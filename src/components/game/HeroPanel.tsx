@@ -97,8 +97,11 @@ export function HeroPanel({ hero, snapshot, variant, active, isOpponentView = fa
         </div>
       </div>
 
+      {/* Inner ladder — mobile only. Desktop has its own side rail. */}
       {!isCompact && (
-        <CollapsibleLadder hero={hero} rows={snapshot.ladderState} isOpponentView={isOpponentView} />
+        <div className="lg:hidden">
+          <CollapsibleLadder hero={hero} rows={snapshot.ladderState} isOpponentView={isOpponentView} />
+        </div>
       )}
     </div>
   );
