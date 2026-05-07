@@ -105,6 +105,18 @@ export default function MatchScreen() {
     return () => { if (aiCooldownRef.current) window.clearTimeout(aiCooldownRef.current); };
   }, [state, mode, aiPlayer, inputUnlocked, dispatch]);
 
+  // Hooks that depend on `state` MUST be called before any early return —
+  // Rules of Hooks. Both safely handle null state internally.
+  const rollKey = useDiceRollKey(viewer);
+  const summary = useMemo(() => {
+    if (!state || !state.winner) return null;
+    return buildMatchSummary(matchLog, {
+      winner: state.winner,
+      turns: state.turn,
+      startingHp: STARTING_HP,
+    });
+  }, [state, matchLog]);
+
   if (!state) return null;
 
   // Identify panels by viewer.
@@ -139,19 +151,6 @@ export default function MatchScreen() {
     if (!live || live.phase !== "offensive-roll") return;
     dispatch({ kind: "toggle-die-lock", die: idx as 0|1|2|3|4 });
   }
-
-  // Dice-rolled events bump rollKey — DiceTray plays the tumble.
-  const rollKey = useDiceRollKey(viewer);
-
-  // Compute match summary at end-of-match — memoized on log length.
-  const summary = useMemo(() => {
-    if (!state || !state.winner) return null;
-    return buildMatchSummary(matchLog, {
-      winner: state.winner,
-      turns: state.turn,
-      startingHp: STARTING_HP,
-    });
-  }, [state, matchLog]);
 
   return (
     <div className="safe-pad min-h-svh bg-arena-0 text-ink relative flex flex-col
