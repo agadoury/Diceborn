@@ -1,0 +1,90 @@
+@import "./tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Global resets & mobile-first ergonomics.
+   ────────────────────────────────────────────────────────────────────────── */
+
+html, body, #root {
+  height: 100%;
+  /* Use dynamic viewport height so iOS chrome collapse doesn't shift layout.
+     100dvh > 100svh fallback > 100vh fallback. */
+  min-height: 100svh;
+  min-height: 100dvh;
+}
+
+html {
+  background: var(--c-arena-0);
+  color: var(--c-ink);
+  font-family: var(--t-body);
+  /* Disable iOS bounce on the root — match screens manage their own scroll. */
+  overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+  /* Prevent rubber-band during dice rolls; restore to "auto" inside scroll
+     regions that explicitly need it. */
+  overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Forbid the iOS double-tap-to-zoom gesture on tap targets. */
+  touch-action: manipulation;
+  /* Game UI is not text — no selection, no callouts, no tap highlight. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* Allow text selection inside dev/storybook-style routes only. */
+.allow-select, .allow-select * { user-select: text; -webkit-user-select: text; }
+
+/* Safe-area utilities — used by every screen container. */
+.safe-pad {
+  padding-top:    max(12px, env(safe-area-inset-top));
+  padding-right:  max(12px, env(safe-area-inset-right));
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  padding-left:   max(12px, env(safe-area-inset-left));
+}
+.safe-pad-x { padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+.safe-pad-y { padding-top:  max(12px, env(safe-area-inset-top));  padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+
+/* Keyboard focus rings — visible, brand-tinted. */
+:focus-visible {
+  outline: 2px solid var(--c-brand);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Buttons: reset, then we restyle per component. */
+button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* Surfaces (cards, panels) — referenced via .surface utility class. */
+.surface {
+  background: linear-gradient(180deg, rgba(43,23,64,0.85) 0%, rgba(15,8,20,0.85) 100%);
+  border: 1px solid var(--panel-stroke-top);
+  box-shadow:
+    0 1px 0 var(--panel-stroke-top) inset,
+    0 -1px 0 var(--panel-stroke-bot) inset,
+    var(--panel-shadow);
+  border-radius: 12px;
+}
+
+/* Hero atmospheric backdrop helper — gradient anchored to a hero accent.
+   Component code drives --hero-accent at runtime. */
+.hero-bg {
+  background: radial-gradient(ellipse at 50% 38%,
+    color-mix(in oklab, var(--hero-accent, var(--c-brand)) 38%, var(--c-arena-0)) 0%,
+    var(--c-arena-0) 70%);
+}

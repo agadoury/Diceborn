@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Maskable: keep glyph inside the safe 80% center; fill the rest with brand bg. -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="70%">
+      <stop offset="0%"  stop-color="#2a1740" />
+      <stop offset="100%" stop-color="#0e0814" />
+    </radialGradient>
+    <linearGradient id="d20" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#c084fc" />
+      <stop offset="100%" stop-color="#7c3aed" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)" />
+  <g transform="translate(256 270)" fill="url(#d20)" stroke="#f59e0b" stroke-width="6" stroke-linejoin="round">
+    <polygon points="0,-110 96,-55 96,55 0,110 -96,55 -96,-55" />
+    <polygon points="0,-110 0,110 -96,55 -96,-55" fill="rgba(0,0,0,0.18)" />
+    <polygon points="0,-110 96,-55 0,0" fill="rgba(255,255,255,0.18)" />
+  </g>
+  <text x="256" y="302" text-anchor="middle" font-family="Cinzel, Georgia, serif" font-weight="900" font-size="86" fill="#fde68a">20</text>
+</svg>
