@@ -20,10 +20,12 @@ const PHASE_NAME: Record<Phase, string> = {
 interface Props {
   phase: Phase;
   activePlayer: PlayerId;
+  /** Set true when the AI is the active player and we want a "thinking..." cue. */
+  thinking?: boolean;
   className?: string;
 }
 
-export function PhaseIndicator({ phase, activePlayer, className }: Props) {
+export function PhaseIndicator({ phase, activePlayer, thinking, className }: Props) {
   return (
     <div
       className={cn(
@@ -35,6 +37,9 @@ export function PhaseIndicator({ phase, activePlayer, className }: Props) {
       <span>{PHASE_NAME[phase]}</span>
       <span className="text-muted">·</span>
       <span className="text-ink">{activePlayer.toUpperCase()}</span>
+      {thinking && (
+        <span className="ml-1 text-muted normal-case text-[10px] animate-pulse">thinking…</span>
+      )}
     </div>
   );
 }

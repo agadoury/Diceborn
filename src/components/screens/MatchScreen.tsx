@@ -27,6 +27,7 @@ import { ActionBar } from "@/components/game/ActionBar";
 import { PhaseIndicator } from "@/components/game/PhaseIndicator";
 import { HotSeatCurtain } from "@/components/game/HotSeatCurtain";
 import { AbilityLadder } from "@/components/game/AbilityLadder";
+import { HeroBackground } from "@/components/effects/HeroBackground";
 import { Button } from "@/components/ui/Button";
 
 const VALID_HEROES: HeroId[] = ["barbarian", "pyromancer", "paladin"];
@@ -141,6 +142,12 @@ export default function MatchScreen() {
   return (
     <div className="safe-pad min-h-svh bg-arena-0 text-ink relative flex flex-col
                     lg:grid lg:grid-cols-[260px_1fr_260px] lg:grid-rows-[auto_1fr_auto] lg:gap-3 lg:p-6">
+      {/* Living arena background — atmospherics for the active player's hero. */}
+      <HeroBackground
+        hero={state.players[state.activePlayer].hero}
+        intensity="ambient"
+        className="z-0"
+      />
       {/* MOBILE: top opponent panel. DESKTOP: top-center opponent panel. */}
       <div
         className="rounded-card mb-2 lg:mb-0 lg:col-start-2 lg:row-start-1"
@@ -179,7 +186,11 @@ export default function MatchScreen() {
       {/* Arena center. */}
       <div className="relative flex-1 flex flex-col items-center justify-center gap-2 my-2
                       lg:my-0 lg:col-start-2 lg:row-start-2">
-        <PhaseIndicator phase={state.phase} activePlayer={state.activePlayer} />
+        <PhaseIndicator
+          phase={state.phase}
+          activePlayer={state.activePlayer}
+          thinking={mode === "vs-ai" && state.activePlayer === aiPlayer && !state.winner}
+        />
         <DiceTray
           dice={state.players[state.activePlayer].dice}
           accent={getHero(state.players[state.activePlayer].hero).accentColor}
