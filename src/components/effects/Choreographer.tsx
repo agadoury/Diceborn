@@ -1,24 +1,25 @@
 /**
- * Choreographer — root-level component that consumes the GameEvent queue
- * from the choreo store and plays each event as a timed beat.
+ * Choreographer — root-level component that renders the visual effect
+ * layers and listens for queue activity.
+ *
+ * Queue draining is driven by a module-level Zustand subscription (NOT a
+ * React useEffect) to avoid React 18 StrictMode + dep-array churn racing
+ * with the in-flight setTimeout — a previous implementation cancelled its
+ * own timer on every re-render mid-event, deadlocking the queue.
  *
  * The store's `playing` field gates the next event: while non-null, no new
  * event starts. When the beat's duration elapses, `finishCurrent` clears
  * `playing` and the next event in queue takes the floor.
  *
- * View components observe individual slices (shake, hitStopUntil,
- * damageNumbers, cinematic, bannerText) and animate accordingly.
- *
- * The match store (Step 5) calls `enqueueEvents(events)` after every
- * applyAction call, and a future "wait for choreographer drain" hook gates
- * the next AI / player action behind `playing == null && queue.length === 0`.
+ * The match store calls `enqueueEvents(events)` after every applyAction
+ * call, and UI components gate interactivity behind `useInputUnlocked()`
+ * (queue.length === 0 && !playing && !cinematic).
  */
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { useChoreoStore } from "@/store/choreoStore";
 import type { GameEvent } from "@/game/types";
 import { sfxForEvent } from "@/audio/library";
 import { audio } from "@/audio/manager";
-import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { vibrate } from "@/hooks/useHaptics";
 
 import { ScreenShake } from "./ScreenShake";
@@ -30,43 +31,6 @@ import { Banner } from "./Banner";
 interface Props { children: ReactNode }
 
 export function Choreographer({ children }: Props) {
-  const queue          = useChoreoStore(s => s.queue);
-  const playing        = useChoreoStore(s => s.playing);
-  const startNext      = useChoreoStore(s => s.startNext);
-  const finishCurrent  = useChoreoStore(s => s.finishCurrent);
-  const setShake       = useChoreoStore(s => s.setShake);
-  const triggerHitStop = useChoreoStore(s => s.triggerHitStop);
-  const spawnDmg       = useChoreoStore(s => s.spawnDamageNumber);
-  const startCinematic = useChoreoStore(s => s.startCinematic);
-  const endCinematic   = useChoreoStore(s => s.endCinematic);
-  const setBanner      = useChoreoStore(s => s.setBanner);
-
-  const reduced = useReducedMotion();
-
-  // Drain the queue one event at a time.
-  useEffect(() => {
-    if (playing) return;                    // already in a beat
-    if (queue.length === 0) return;
-    const ev = queue[0];
-    startNext(ev);
-
-    // Fire SFX
-    const sfx = sfxForEvent(ev);
-    if (sfx) audio.play(sfx);
-
-    // Side-effects + duration
-    const baseDuration = playEvent(ev, {
-      reduced, setShake, triggerHitStop, spawnDmg, startCinematic, endCinematic, setBanner,
-    });
-    const duration = reduced ? Math.min(baseDuration, 220) : baseDuration;
-
-    const id = window.setTimeout(() => finishCurrent(), duration);
-    return () => window.clearTimeout(id);
-  }, [
-    queue, playing, startNext, finishCurrent, reduced,
-    setShake, triggerHitStop, spawnDmg, startCinematic, endCinematic, setBanner,
-  ]);
-
   return (
     <ScreenShake>
       {children}
@@ -76,6 +40,63 @@ export function Choreographer({ children }: Props) {
       <Banner />
     </ScreenShake>
   );
+}
+
+// ── Module-level queue driver — runs once per page load ─────────────────────
+
+let pumpTimer: ReturnType<typeof setTimeout> | null = null;
+let subscribed = false;
+
+function readReduced(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const o = localStorage.getItem("diceborn:reduced-motion");
+    if (o === "on")  return true;
+    if (o === "off") return false;
+  } catch { /* */ }
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function pump(): void {
+  const s = useChoreoStore.getState();
+  if (pumpTimer) return;          // a beat is already in flight
+  if (s.playing) return;
+  if (s.queue.length === 0) return;
+
+  const ev = s.queue[0];
+  s.startNext(ev);
+
+  // Audio
+  const fx = sfxForEvent(ev);
+  if (fx) audio.play(fx);
+
+  // Side-effects + duration
+  const reduced = readReduced();
+  const baseDuration = playEvent(ev, {
+    reduced,
+    setShake:       s.setShake,
+    triggerHitStop: s.triggerHitStop,
+    spawnDmg:       s.spawnDamageNumber,
+    startCinematic: s.startCinematic,
+    endCinematic:   s.endCinematic,
+    setBanner:      s.setBanner,
+  });
+  const duration = reduced ? Math.min(baseDuration, 220) : baseDuration;
+
+  pumpTimer = setTimeout(() => {
+    pumpTimer = null;
+    useChoreoStore.getState().finishCurrent();
+    // Try to advance immediately to the next event in the queue.
+    pump();
+  }, duration);
+}
+
+if (typeof window !== "undefined" && !subscribed) {
+  subscribed = true;
+  // Drain on every store change. Cheap — bails immediately if not ready.
+  useChoreoStore.subscribe(() => pump());
+  // Kick once at install time in case events were enqueued before subscribe.
+  pump();
 }
 
 interface PlayCtx {
@@ -93,19 +114,19 @@ function playEvent(ev: GameEvent, ctx: PlayCtx): number {
   switch (ev.t) {
     case "match-started":
       ctx.setBanner(`${ev.players.p1.toUpperCase()} vs ${ev.players.p2.toUpperCase()}`);
-      window.setTimeout(() => ctx.setBanner(null), 1400);
+      setTimeout(() => ctx.setBanner(null), 1400);
       return 1400;
 
     case "match-won": {
       ctx.setBanner(ev.winner === "draw" ? "DRAW" : `${ev.winner.toUpperCase()} WINS`);
       vibrate("victory");
-      window.setTimeout(() => ctx.setBanner(null), 2000);
+      setTimeout(() => ctx.setBanner(null), 2000);
       return 2200;
     }
 
     case "turn-started": {
       ctx.setBanner(`Turn ${ev.turn} — ${ev.player.toUpperCase()}`);
-      window.setTimeout(() => ctx.setBanner(null), 700);
+      setTimeout(() => ctx.setBanner(null), 700);
       return 700;
     }
 
@@ -126,25 +147,21 @@ function playEvent(ev: GameEvent, ctx: PlayCtx): number {
     case "ladder-state-changed": return 200;
 
     case "ability-triggered": {
-      if (ev.tier === 4) {
-        // Ultimate cinematic is handled separately via "ultimate-fired".
-        return 280;
-      }
-      // Minor crit gets an extra accent flash; main visual is on the ladder.
+      if (ev.tier === 4) return 280;
       return ev.isCritical ? 600 : 380;
     }
 
     case "ultimate-fired": {
       const dur = ev.isCritical ? (ctx.reduced ? 540 : 2600) : (ctx.reduced ? 540 : 1800);
       ctx.startCinematic({
-        hero: heroIdFromPlayer(ev.player),    // see helper below
+        hero: heroIdFromPlayer(ev.player),
         abilityName: ev.abilityName,
         isUlt: true,
         isCritical: ev.isCritical,
         durationMs: dur,
       });
       vibrate("ability");
-      window.setTimeout(() => ctx.endCinematic(), dur);
+      setTimeout(() => ctx.endCinematic(), dur);
       return dur;
     }
 
@@ -154,10 +171,8 @@ function playEvent(ev: GameEvent, ctx: PlayCtx): number {
       const mag = ev.type === "ultimate" ? 10 : ev.amount >= 15 ? 6 : 2;
       const dur = ev.type === "ultimate" ? 600 : ev.amount >= 15 ? 250 : 100;
       ctx.setShake({ magnitude: mag, duration: dur, startedAt: performance.now() });
-      window.setTimeout(() => ctx.setShake(null), dur);
+      setTimeout(() => ctx.setShake(null), dur);
 
-      // Spawn a damage number near the receiver's panel — Step 4 placeholder
-      // location is screen-center; Step 5 wires real coordinates.
       const variant: "dmg" | "pure" | "white" | "crit" =
         ev.type === "pure" ? "pure" :
         ev.type === "undefendable" ? "white" :
@@ -186,12 +201,11 @@ function playEvent(ev: GameEvent, ctx: PlayCtx): number {
     case "hero-state":         return 200;
     case "rage-changed":       return 280;
 
-    case "counter-prompt":     return 0;       // interactive — user resolves
+    case "counter-prompt":     return 0;
     case "counter-resolved":   return 200;
   }
 }
 
-/** Map PlayerId → HeroId for cinematics. Step 4 placeholder; Step 5 reads real game store. */
 function heroIdFromPlayer(_p: string): import("@/game/types").HeroId {
   return "barbarian";
 }
