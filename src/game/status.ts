@@ -129,6 +129,43 @@ registerStatus({
   visualTreatment: { icon: "bleeding", color: "#9F1239", pulse: true, particle: "drips" },
 });
 
+// ── Signature: Smolder (Pyromancer) ──────────────────────────────────────────
+// Like Burn but stacks independently with cap 7. On removal (decrement to 0
+// OR strip), fires an ignition burst of 2 final damage.
+registerStatus({
+  id: "smolder",
+  name: "Smolder",
+  type: "debuff",
+  stackLimit: 7,
+  tickPhase: "ownUpkeep",
+  onTick: (_holder, inst) => ({
+    events: [],
+    pendingDamage: inst.stacks,
+    decrementBy: 1,
+  }),
+  onRemove: (_holder, _inst, reason) => ({
+    events: [{ t: "status-triggered", status: "smolder", holder: _holder.player, cause: `ignite-${reason}` }],
+    pendingDamage: 2,
+  }),
+  visualTreatment: { icon: "smolder", color: "#F97316", pulse: true, particle: "smoke" },
+});
+
+// ── Signature: Judgment (Paladin) ────────────────────────────────────────────
+// Applied to attackers when the Paladin successfully defends. Does not tick
+// at upkeep — its trigger fires when the attacker fires their next offensive
+// ability. The phases.ts ability-resolver consults Judgment to deduct 2 dmg
+// AND hands the Paladin +1 CP. Implementation lives in phases.ts; this
+// registration is the data declaration.
+registerStatus({
+  id: "judgment",
+  name: "Judgment",
+  type: "debuff",
+  stackLimit: 3,
+  tickPhase: "onTrigger",
+  onRemove: (_holder, _inst, _reason) => ({ events: [] }),
+  visualTreatment: { icon: "judgment", color: "#FBBF24", pulse: true, particle: "light" },
+});
+
 // ── Helpers used by the engine ───────────────────────────────────────────────
 
 /** Apply N stacks; clamps to the definition's stackLimit. Emits status-applied. */

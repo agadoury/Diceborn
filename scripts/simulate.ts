@@ -11,8 +11,12 @@ import { applyAction, makeEmptyState } from "../src/game/engine";
 import { nextAiAction } from "../src/game/ai";
 import { simulateLandingRate } from "../src/game/dice";
 import { BARBARIAN } from "../src/content/heroes/barbarian";
+import { PYROMANCER } from "../src/content/heroes/pyromancer";
+import { PALADIN } from "../src/content/heroes/paladin";
 import "../src/content/cards/barbarian";   // side-effect: registers custom handlers
-import type { Action, GameEvent, GameState, PlayerId } from "../src/game/types";
+import "../src/content/cards/pyromancer";
+import "../src/content/cards/paladin";
+import type { Action, GameEvent, GameState, HeroId, PlayerId } from "../src/game/types";
 
 interface Args {
   n: number;
@@ -36,10 +40,10 @@ function parseArgs(): Args {
   return { n, ratesOnly, verbose, seed };
 }
 
-function runMatch(seed: number, verbose: boolean): { winner: PlayerId | "draw"; turns: number } {
+function runMatch(seed: number, verbose: boolean, p1: HeroId = "barbarian", p2: HeroId = "barbarian"): { winner: PlayerId | "draw"; turns: number } {
   let state: GameState = makeEmptyState();
   ({ state } = applyAction(state, {
-    kind: "start-match", seed, p1: "barbarian", p2: "barbarian", coinFlipWinner: "p1",
+    kind: "start-match", seed, p1, p2, coinFlipWinner: "p1",
   }));
   if (verbose) console.log(`\n— match start (seed ${seed}) —`);
 
@@ -82,14 +86,17 @@ function logEvent(ev: GameEvent): void {
 
 function landingRateAudit(): void {
   console.log("\n— Landing-rate audit (10,000 trials per tier, 2 attempts) —");
-  const results = simulateLandingRate(BARBARIAN, 2, 10_000, 7);
-  for (const r of results) {
-    const inBand = r.rate >= r.target[0] && r.rate <= r.target[1];
-    const flag = inBand ? " ✓" : " ✗";
-    console.log(
-      `  T${r.tier} ${r.abilityName.padEnd(20)}  ${(r.rate * 100).toFixed(1)}% ` +
-      `(target ${(r.target[0] * 100).toFixed(0)}–${(r.target[1] * 100).toFixed(0)}%)${flag}`,
-    );
+  for (const hero of [BARBARIAN, PYROMANCER, PALADIN]) {
+    console.log(`\n  ${hero.name}`);
+    const results = simulateLandingRate(hero, 2, 10_000, 7);
+    for (const r of results) {
+      const inBand = r.rate >= r.target[0] && r.rate <= r.target[1];
+      const flag = inBand ? " ✓" : " ✗";
+      console.log(
+        `    T${r.tier} ${r.abilityName.padEnd(20)}  ${(r.rate * 100).toFixed(1)}% ` +
+        `(target ${(r.target[0] * 100).toFixed(0)}–${(r.target[1] * 100).toFixed(0)}%)${flag}`,
+      );
+    }
   }
   console.log("");
 }

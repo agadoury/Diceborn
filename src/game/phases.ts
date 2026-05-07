@@ -89,9 +89,21 @@ export function runUpkeep(state: GameState): GameEvent[] {
     }
   }
 
-  // Tick own-upkeep statuses on the active player (Burn, Regen).
+  // Tick own-upkeep statuses on the active player (Burn, Regen, Smolder).
   const ownTick = tickStatusesAt(state, active, "ownUpkeep");
   events.push(...ownTick.events);
+  // Pyromancer "+1 CP whenever Smolder ticks on opponent" — the Smolder-bearer
+  // is the active player; the *opponent* (who applied Smolder) gains CP.
+  for (const ev of ownTick.events) {
+    if (ev.t === "status-ticked" && ev.status === "smolder" && ev.holder === active.player) {
+      const oppHero = getHero(opponent.hero);
+      for (const trig of oppHero.resourceIdentity.cpGainTriggers) {
+        if (trig.on === "statusTicked" && trig.status === "smolder" && trig.on_target === "opponent") {
+          events.push(...gainCp(opponent, trig.gain));
+        }
+      }
+    }
+  }
   if (ownTick.pendingDamage > 0) {
     const r = dealDamage(active.player, active, ownTick.pendingDamage, "pure", 0);
     events.push(...r.events);
@@ -240,6 +252,21 @@ export function resolveOffensiveAbility(state: GameState): GameEvent[] {
     events.push({ t: "ultimate-fired", player: active.player, abilityName: ability.name, isCritical: !!isCritical });
   }
 
+  // Judgment consumption — if the attacker has Judgment, this ability deals
+  // -2 damage per stack and the *applier* (defender, who is the Paladin)
+  // gains +1 CP per stack. All Judgment stacks are consumed on a single hit.
+  let judgmentReduction = 0;
+  const judgmentInst = active.statuses.find(s => s.id === "judgment");
+  if (judgmentInst && judgmentInst.stacks > 0) {
+    judgmentReduction = judgmentInst.stacks * 2;
+    const paladin = state.players[judgmentInst.appliedBy];
+    events.push(...gainCp(paladin, judgmentInst.stacks));
+    active.statuses = active.statuses.filter(s => s.id !== "judgment");
+    events.push({ t: "status-removed", status: "judgment", holder: active.player, reason: "expired" });
+    events.push({ t: "status-triggered", status: "judgment", holder: active.player, cause: "ability-fired" });
+  }
+  damageBonus -= judgmentReduction;
+
   // Defensive roll for normal/ultimate/collateral damage.
   let defensiveReduction = 0;
   if (ability.damageType === "normal" || ability.damageType === "ultimate" || ability.damageType === "collateral") {
@@ -287,6 +314,8 @@ function autoResolveDefense(
   // MVP: simple deterministic reduction policy — sum 1 for every SHIELD face
   // showing on the defender's current dice (fresh single roll, no rerolls).
   const events: GameEvent[] = [];
+  // Reset locks on the defender's dice and reroll all (defense is fresh).
+  for (const d of defender.dice) d.locked = false;
   rollUnlocked(state, defender.dice);
   let reduction = 0;
   for (const d of defender.dice) {
@@ -300,6 +329,25 @@ function autoResolveDefense(
   });
   events.push({ t: "defense-resolved", player: defender.player, reduction });
   if (reduction >= 2) events.push({ t: "hero-state", player: defender.player, state: "defended" });
+
+  // Paladin's Divine Favor passive — successful defense (≥1 reduction) grants
+  // +1 Protect to defender AND applies +1 Judgment to the attacker.
+  const defHero = getHero(defender.hero);
+  const sig = defHero.signatureMechanic.implementation;
+  if (sig.kind === "divine-favor" && reduction >= 1) {
+    const attacker = state.players[other(defender.player)];
+    // Cap protect via the passive's own cap — applyStatus uses the registry's
+    // stackLimit (5), and our divine-favor cap matches.
+    events.push(...applyStatus(defender, defender.player, "protect", sig.protectPerDefense));
+    events.push(...applyStatus(attacker, defender.player, "judgment", sig.judgmentPerDefense));
+  }
+
+  // Defender's CP gain trigger: "+1 CP on successful defense" (Paladin).
+  if (reduction >= 1) {
+    for (const trig of defHero.resourceIdentity.cpGainTriggers) {
+      if (trig.on === "successfulDefense") events.push(...gainCp(defender, trig.gain));
+    }
+  }
   return { reduction, events };
 }
 
