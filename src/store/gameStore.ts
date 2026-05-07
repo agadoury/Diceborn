@@ -25,6 +25,8 @@ interface GameStoreState {
   aiPlayer: PlayerId | null;
   /** Latest events (for tests / debug). */
   lastEvents: GameEvent[];
+  /** Full event log accumulated since match start — used by match-summary. */
+  matchLog: GameEvent[];
 
   // Actions
   startMatch: (opts: { p1: HeroId; p2: HeroId; mode: MatchMode; seed?: number; coin?: PlayerId }) => void;
@@ -37,6 +39,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   mode: "hot-seat",
   aiPlayer: null,
   lastEvents: [],
+  matchLog: [],
 
   startMatch: ({ p1, p2, mode, seed, coin }) => {
     const empty = makeEmptyState();
@@ -51,6 +54,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       mode,
       aiPlayer: mode === "vs-ai" ? "p2" : null,
       lastEvents: r.events,
+      matchLog: r.events.slice(),
     });
   },
 
@@ -59,12 +63,16 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     if (!cur) return;
     const r = applyAction(cur, action);
     enqueueEvents(r.events);
-    set({ state: r.state, lastEvents: r.events });
+    set(s => ({
+      state: r.state,
+      lastEvents: r.events,
+      matchLog: [...s.matchLog, ...r.events],
+    }));
   },
 
   reset: () => {
     useChoreoStore.getState().reset();
-    set({ state: null, mode: "hot-seat", aiPlayer: null, lastEvents: [] });
+    set({ state: null, mode: "hot-seat", aiPlayer: null, lastEvents: [], matchLog: [] });
   },
 }));
 

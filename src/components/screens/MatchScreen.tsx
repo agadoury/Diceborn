@@ -28,7 +28,10 @@ import { PhaseIndicator } from "@/components/game/PhaseIndicator";
 import { HotSeatCurtain } from "@/components/game/HotSeatCurtain";
 import { AbilityLadder } from "@/components/game/AbilityLadder";
 import { HeroBackground } from "@/components/effects/HeroBackground";
-import { Button } from "@/components/ui/Button";
+import { ResultScreen } from "@/components/screens/ResultScreen";
+import { buildMatchSummary } from "@/game/match-summary";
+import { STARTING_HP } from "@/game/types";
+import { useMemo } from "react";
 
 const VALID_HEROES: HeroId[] = ["barbarian", "pyromancer", "paladin"];
 
@@ -42,6 +45,7 @@ export default function MatchScreen() {
   const state       = useGameStore(s => s.state);
   const mode        = useGameStore(s => s.mode);
   const aiPlayer    = useGameStore(s => s.aiPlayer);
+  const matchLog    = useGameStore(s => s.matchLog);
 
   const inputUnlocked = useInputUnlocked();
 
@@ -139,6 +143,16 @@ export default function MatchScreen() {
   // Dice-rolled events bump rollKey — DiceTray plays the tumble.
   const rollKey = useDiceRollKey(viewer);
 
+  // Compute match summary at end-of-match — memoized on log length.
+  const summary = useMemo(() => {
+    if (!state || !state.winner) return null;
+    return buildMatchSummary(matchLog, {
+      winner: state.winner,
+      turns: state.turn,
+      startingHp: STARTING_HP,
+    });
+  }, [state, matchLog]);
+
   return (
     <div className="safe-pad min-h-svh bg-arena-0 text-ink relative flex flex-col
                     lg:grid lg:grid-cols-[260px_1fr_260px] lg:grid-rows-[auto_1fr_auto] lg:gap-3 lg:p-6">
@@ -198,23 +212,7 @@ export default function MatchScreen() {
           onToggleLock={state.activePlayer === viewer ? toggleLock : undefined}
           centerStage={state.phase === "offensive-roll"}
         />
-        {state.winner && (
-          <div className="mt-3 surface px-4 py-2 rounded-card text-center">
-            <div className="font-display tracking-widest text-d-3 text-ember">
-              {state.winner === "draw" ? "DRAW" : state.winner === viewer ? "VICTORY" : "DEFEAT"}
-            </div>
-            <div className="mt-2 flex gap-2 justify-center">
-              <Button size="sm" variant="ghost" onClick={() => { reset(); navigate("/"); }}>Menu</Button>
-              <Button size="sm" variant="primary" heroAccent={meHero.accentColor}
-                      onClick={() => {
-                        reset();
-                        startMatch({ p1: meSnap.hero, p2: oppSnap.hero, mode });
-                      }}>
-                Rematch
-              </Button>
-            </div>
-          </div>
-        )}
+        {/* Match-end result — full ResultScreen overlay rendered below. */}
       </div>
 
       {/* Active hero panel. Desktop: bottom-center. */}
@@ -264,6 +262,21 @@ export default function MatchScreen() {
         nextHero={state.players[state.activePlayer].hero}
         onContinue={dismissCurtain}
       />
+
+      {/* Match-end overlay with descriptor + stats. */}
+      {state.winner && summary && (
+        <ResultScreen
+          summary={summary}
+          viewer={viewer}
+          myHero={meHero}
+          oppHero={oppHero}
+          onMenu={() => { reset(); navigate("/"); }}
+          onRematch={() => {
+            reset();
+            startMatch({ p1: meSnap.hero, p2: oppSnap.hero, mode });
+          }}
+        />
+      )}
     </div>
   );
 }
