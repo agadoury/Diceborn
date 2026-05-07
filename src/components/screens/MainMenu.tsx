@@ -16,8 +16,8 @@ export default function MainMenu() {
       </header>
 
       <nav className="w-full max-w-sm flex flex-col gap-3">
-        <MenuButton to="/play"           label="Vs AI" recommended />
-        <MenuButton to="/play"           label="Hot-Seat" />
+        <MenuButton to="/play?mode=vs-ai&p1=barbarian&p2=barbarian"     label="Vs AI" recommended />
+        <MenuButton to="/play?mode=hot-seat&p1=barbarian&p2=barbarian"  label="Hot-Seat" />
         <MenuButton to="/dev/tokens"     label="Design tokens" subtle />
         <MenuButton to="/dev/components" label="Component storybook" subtle />
       </nav>

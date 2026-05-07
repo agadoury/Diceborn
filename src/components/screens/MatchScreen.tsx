@@ -1,0 +1,259 @@
+/**
+ * MatchScreen — full match UI.
+ *
+ * Mobile portrait layout (primary):
+ *   top status bar     — opponent panel (compact)
+ *   arena center       — DiceTray + PhaseIndicator
+ *   active hero panel  — full HeroPanel including ladder
+ *   hand               — fanned cards
+ *   action bar         — primary CTA (fixed bottom)
+ *
+ * Desktop layout (Step 6) overlays via `lg:` Tailwind classes — the same
+ * components reflow to a wide arena with side ladders.
+ */
+import { useEffect, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useGameStore, useInputUnlocked } from "@/store/gameStore";
+import { useUIStore } from "@/store/uiStore";
+import { getHero } from "@/content";
+import type { CardId, HeroId, PlayerId } from "@/game/types";
+import { nextAiAction } from "@/game/ai";
+import { useChoreoStore } from "@/store/choreoStore";
+
+import { HeroPanel } from "@/components/game/HeroPanel";
+import { Hand } from "@/components/game/Hand";
+import { DiceTray } from "@/components/game/DiceTray";
+import { ActionBar } from "@/components/game/ActionBar";
+import { PhaseIndicator } from "@/components/game/PhaseIndicator";
+import { HotSeatCurtain } from "@/components/game/HotSeatCurtain";
+import { Button } from "@/components/ui/Button";
+
+const VALID_HEROES: HeroId[] = ["barbarian", "pyromancer", "paladin"];
+
+export default function MatchScreen() {
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+
+  const startMatch  = useGameStore(s => s.startMatch);
+  const dispatch    = useGameStore(s => s.dispatch);
+  const reset       = useGameStore(s => s.reset);
+  const state       = useGameStore(s => s.state);
+  const mode        = useGameStore(s => s.mode);
+  const aiPlayer    = useGameStore(s => s.aiPlayer);
+
+  const inputUnlocked = useInputUnlocked();
+
+  const viewer       = useUIStore(s => s.currentViewer);
+  const setViewer    = useUIStore(s => s.setViewer);
+  const curtainOpen  = useUIStore(s => s.curtainOpen);
+  const setCurtain   = useUIStore(s => s.setCurtain);
+
+  // Boot the match on first mount based on URL params.
+  const startedRef = useRef(false);
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    const p1   = readHero(params.get("p1"))   ?? "barbarian";
+    const p2   = readHero(params.get("p2"))   ?? "barbarian";
+    const m    = (params.get("mode") as "hot-seat" | "vs-ai" | null) ?? "hot-seat";
+    const seed = params.get("seed") ? Number(params.get("seed")) : undefined;
+    startMatch({ p1, p2, mode: m, seed });
+    setViewer("p1");
+  }, [params, startMatch, setViewer]);
+
+  // Hot-seat: when the active player changes mid-game, raise the curtain.
+  // Skip during the match-end phase and during the very first turn.
+  const lastActiveRef = useRef<PlayerId | null>(null);
+  useEffect(() => {
+    if (!state) return;
+    const cur = state.activePlayer;
+    if (lastActiveRef.current && lastActiveRef.current !== cur && state.phase !== "match-end" && mode === "hot-seat") {
+      setCurtain(true);
+    }
+    lastActiveRef.current = cur;
+  }, [state, mode, setCurtain]);
+
+  function dismissCurtain() {
+    if (!state) return;
+    setViewer(state.activePlayer);
+    setCurtain(false);
+  }
+
+  // AI driver — when active player is AI and inputs are unlocked, fire the next action.
+  const aiCooldownRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!state || mode !== "vs-ai" || !aiPlayer) return;
+    if (state.activePlayer !== aiPlayer) return;
+    if (state.winner) return;
+    if (!inputUnlocked) return;
+
+    if (aiCooldownRef.current) window.clearTimeout(aiCooldownRef.current);
+    aiCooldownRef.current = window.setTimeout(() => {
+      // Read state fresh inside the timeout to avoid stale snapshots.
+      const live = useGameStore.getState().state;
+      if (!live || live.winner) return;
+      if (live.activePlayer !== aiPlayer) return;
+      const action = nextAiAction(live, aiPlayer);
+      dispatch(action);
+    }, 350);
+    return () => { if (aiCooldownRef.current) window.clearTimeout(aiCooldownRef.current); };
+  }, [state, mode, aiPlayer, inputUnlocked, dispatch]);
+
+  if (!state) return null;
+
+  // Identify panels by viewer.
+  const opponentId: PlayerId = viewer === "p1" ? "p2" : "p1";
+  const meSnap   = state.players[viewer];
+  const oppSnap  = state.players[opponentId];
+  const meHero   = getHero(meSnap.hero);
+  const oppHero  = getHero(oppSnap.hero);
+
+  // Capability gating.
+  const myTurn   = state.activePlayer === viewer;
+  const canInput = myTurn && inputUnlocked && !state.winner;
+
+  // Action handlers.
+  function play(cardId: CardId, targetDie?: number) {
+    dispatch({ kind: "play-card", card: cardId, targetDie: targetDie as 0|1|2|3|4|undefined });
+  }
+  function sell(cardId: CardId) {
+    dispatch({ kind: "sell-card", card: cardId });
+  }
+  function roll() {
+    dispatch({ kind: "roll-dice" });
+  }
+  function advance() {
+    dispatch({ kind: "advance-phase" });
+  }
+  function endTurn() {
+    dispatch({ kind: "end-turn" });
+  }
+  function toggleLock(idx: number) {
+    const live = useGameStore.getState().state;
+    if (!live || live.phase !== "offensive-roll") return;
+    dispatch({ kind: "toggle-die-lock", die: idx as 0|1|2|3|4 });
+  }
+
+  // Dice-rolled events bump rollKey — DiceTray plays the tumble.
+  const rollKey = useDiceRollKey(viewer);
+
+  return (
+    <div className="safe-pad min-h-svh bg-arena-0 text-ink relative flex flex-col">
+      {/* Top: opponent panel (compact). */}
+      <div
+        className="rounded-card mb-2"
+        style={{ background: `linear-gradient(180deg, ${oppHero.accentColor}11 0%, transparent 100%)` }}
+      >
+        <HeroPanel
+          hero={oppHero}
+          snapshot={oppSnap}
+          variant="opponent"
+          active={state.activePlayer === opponentId}
+          isOpponentView
+        />
+      </div>
+
+      {/* Arena center. */}
+      <div className="relative flex-1 flex flex-col items-center justify-center gap-2 my-2">
+        <PhaseIndicator phase={state.phase} activePlayer={state.activePlayer} />
+        {/* Show whichever side is currently rolling. */}
+        <DiceTray
+          dice={state.players[state.activePlayer].dice}
+          accent={getHero(state.players[state.activePlayer].hero).accentColor}
+          rollKey={rollKey}
+          onToggleLock={state.activePlayer === viewer ? toggleLock : undefined}
+          centerStage={state.phase === "offensive-roll"}
+        />
+        {state.winner && (
+          <div className="mt-3 surface px-4 py-2 rounded-card text-center">
+            <div className="font-display tracking-widest text-d-3 text-ember">
+              {state.winner === "draw" ? "DRAW" : state.winner === viewer ? "VICTORY" : "DEFEAT"}
+            </div>
+            <div className="mt-2 flex gap-2 justify-center">
+              <Button size="sm" variant="ghost" onClick={() => { reset(); navigate("/"); }}>Menu</Button>
+              <Button size="sm" variant="primary" heroAccent={meHero.accentColor}
+                      onClick={() => {
+                        reset();
+                        startMatch({ p1: meSnap.hero, p2: oppSnap.hero, mode });
+                      }}>
+                Rematch
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Active hero panel (bottom area). */}
+      <div className="rounded-card mb-1"
+           style={{ background: `linear-gradient(0deg, ${meHero.accentColor}1c 0%, transparent 100%)` }}>
+        <HeroPanel
+          hero={meHero}
+          snapshot={meSnap}
+          variant="active"
+          active={myTurn}
+        />
+      </div>
+
+      {/* Hand. */}
+      <Hand
+        state={state}
+        hero={meSnap}
+        opponent={oppSnap}
+        accent={meHero.accentColor}
+        enabled={canInput && (state.phase === "main-pre" || state.phase === "main-post" || state.phase === "offensive-roll")}
+        onPlay={play}
+        onSell={sell}
+      />
+
+      {/* Spacer so the fixed action bar doesn't cover the hand. */}
+      <div className="h-[88px] sm:h-[96px]" />
+
+      {/* Action bar — fixed at viewport bottom. */}
+      <ActionBar
+        state={state}
+        active={meSnap}
+        accent={meHero.accentColor}
+        enabled={canInput}
+        isViewerActive={myTurn}
+        onRoll={roll}
+        onAdvancePhase={advance}
+        onEndTurn={endTurn}
+        onMenu={() => { reset(); navigate("/"); }}
+      />
+
+      {/* Hot-seat curtain. */}
+      <HotSeatCurtain
+        open={curtainOpen && mode === "hot-seat"}
+        nextPlayer={state.activePlayer}
+        nextHero={state.players[state.activePlayer].hero}
+        onContinue={dismissCurtain}
+      />
+    </div>
+  );
+}
+
+function readHero(s: string | null): HeroId | null {
+  return VALID_HEROES.includes(s as HeroId) ? (s as HeroId) : null;
+}
+
+/**
+ * Returns a counter that bumps every time the viewer's last seen
+ * `dice-rolled` event finished playing. DiceTray uses this to trigger a
+ * fresh tumble on each roll.
+ *
+ * NOTE: We want the tray to only tumble once per server roll regardless of
+ * whether the dice-rolled event is being processed by the choreographer
+ * right now — so we listen for finishCurrent transitions on dice-rolled.
+ */
+function useDiceRollKey(viewer: PlayerId): number {
+  const playing = useChoreoStore(s => s.playing);
+  const handled = useChoreoStore(s => s.totalEventsHandled);
+  const lastBump = useRef(0);
+  // Bump on every `dice-rolled` event seen for either player so the active
+  // tray (which always shows the active player's dice) tumbles.
+  if (playing && playing.t === "dice-rolled") {
+    void viewer;
+    lastBump.current = handled + 1;
+  }
+  return lastBump.current;
+}
