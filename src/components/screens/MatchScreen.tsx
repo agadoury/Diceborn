@@ -26,6 +26,7 @@ import { DiceTray } from "@/components/game/DiceTray";
 import { ActionBar } from "@/components/game/ActionBar";
 import { PhaseIndicator } from "@/components/game/PhaseIndicator";
 import { HotSeatCurtain } from "@/components/game/HotSeatCurtain";
+import { AbilityLadder } from "@/components/game/AbilityLadder";
 import { Button } from "@/components/ui/Button";
 
 const VALID_HEROES: HeroId[] = ["barbarian", "pyromancer", "paladin"];
@@ -138,10 +139,11 @@ export default function MatchScreen() {
   const rollKey = useDiceRollKey(viewer);
 
   return (
-    <div className="safe-pad min-h-svh bg-arena-0 text-ink relative flex flex-col">
-      {/* Top: opponent panel (compact). */}
+    <div className="safe-pad min-h-svh bg-arena-0 text-ink relative flex flex-col
+                    lg:grid lg:grid-cols-[260px_1fr_260px] lg:grid-rows-[auto_1fr_auto] lg:gap-3 lg:p-6">
+      {/* MOBILE: top opponent panel. DESKTOP: top-center opponent panel. */}
       <div
-        className="rounded-card mb-2"
+        className="rounded-card mb-2 lg:mb-0 lg:col-start-2 lg:row-start-1"
         style={{ background: `linear-gradient(180deg, ${oppHero.accentColor}11 0%, transparent 100%)` }}
       >
         <HeroPanel
@@ -153,10 +155,31 @@ export default function MatchScreen() {
         />
       </div>
 
+      {/* DESKTOP: opponent ladder on left side rail. */}
+      <div className="hidden lg:block lg:col-start-1 lg:row-start-1 lg:row-span-3 lg:self-start lg:sticky lg:top-6">
+        <div className="surface rounded-card p-3">
+          <div className="text-[10px] uppercase tracking-widest text-muted mb-2">
+            {oppHero.name} ladder
+          </div>
+          {/* Re-uses AbilityLadder via HeroPanel's collapsible — but on desktop we want it always-open and standalone. */}
+          <DesktopSideLadder hero={oppHero} rows={oppSnap.ladderState} isOpponentView />
+        </div>
+      </div>
+
+      {/* DESKTOP: own ladder on right side rail. */}
+      <div className="hidden lg:block lg:col-start-3 lg:row-start-1 lg:row-span-3 lg:self-start lg:sticky lg:top-6">
+        <div className="surface rounded-card p-3">
+          <div className="text-[10px] uppercase tracking-widest text-muted mb-2">
+            {meHero.name} ladder
+          </div>
+          <DesktopSideLadder hero={meHero} rows={meSnap.ladderState} />
+        </div>
+      </div>
+
       {/* Arena center. */}
-      <div className="relative flex-1 flex flex-col items-center justify-center gap-2 my-2">
+      <div className="relative flex-1 flex flex-col items-center justify-center gap-2 my-2
+                      lg:my-0 lg:col-start-2 lg:row-start-2">
         <PhaseIndicator phase={state.phase} activePlayer={state.activePlayer} />
-        {/* Show whichever side is currently rolling. */}
         <DiceTray
           dice={state.players[state.activePlayer].dice}
           accent={getHero(state.players[state.activePlayer].hero).accentColor}
@@ -183,8 +206,8 @@ export default function MatchScreen() {
         )}
       </div>
 
-      {/* Active hero panel (bottom area). */}
-      <div className="rounded-card mb-1"
+      {/* Active hero panel. Desktop: bottom-center. */}
+      <div className="rounded-card mb-1 lg:mb-0 lg:col-start-2 lg:row-start-3"
            style={{ background: `linear-gradient(0deg, ${meHero.accentColor}1c 0%, transparent 100%)` }}>
         <HeroPanel
           hero={meHero}
@@ -194,21 +217,23 @@ export default function MatchScreen() {
         />
       </div>
 
-      {/* Hand. */}
-      <Hand
-        state={state}
-        hero={meSnap}
-        opponent={oppSnap}
-        accent={meHero.accentColor}
-        enabled={canInput && (state.phase === "main-pre" || state.phase === "main-post" || state.phase === "offensive-roll")}
-        onPlay={play}
-        onSell={sell}
-      />
+      {/* Hand. Desktop: bottom-center, full width across the center column. */}
+      <div className="lg:col-start-2 lg:row-start-3">
+        <Hand
+          state={state}
+          hero={meSnap}
+          opponent={oppSnap}
+          accent={meHero.accentColor}
+          enabled={canInput && (state.phase === "main-pre" || state.phase === "main-post" || state.phase === "offensive-roll")}
+          onPlay={play}
+          onSell={sell}
+        />
+      </div>
 
-      {/* Spacer so the fixed action bar doesn't cover the hand. */}
-      <div className="h-[88px] sm:h-[96px]" />
+      {/* Spacer so the fixed action bar doesn't cover the hand on mobile. */}
+      <div className="h-[88px] sm:h-[96px] lg:hidden" />
 
-      {/* Action bar — fixed at viewport bottom. */}
+      {/* Action bar. Mobile: fixed bottom. Desktop: also fixed bottom but centered narrower. */}
       <ActionBar
         state={state}
         active={meSnap}
@@ -230,6 +255,17 @@ export default function MatchScreen() {
       />
     </div>
   );
+}
+
+/** Desktop side rail rendering the AbilityLadder (always open, no collapse). */
+function DesktopSideLadder({
+  hero, rows, isOpponentView,
+}: {
+  hero: import("@/game/types").HeroDefinition;
+  rows: import("@/game/types").HeroSnapshot["ladderState"];
+  isOpponentView?: boolean;
+}) {
+  return <AbilityLadder hero={hero} rows={rows} isOpponentView={isOpponentView} />;
 }
 
 function readHero(s: string | null): HeroId | null {
