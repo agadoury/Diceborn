@@ -12,7 +12,7 @@ import { BARBARIAN } from "@/content/heroes/barbarian";
 import { BARBARIAN_CARDS } from "@/content/cards/barbarian";
 import { GENERIC_CARDS } from "@/content/cards/generic";
 import { evaluateLadder } from "@/game/dice";
-import type { Die, HeroSnapshot, LadderRowState, StatusInstance } from "@/game/types";
+import type { Die, GameEvent, HeroSnapshot, LadderRowState, StatusInstance } from "@/game/types";
 
 import { Button } from "@/components/ui/Button";
 import { HealthBar } from "@/components/ui/HealthBar";
@@ -23,7 +23,9 @@ import { StatusTrack } from "@/components/game/StatusTrack";
 import { StatusBadge } from "@/components/game/StatusBadge";
 import { CardView } from "@/components/game/CardView";
 import { sfx } from "@/audio/sfx";
+import { audio } from "@/audio/manager";
 import { vibrate } from "@/hooks/useHaptics";
+import { enqueueEvents, useChoreoStore } from "@/store/choreoStore";
 
 const SYM_FACES = BARBARIAN.diceIdentity.faces;
 
@@ -52,6 +54,7 @@ export default function DevComponents() {
       </p>
 
       <div className="flex flex-col gap-6">
+        <ChoreoTestBench />
         <DicePlayground />
         <LadderDemo />
         <StatusDemo />
@@ -59,6 +62,120 @@ export default function DevComponents() {
         <CardShowcase />
       </div>
     </main>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+   0. CHOREOGRAPHER TEST BENCH — fire any event type and feel the result.
+   ──────────────────────────────────────────────────────────────────────── */
+function ChoreoTestBench() {
+  const queueLen = useChoreoStore(s => s.queue.length);
+  const playing  = useChoreoStore(s => !!s.playing);
+  const totalHandled = useChoreoStore(s => s.totalEventsHandled);
+  const reset    = useChoreoStore(s => s.reset);
+
+  const [muted, setMuted] = useState(audio.isMuted());
+
+  function fire(events: GameEvent | GameEvent[]) {
+    enqueueEvents(Array.isArray(events) ? events : [events]);
+  }
+
+  return (
+    <Section
+      title="Choreographer test bench"
+      hint="Fire engine events; the Choreographer runs each as a timed visual+audio+haptic beat. Tap any cinematic to skip. Audio unlocks on first interaction (iOS)."
+    >
+      <div className="surface rounded-card p-4 flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
+          <span>queue: <strong className="text-ink font-num">{queueLen}</strong></span>
+          <span>playing: <strong className="text-ink">{playing ? "yes" : "no"}</strong></span>
+          <span>handled: <strong className="text-ink font-num">{totalHandled}</strong></span>
+          <span className="ml-auto inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={muted}
+              onChange={e => { audio.setMuted(e.target.checked); setMuted(e.target.checked); }}
+              className="accent-brand"
+            />
+            mute
+          </span>
+          <Button size="sm" variant="ghost" onClick={() => { reset(); }}>clear queue</Button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+          <Button sound={null} onClick={() => fire({ t: "damage-dealt", from: "p1", to: "p2", amount: 3, type: "normal", mitigated: 0 })}>
+            damage 3
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "damage-dealt", from: "p1", to: "p2", amount: 11, type: "normal", mitigated: 2 })}>
+            damage 11
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "damage-dealt", from: "p1", to: "p2", amount: 24, type: "ultimate", mitigated: 0 })}>
+            damage 24 ULT
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "damage-dealt", from: "p1", to: "p2", amount: 7, type: "pure", mitigated: 0 })}>
+            damage 7 pure
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "heal-applied", player: "p1", amount: 5 })}>
+            heal 5
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "ability-triggered", player: "p1", tier: 1, abilityName: "CLEAVE", isCritical: false })}>
+            T1 CLEAVE
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "ability-triggered", player: "p1", tier: 2, abilityName: "AXE SWING", isCritical: "minor" })}>
+            T2 AXE SWING (minor crit)
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "ultimate-fired", player: "p1", abilityName: "BLOOD HARVEST", isCritical: false })} variant="primary">
+            ULTIMATE
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "ultimate-fired", player: "p1", abilityName: "BLOOD HARVEST", isCritical: true })} variant="primary">
+            CRIT ULT
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "status-applied", status: "bleeding", holder: "p2", applier: "p1", stacks: 1, total: 3 })}>
+            +1 bleeding
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "status-applied", status: "stun", holder: "p2", applier: "p1", stacks: 1, total: 1 })}>
+            +stun
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "status-removed", status: "bleeding", holder: "p2", reason: "expired" })}>
+            -bleeding
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "rage-changed", player: "p1", stacks: 3 })}>
+            rage = 3
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "turn-started", player: "p1", turn: 4 })}>
+            turn started
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "match-won", winner: "p1" })} variant="primary">
+            match won
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "match-won", winner: "draw" })} variant="ghost">
+            draw
+          </Button>
+        </div>
+
+        <div className="text-xs text-muted">
+          <strong className="text-ink">Combo plays:</strong>
+          <div className="flex flex-wrap gap-2 mt-2">
+            <Button size="sm" sound={null} onClick={() => fire([
+              { t: "ability-triggered", player: "p1", tier: 2, abilityName: "AXE SWING", isCritical: false },
+              { t: "damage-dealt", from: "p1", to: "p2", amount: 7, type: "normal", mitigated: 0 },
+              { t: "status-applied", status: "bleeding", holder: "p2", applier: "p1", stacks: 1, total: 1 },
+            ])}>full T2 hit</Button>
+            <Button size="sm" sound={null} onClick={() => fire([
+              { t: "ultimate-fired", player: "p1", abilityName: "BLOOD HARVEST", isCritical: false },
+              { t: "damage-dealt", from: "p1", to: "p2", amount: 16, type: "ultimate", mitigated: 0 },
+              { t: "status-applied", status: "bleeding", holder: "p2", applier: "p1", stacks: 3, total: 3 },
+              { t: "status-applied", status: "stun",     holder: "p2", applier: "p1", stacks: 1, total: 1 },
+            ])}>full ULT sequence</Button>
+            <Button size="sm" sound={null} onClick={() => fire([
+              { t: "damage-dealt", from: "p2", to: "p1", amount: 11, type: "normal", mitigated: 0 },
+              { t: "hp-changed", player: "p1", delta: -11, total: 19 },
+              { t: "match-won", winner: "p2" },
+            ])}>lethal flow</Button>
+          </div>
+        </div>
+      </div>
+    </Section>
   );
 }
 
