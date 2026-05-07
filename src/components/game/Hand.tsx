@@ -59,7 +59,7 @@ export function Hand({ state, hero, opponent, accent, enabled, onPlay, onSell, c
         aria-label="Hand"
         style={{ WebkitOverflowScrolling: "touch" }}
       >
-        <div className="flex gap-2 items-end px-2 pb-2 min-w-max">
+        <div className="flex gap-2 items-end px-2 pb-2 min-w-max lg:justify-center lg:min-w-0">
           {hero.hand.length === 0 && (
             <span className="text-xs text-muted italic px-3">(no cards)</span>
           )}

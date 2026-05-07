@@ -161,9 +161,11 @@ export default function MatchScreen() {
         intensity="ambient"
         className="z-0"
       />
-      {/* MOBILE: top opponent panel. DESKTOP: top-center opponent panel. */}
+      {/* MOBILE: top opponent panel. DESKTOP: top-center opponent panel,
+          capped to a comfortable max-width and centered in the column. */}
       <div
-        className="rounded-card mb-2 lg:mb-0 lg:col-start-2 lg:row-start-1"
+        className="rounded-card mb-2 lg:mb-0 lg:col-start-2 lg:row-start-1
+                   lg:max-w-2xl lg:w-full lg:mx-auto"
         style={{ background: `linear-gradient(180deg, ${oppHero.accentColor}11 0%, transparent 100%)` }}
       >
         <HeroPanel
@@ -204,19 +206,30 @@ export default function MatchScreen() {
           activePlayer={state.activePlayer}
           thinking={mode === "vs-ai" && state.activePlayer === aiPlayer && !state.winner}
         />
-        <DiceTray
-          dice={state.players[state.activePlayer].dice}
-          accent={getHero(state.players[state.activePlayer].hero).accentColor}
-          rollKey={rollKey}
-          onToggleLock={state.activePlayer === viewer ? toggleLock : undefined}
-          centerStage={state.phase === "offensive-roll"}
-        />
+        {/* Dice tray dims outside the roll phases — cards own the screen during Main,
+            dice own it during Roll. */}
+        <div
+          className="transition-opacity duration-300 ease-out-quart"
+          style={{
+            opacity: state.phase === "offensive-roll" || state.phase === "defensive-roll" ? 1 : 0.45,
+          }}
+        >
+          <DiceTray
+            dice={state.players[state.activePlayer].dice}
+            accent={getHero(state.players[state.activePlayer].hero).accentColor}
+            rollKey={rollKey}
+            onToggleLock={state.activePlayer === viewer ? toggleLock : undefined}
+            centerStage={state.phase === "offensive-roll"}
+          />
+        </div>
         {/* Match-end result — full ResultScreen overlay rendered below. */}
       </div>
 
       {/* Active hero panel + hand share one grid cell on desktop so they
-          stack vertically inside it; on mobile they sit in normal flow. */}
-      <div className="lg:col-start-2 lg:row-start-3 flex flex-col gap-2">
+          stack vertically inside it; on mobile they sit in normal flow.
+          Capped to the same max-width as the opponent panel for symmetry. */}
+      <div className="lg:col-start-2 lg:row-start-3 flex flex-col gap-2
+                      lg:max-w-2xl lg:w-full lg:mx-auto">
         <div className="rounded-card mb-1 lg:mb-0"
              style={{ background: `linear-gradient(0deg, ${meHero.accentColor}1c 0%, transparent 100%)` }}>
           <HeroPanel
