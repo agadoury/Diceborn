@@ -214,19 +214,19 @@ export default function MatchScreen() {
         {/* Match-end result — full ResultScreen overlay rendered below. */}
       </div>
 
-      {/* Active hero panel. Desktop: bottom-center. */}
-      <div className="rounded-card mb-1 lg:mb-0 lg:col-start-2 lg:row-start-3"
-           style={{ background: `linear-gradient(0deg, ${meHero.accentColor}1c 0%, transparent 100%)` }}>
-        <HeroPanel
-          hero={meHero}
-          snapshot={meSnap}
-          variant="active"
-          active={myTurn}
-        />
-      </div>
+      {/* Active hero panel + hand share one grid cell on desktop so they
+          stack vertically inside it; on mobile they sit in normal flow. */}
+      <div className="lg:col-start-2 lg:row-start-3 flex flex-col gap-2">
+        <div className="rounded-card mb-1 lg:mb-0"
+             style={{ background: `linear-gradient(0deg, ${meHero.accentColor}1c 0%, transparent 100%)` }}>
+          <HeroPanel
+            hero={meHero}
+            snapshot={meSnap}
+            variant="active"
+            active={myTurn}
+          />
+        </div>
 
-      {/* Hand. Desktop: bottom-center, full width across the center column. */}
-      <div className="lg:col-start-2 lg:row-start-3">
         <Hand
           state={state}
           hero={meSnap}
