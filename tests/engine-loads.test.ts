@@ -7,9 +7,10 @@
  * test fixtures land alongside fresh hero content.
  */
 import { describe, it, expect } from "vitest";
-import { comboMatchesFaces, computeComboExtras } from "../src/game/dice";
-import { applyStatus, getStatusDef, stacksOf } from "../src/game/status";
-import type { DieFace, HeroSnapshot, LadderRowState } from "../src/game/types";
+import { bendSymbol, comboMatchesFaces, computeComboExtras } from "../src/game/dice";
+import { applyStatus, getStatusDef, registerStatus, stacksOf, stripStatus } from "../src/game/status";
+import { validateDeckComposition } from "../src/game/cards";
+import type { Card, DieFace, HeroSnapshot, LadderRowState } from "../src/game/types";
 
 const FACES: DieFace[] = [
   { faceValue: 1, symbol: "test:a", label: "A" },
@@ -76,6 +77,62 @@ describe("status registry — universal tokens", () => {
   });
 });
 
+describe("Correction 6 primitives", () => {
+  it("symbol bends one symbol to another", () => {
+    expect(bendSymbol("test:fur", [{ fromSymbol: "test:fur", toSymbol: "test:axe" }])).toBe("test:axe");
+    expect(bendSymbol("test:other", [{ fromSymbol: "test:fur", toSymbol: "test:axe" }])).toBe("test:other");
+  });
+
+  it("stripStatus records lastStripped count", () => {
+    const snap: HeroSnapshot = mockSnapshot();
+    applyStatus(snap, "p2", "burn", 4);
+    expect(stacksOf(snap, "burn")).toBe(4);
+    stripStatus(snap, "burn");
+    expect(stacksOf(snap, "burn")).toBe(0);
+    expect(snap.lastStripped["burn"]).toBe(4);
+  });
+
+  it("detonation triggers on apply-overflow", () => {
+    registerStatus({
+      id: "test:cinder",
+      name: "Test Cinder",
+      type: "debuff",
+      stackLimit: 5,
+      tickPhase: "neverTicks",
+      detonation: {
+        threshold: 5,
+        triggerTiming: "on-application-overflow",
+        effect: { kind: "damage", amount: 8, type: "pure" },
+        resetsStacksTo: 0,
+      },
+      visualTreatment: { icon: "burn", color: "var(--c-dmg)", pulse: true },
+    });
+    const snap: HeroSnapshot = mockSnapshot();
+    const events = applyStatus(snap, "p2", "test:cinder", 5);
+    expect(events.find(e => e.t === "status-detonated")).toBeDefined();
+    expect(stacksOf(snap, "test:cinder")).toBe(0);
+  });
+
+  it("validateDeckComposition enforces 12 cards + 4 masteries (no T4)", () => {
+    const card = (id: string, kind: Card["kind"], extras: Partial<Card> = {}): Card => ({
+      id, hero: "h", kind, name: id, cost: 1, text: "", trigger: { kind: "manual" },
+      effect: { kind: "gain-cp", amount: 1 }, ...extras,
+    });
+    const good: Card[] = [
+      card("h/m1", "mastery", { masteryTier: 1 }),
+      card("h/m2", "mastery", { masteryTier: 2 }),
+      card("h/m3", "mastery", { masteryTier: 3 }),
+      card("h/md", "mastery", { masteryTier: "defensive" }),
+      ...Array.from({ length: 8 }, (_, i) => card(`h/p${i}`, "main-phase")),
+    ];
+    expect(validateDeckComposition(good)).toEqual([]);
+
+    const tooFew = good.slice(0, 11);
+    const issues = validateDeckComposition(tooFew);
+    expect(issues.some(i => i.includes("12"))).toBe(true);
+  });
+});
+
 function mockSnapshot(): HeroSnapshot {
   return {
     player: "p1", hero: "",
@@ -86,5 +143,6 @@ function mockSnapshot(): HeroSnapshot {
     signatureState: {},
     ladderState: [] as LadderRowState[],
     isLowHp: false, nextAbilityBonusDamage: 0,
+    abilityModifiers: [], symbolBends: [], lastStripped: {}, masterySlots: {},
   };
 }

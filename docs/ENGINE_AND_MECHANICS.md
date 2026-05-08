@@ -176,12 +176,17 @@ When the active player ends their offensive roll:
 
 | Tier | Role | Target landing rate | Damage envelope |
 |---|---|---|---|
-| 1 — Basic | "I always do something" | 75–95% | 3–7 dmg |
+| 1 — Basic | "I always do something" | 75–95% | 3–9 dmg (extended ceiling for Minor Crit on T1 scaling abilities) |
 | 2 — Strong | "I'm playing well" | 45–70% | 5–9 dmg |
 | 3 — Signature | Big swing — earned | 20–45% | 9–13 dmg |
-| 4 — Ultimate | Once or twice per match | 8–25% | 13–18 dmg |
+| 4 — Ultimate (standard) | Once or twice per match | 8–25% | 13–15 dmg |
+| 4 — Ultimate (career-moment) | Once-per-career screenshot | 1–5% | 15–18 dmg |
 
-Tier 4 triggers a full-screen cinematic moment via the choreographer (`ultimate-fired` event).
+Tier 4 triggers a full-screen cinematic moment via the choreographer (`ultimate-fired` event). Career-moment is opted-in by setting `ultimateBand: "career-moment"` on the AbilityDef — the simulator validates against the matching landing band.
+
+### Critical Ultimate (Correction 6 §12)
+
+A Tier 4 ability can declare a more-restrictive variant — `criticalCondition: DiceCombo` — that, when matched on top of the base combo, fires the ability with an enhanced cinematic + optional mechanical bonus (`criticalEffect: { cosmeticOnly | damageMultiplier | damageOverride | effectAdditions | consumeModifierBonus }`). The crit class is escalated to `"major"` so the choreographer plays the harder-hitting cinematic. See `phases.ts beginAttack` for the matcher and `applyAttackEffects` for the consumer.
 
 ### Defensive ladder (interactive — Correction 5)
 
@@ -201,11 +206,20 @@ Each `AbilityDef` in the defensive ladder may declare `defenseDiceCount: 2 | 3 |
 
 **Fallback if no defensive ladder is declared:** the engine falls back to "1 dmg reduced per shield-symbol face the defender rolls (5 dice, no choice)" — mechanically valid but much less interesting than a real ladder.
 
+**Offensive fallback (Correction 6 §7):** any defense in the ladder may declare an `offensiveFallback: { diceCount?, combo?, effect }`. When the caster's *own* offensive turn ends without producing a firing ability, the engine rolls the fallback's dice once and resolves the fallback effect if its combo lands — useful for "consolation prize" mechanics like Bloodoath (heal + a passive stack on offensive whiff). See `phases.ts tryOffensiveFallback`.
+
 ---
 
 ## 6. Damage pipeline
 
-`src/game/damage.ts`. One function `dealDamage(source, target, amount, type, defensiveReduction)` handles every incoming damage source. The order of operations:
+Damage is computed in two layers:
+
+1. **`phases.ts resolveAbilityEffect`** — composes the *amount and type* by walking the ability's effect tree, applying ability modifiers (masteries / persistent buffs) per scope, passive token modifiers (e.g. Frost-bite -1 dmg / stack), conditional bonuses, conditional type overrides, the bankable-passive bonus (e.g. Radiance +2 dmg / token spent), and crit modulation.
+2. **`damage.ts dealDamage`** — applies *mitigation* against the resulting amount: Shield → Protect → defensive-roll reduction → HP. Self-cost damage on the caster runs through this same pipeline as `pure` (bypasses everything).
+
+### Order of operations on incoming damage
+
+`dealDamage(source, target, amount, type, defensiveReduction)`:
 
 ```
 incoming amount
@@ -284,7 +298,15 @@ A status's `tickPhase` controls when its `onTick` runs:
 
 ### Signature tokens
 
-Heroes can register their own status definitions on top of the universal pool. The hero's content module calls `registerStatus(...)` once at module load. Signature tokens get the same machinery as universals — apply, tick, strip, on-removal hooks all work the same way.
+Heroes can register their own status definitions on top of the universal pool. The hero's content module calls `registerStatus(...)` once at module load. Signature tokens get the same machinery as universals — apply, tick, strip, on-removal — plus three richer hooks added in Correction 6:
+
+| Field | Behaviour |
+|---|---|
+| `passiveModifier` | Continuous, non-tick effect while stacks > 0. `scope: "holder" \| "applier"`, `trigger: "on-offensive-ability" \| "on-defensive-roll" \| "on-card-played" \| "always"`, `field: "damage" \| "defensive-dice-count" \| "card-cost"`, `valuePerStack`, optional `cap: { min?, max? }`. Aggregated by `phases.ts aggregatePassiveModifiers` when computing damage. |
+| `detonation` | Threshold trigger. `threshold`, `triggerTiming: "on-application-overflow" \| "on-holder-upkeep-at-threshold" \| "on-event"`, `effect: AbilityEffect`, `resetsStacksTo` (default 0). Wired in `status.ts applyStatus` — emits `status-detonated`, marks `signatureState["__pendingDetonation:<id>"]` so the engine can chain the detonation effect. |
+| `stateThresholdEffects[]` | Array of `{ threshold, effect, duration }`. `effect` is one of `block-card-kind`, `block-ability-tier`, or `modify-roll-dice-count`. Read by `cards.ts canPlay` to gate plays while the holder is at threshold. |
+
+`stripStatus` records the stacks-removed count on `holder.lastStripped[status]` so downstream conditional bonuses (e.g. "+1 dmg per stack stripped") can read it in the same resolution.
 
 ---
 
@@ -311,21 +333,69 @@ The shared spendable resource. All cards have a CP cost (typically 0–5).
 | Kind | Playable when | Trigger |
 |---|---|---|
 | `main-phase` | Active player's `main-pre` or `main-post` | Manual |
-| `roll-phase` | Active player's `offensive-roll` (between rolls) | Manual |
-| `instant` | Any time (auto-prompts both players on qualifying events) | Reactive |
+| `roll-phase` | Active player's `offensive-roll` OR defender's `defensive-roll` | Manual |
+| `instant` | Any time (auto-prompts the holder on qualifying events) | Structured trigger |
+| `mastery` | Active player's main phase | Manual; locks `masterySlots[masteryTier]` for the rest of the match |
 
-Legacy kinds `upgrade`, `main-action`, `roll-action`, `status` are still in the type union for backward compatibility but new content uses the canonical 3.
+Legacy kinds `upgrade`, `main-action`, `roll-action`, `status` are still in the type union for backward compatibility but new content uses the canonical four.
+
+### Deck composition validator
+
+`cards.ts validateDeckComposition` enforces Correction 6 §9: exactly 12 cards, exactly 4 Masteries (one each for T1 / T2 / T3 / Defensive). T4 ultimates intentionally have no Mastery — power lives at the curve peak. The validator returns a list of issues; an empty list means the deck is conformant.
+
+### Instant trigger taxonomy (Correction 6 §5)
+
+`CardTrigger` is a structured union. The choreographer's instant-prompt path inspects each playable Instant's trigger to decide whether the just-played event qualifies:
+
+| Trigger kind | When it qualifies |
+|---|---|
+| `self-takes-damage` | Any `damage-dealt` to the holder. Optional `from`: `"offensive-ability"` / `"status-tick"` / `"self-cost"` / `"any"`. |
+| `self-attacked` | An `attack-intended` targeting the holder. Optional `tier`. |
+| `opponent-fires-ability` | Any `ability-triggered` by the opponent. Optional `tier`. |
+| `opponent-removes-status` | A `status-removed` (reason `"stripped"`) targeting the holder for the named status. |
+| `opponent-applies-status` | A `status-applied` to the holder for the named status. |
+| `self-ability-resolved` | A `damage-dealt` from the holder's ability. Optional `tier`. |
+| `match-state-threshold` | HP crosses a threshold. `metric: "self-hp" \| "opponent-hp"`, `op: "<=" \| ">="`, `value`. |
 
 ### Effect resolver
 
 `resolveEffect(effect, ctx)` in `cards.ts` is the single dispatcher. The same function resolves both card effects and ability effects (they share the `AbilityEffect` shape). Supported kinds:
 
-- `damage` / `scaling-damage` / `reduce-damage`
+**Core**
+- `damage` / `scaling-damage` / `reduce-damage` — `damage` and `scaling-damage` carry optional `self_cost`, `conditional_bonus`, `conditional_type_override` sub-fields ([§6](#6-damage-pipeline))
 - `heal` (target self or opponent)
 - `apply-status` / `remove-status`
 - `gain-cp` / `draw`
 - `compound` (sequence of sub-effects)
-- `custom` (escape hatch — dispatched through a `registerCustomCard(id, handler)` registry for cards that need bespoke logic)
+
+**Dice manipulation (Correction 6 §3)**
+- `set-die-face` — set N dice to a specific face, with filter + target shapes
+- `reroll-dice` — reroll a filtered subset once; optional `ignoresLock`
+- `face-symbol-bend` — temporarily count one symbol as another (this-roll / this-turn / until-status)
+
+**Persistence**
+- `ability-upgrade` — push an `ActiveAbilityModifier` onto the caster; applied during `phases.ts resolveAbilityEffect` whenever the firing ability matches the modifier's scope
+- `persistent-buff` — same as above plus a `discardOn` trigger that removes the modifier on a qualifying event
+- `passive-counter-modifier` — direct `signatureState[passiveKey]` manipulation
+
+**Bonus dice**
+- `bonus-dice-damage` — roll N extra hero faces; deal damage by `sum-of-faces` / `highest-face` / `count-symbol`; optional `thresholdBonus` chains a follow-up effect
+
+**Last resort**
+- `custom` (escape hatch — dispatched through a `registerCustomCard(id, handler)` registry; a well-formed hero submission has zero of these)
+
+### Modifier evaluation pipeline
+
+When an ability fires, `phases.ts resolveAbilityEffect` walks the effect tree and for each `damage` / `scaling-damage` leaf:
+
+1. Read the base amount.
+2. Apply `ability-upgrade` modifiers whose scope matches the firing ability (`base-damage`, `damage-type`, `defenseDiceCount`, etc.); evaluate any `conditional` StateCheck.
+3. Apply `passive-token-modifier` aggregation (Frost-bite -1 dmg / stack on `on-offensive-ability + damage`).
+4. Apply the leaf's `conditional_bonus` (per-unit damage, source from opponent stacks / self stacks / stripped-stack-count / passive counter / fixed-one).
+5. Apply the leaf's `conditional_type_override` (e.g. normal → undefendable when 4+ axes).
+6. Apply crit modulation (`critFlat` + `critMul`) and the firing ability's Critical Ultimate `damageMultiplier` / `damageOverride` if `critTriggered`.
+7. Pass the resulting amount + type into `damage.ts dealDamage` for mitigation.
+8. If the leaf carries `self_cost`, deal that amount as `pure` damage to the caster (no on-hit / passive triggers).
 
 ---
 
@@ -351,7 +421,21 @@ interface HeroDefinition {
 }
 ```
 
-`PassiveBehavior` is open-shaped: `{ kind: string, [key: string]: unknown }`. The hero declares its kind, the `phases.ts` dispatcher matches on `kind` at the relevant phase boundary, and a custom handler does the work. This lets new heroes introduce new mechanic categories without engine changes.
+`PassiveBehavior` is open-shaped but the engine reads four well-known optional fields:
+
+- `passiveKey` — slot in `signatureState[]` where the bankable counter lives (`"frenzy"`, `"radiance"`, etc.)
+- `bankStartsAt` — seed value at match start (engine writes it during `start-match`)
+- `bankCap` — optional cap on the counter
+- `spendOptions: PassiveSpendOption[]` — declared spend modes; engine opens a `pendingBankSpend` prompt at the matching context (offensive / defensive resolution / main-phase-on-demand)
+
+Anything outside these well-known fields is hero-specific and dispatched via `phases.ts` per the `kind` discriminator.
+
+`HeroSnapshot` carries transient state for the new primitives:
+
+- `abilityModifiers: ActiveAbilityModifier[]` — masteries + persistent buffs in flight
+- `symbolBends: ActiveSymbolBend[]` — active face-symbol bends
+- `lastStripped: Record<StatusId, number>` — count of stacks stripped in the most-recent strip event (consumed by conditional bonuses)
+- `masterySlots: { 1?, 2?, 3?, defensive? }` — locks the per-tier mastery slot once played
 
 Heroes register themselves in `src/content/index.ts` (`HEROES: Partial<Record<HeroId, HeroDefinition>>`). The HeroSelect screen, simulator, and dev showcase all read this registry live.
 
@@ -378,6 +462,8 @@ type Action =
   | { kind: "end-turn" }
   | { kind: "respond-to-counter"; accept }
   | { kind: "select-defense"; abilityIndex: number | null }   // defender picks during pendingAttack
+  | { kind: "spend-bank"; amount }                            // resolve pendingBankSpend (Radiance, etc.)
+  | { kind: "decline-bank-spend" }
   | { kind: "concede"; player };
 ```
 
@@ -418,6 +504,11 @@ Every `applyAction` returns a new `state` and a `GameEvent[]`. Events are declar
 - `attack-intended`, `defense-intended`, `defense-dice-rolled`, `defense-resolved` — the four-event defensive flow ([§5](#5-ability-ladders))
 - `damage-dealt`, `hp-changed`, `heal-applied`
 - `status-applied`, `status-ticked`, `status-removed`, `status-triggered`
+- `status-detonated` — Cinder-style threshold explosion (Correction 6 §1b)
+- `passive-counter-changed` — bankable / non-bankable counter ticked up or spent (Frenzy, Radiance)
+- `ability-modifier-added`, `ability-modifier-removed` — Mastery / persistent-buff lifecycle
+- `symbol-bend-applied`, `symbol-bend-expired` — face-symbol-bend lifecycle
+- `bank-spend-prompt`, `bank-spent` — bankable-passive spend flow
 - `hero-state` (idle/hit/defended/low-hp-enter/low-hp-exit/victorious/defeated)
 - `cp-changed`, `counter-prompt`, `counter-resolved`
 
@@ -551,13 +642,23 @@ From `src/game/types.ts`:
 
 ## 16. Glossary
 
+- **Ability modifier** — entry in `HeroSnapshot.abilityModifiers[]` from a Mastery, persistent buff, or `ability-upgrade` effect. Applied during damage resolution when its scope matches the firing ability.
 - **Active player** — whose turn it currently is (`state.activePlayer`).
 - **Attack-intended** — engine event marking the start of the defensive flow; `state.pendingAttack` is set, the engine halts until `select-defense` arrives.
+- **Bankable passive** — signature passive with a `signatureState` counter that the player can spend at named contexts (offensive/defensive resolution / main-phase-on-demand) per the hero's `spendOptions`.
 - **Combo** — a dice condition that fires an ability. See [§4](#4-dice--the-combo-grammar).
+- **Conditional bonus** — `damage` / `scaling-damage` sub-field that adds per-unit bonus damage when a `StateCheck` holds.
+- **Critical Ultimate** — a Tier 4 ability's `criticalCondition` matched on top of the base combo; escalates the cinematic and applies `criticalEffect` modifiers.
 - **CP** — Combat Points. Shared spendable resource. Cap 15.
 - **Defendable damage** — `normal` and `collateral` types; runs through the defensive ladder picker. `undefendable` / `pure` / `ultimate` skip the picker entirely.
 - **Defense dice count** — `AbilityDef.defenseDiceCount` (2–5, default 3); how many dice the defender rolls when this defense is picked. Single roll, no rerolls.
 - **Defensive ladder** — per-hero set of defensive abilities the defender picks from when attacked. Single-roll resolution per the chosen defense's dice count.
+- **Detonation** — token-level "explode at threshold" hook. Triggered on `applyStatus` overflow.
+- **Mastery** — persistent ability upgrade card. Each hero ships exactly 4 (T1 / T2 / T3 / Defensive). Locks the corresponding slot in `HeroSnapshot.masterySlots`.
+- **Offensive fallback** — a defense's optional consolation effect that fires when the caster's offensive turn produces no ability.
+- **Passive modifier** — token-level continuous adjustment applied while stacks > 0 (e.g. Frost-bite -1 dmg / stack on holder's offensive abilities).
+- **State threshold effect** — token-level gating that blocks card kinds / ability tiers / dice count when the holder is at or above a stack threshold.
+- **Symbol bend** — temporary `from_symbol → to_symbol` aliasing applied during combo evaluation. Active for one of: this-roll, this-turn, until-status.
 - **Effect** — `AbilityEffect` — what an ability or card does (damage, heal, status, etc.).
 - **Event** — `GameEvent` — typed record of one thing that happened during action resolution.
 - **Hero snapshot** — `HeroSnapshot` — a player's full live state (HP, CP, dice, hand, deck, statuses, ladder state).

@@ -314,6 +314,19 @@ function playEvent(ev: GameEvent, ctx: PlayCtx): number {
 
     case "counter-prompt":     return 0;
     case "counter-resolved":   return 400;
+    case "passive-counter-changed": return 600;
+    case "status-detonated": {
+      ctx.triggerHitStop(160);
+      ctx.setShake({ magnitude: 6, duration: 200, startedAt: performance.now() });
+      setTimeout(() => ctx.setShake(null), 200);
+      return 1100;
+    }
+    case "ability-modifier-added":   return 600;
+    case "ability-modifier-removed": return 400;
+    case "symbol-bend-applied":      return 500;
+    case "symbol-bend-expired":      return 250;
+    case "bank-spend-prompt":        return 0;          // overlay holds its own pacing
+    case "bank-spent":               return ev.amount > 0 ? 600 : 200;
   }
 }
 

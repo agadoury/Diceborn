@@ -26,6 +26,24 @@ import { stacksOf } from "./status";
 export function symbolsOnDice(dice: ReadonlyArray<Die>): SymbolId[] {
   return dice.map(d => d.faces[d.current].symbol);
 }
+
+/** Apply a list of active symbol bends to a face — one-directional, first
+ *  matching bend wins. Used by combo evaluators to honour `face-symbol-bend`
+ *  (Correction 6 §3c). */
+export function bendSymbol(symbol: SymbolId, bends: ReadonlyArray<{ fromSymbol: SymbolId; toSymbol: SymbolId }>): SymbolId {
+  for (const b of bends) if (b.fromSymbol === symbol) return b.toSymbol;
+  return symbol;
+}
+
+/** Project DieFaces through any active symbol bends, returning a new face
+ *  array with bent symbols (faceValue and label preserved). */
+export function bentFaces(
+  faces: ReadonlyArray<DieFace>,
+  bends: ReadonlyArray<{ fromSymbol: SymbolId; toSymbol: SymbolId }>,
+): DieFace[] {
+  if (bends.length === 0) return faces.slice();
+  return faces.map(f => ({ ...f, symbol: bendSymbol(f.symbol, bends) }));
+}
 export function tally(symbols: ReadonlyArray<SymbolId>): Map<SymbolId, number> {
   const m = new Map<SymbolId, number>();
   for (const s of symbols) m.set(s, (m.get(s) ?? 0) + 1);

@@ -10,6 +10,9 @@
  */
 
 import type {
+  AbilityEffect,
+  AbilityTier,
+  CardKind,
   GameEvent,
   GameState,
   HeroSnapshot,
@@ -24,6 +27,44 @@ export type TickPhase =
   | "applierUpkeep"    // ticks at the upkeep of whoever applied it (Bleeding)
   | "neverTicks"       // Stun, Protect, Shield (consumed/expired by other rules)
   | "onTrigger";       // Judgment (resolved when its trigger event fires)
+
+/** A continuous, non-tick effect a status applies while stacks > 0
+ *  (Correction 6 §1a). Frost-bite uses this for "-1 dmg on holder's
+ *  offensive abilities per stack". */
+export interface PassiveModifier {
+  scope: "holder" | "applier";
+  trigger:
+    | "on-offensive-ability"     // applied as a damage adjustment to the affected player's offensive abilities
+    | "on-defensive-roll"        // adds to / subtracts from defensive dice count
+    | "on-card-played"
+    | "always";
+  /** Per-stack effect description. The engine reads `field` + `valuePerStack`. */
+  field: "damage" | "defensive-dice-count" | "card-cost";
+  valuePerStack: number;
+  /** Optional clamp (e.g. min: 0 to never push damage below 0). */
+  cap?: { min?: number; max?: number };
+}
+
+/** A token whose presence at or above `threshold` stacks blocks game actions
+ *  on the holder (Correction 6 §1c). Verdict at 3+ blocks main-phase cards
+ *  and instants on the holder's next Main Phase. */
+export interface StateThresholdEffect {
+  threshold: number;
+  effect:
+    | { kind: "block-card-kind"; cardKind: CardKind }
+    | { kind: "block-ability-tier"; tier: AbilityTier }
+    | { kind: "modify-roll-dice-count"; delta: number };
+  duration: "while-at-threshold" | "next-turn" | "this-phase";
+}
+
+/** A token that explodes when stacks reach a threshold (Correction 6 §1b).
+ *  Cinder uses `threshold: 5, effect: 8 dmg, resetsStacksTo: 0`. */
+export interface DetonationDefinition {
+  threshold: number;
+  triggerTiming: "on-application-overflow" | "on-holder-upkeep-at-threshold" | "on-event";
+  effect: AbilityEffect;
+  resetsStacksTo?: number;       // default 0
+}
 
 export interface StatusDefinition {
   id: StatusId;
@@ -42,6 +83,12 @@ export interface StatusDefinition {
     inst: StatusInstance,
     reason: "expired" | "stripped" | "ignited",
   ) => { events: GameEvent[]; pendingDamage?: number };
+  /** Continuous modifier applied while stacks > 0. Read by ability resolver. */
+  passiveModifier?: PassiveModifier;
+  /** Stacks threshold(s) that block specific actions on the holder. */
+  stateThresholdEffects?: StateThresholdEffect[];
+  /** Threshold-detonation: on apply (or upkeep), check stacks and trigger. */
+  detonation?: DetonationDefinition;
   visualTreatment: { icon: string; color: string; pulse: boolean; particle?: string };
 }
 
@@ -121,7 +168,12 @@ registerStatus({
 
 // ── Helpers used by the engine ───────────────────────────────────────────────
 
-/** Apply N stacks; clamps to the definition's stackLimit. Emits status-applied. */
+/** Apply N stacks; clamps to the definition's stackLimit. Emits status-applied.
+ *  Per Correction 6 §1b, if the definition declares a `detonation` block and
+ *  the post-apply count meets the threshold, we emit `status-detonated`,
+ *  resolve the detonation effect, and reset stacks per the definition. The
+ *  detonation effect is resolved against the holder's opponent (caller can
+ *  re-target if needed). */
 export function applyStatus(
   holder: HeroSnapshot,
   applier: PlayerId,
@@ -130,22 +182,45 @@ export function applyStatus(
 ): GameEvent[] {
   const def = REGISTRY.get(status);
   if (!def || stacks <= 0) return [];
+  const events: GameEvent[] = [];
+
   const existing = holder.statuses.find(s => s.id === status);
+  let postCount = 0;
   if (existing) {
     const before = existing.stacks;
     existing.stacks = Math.min(def.stackLimit, before + stacks);
-    if (existing.stacks === before) return [];   // already capped
-    // Track the most recent applier (matters for Bleeding ticking on their turn)
-    existing.appliedBy = applier;
-    return [{ t: "status-applied", status, holder: holder.player, applier, stacks: existing.stacks - before, total: existing.stacks }];
+    if (existing.stacks === before) {
+      // Already capped — but detonation may still trigger when at threshold.
+      postCount = existing.stacks;
+    } else {
+      existing.appliedBy = applier;
+      events.push({ t: "status-applied", status, holder: holder.player, applier, stacks: existing.stacks - before, total: existing.stacks });
+      postCount = existing.stacks;
+    }
+  } else {
+    const inst: StatusInstance = { id: status, stacks: Math.min(def.stackLimit, stacks), appliedBy: applier };
+    holder.statuses.push(inst);
+    events.push({ t: "status-applied", status, holder: holder.player, applier, stacks: inst.stacks, total: inst.stacks });
+    postCount = inst.stacks;
   }
-  const inst: StatusInstance = {
-    id: status,
-    stacks: Math.min(def.stackLimit, stacks),
-    appliedBy: applier,
-  };
-  holder.statuses.push(inst);
-  return [{ t: "status-applied", status, holder: holder.player, applier, stacks: inst.stacks, total: inst.stacks }];
+
+  if (def.detonation && def.detonation.triggerTiming === "on-application-overflow" && postCount >= def.detonation.threshold) {
+    events.push({ t: "status-detonated", status, holder: holder.player, threshold: def.detonation.threshold });
+    // Reset stacks (default 0). The detonation effect is a normal AbilityEffect
+    // and is resolved by the caller / engine via the registry helper below.
+    const resetTo = def.detonation.resetsStacksTo ?? 0;
+    const inst2 = holder.statuses.find(s => s.id === status);
+    if (inst2) {
+      if (resetTo <= 0) holder.statuses = holder.statuses.filter(s => s.id !== status);
+      else inst2.stacks = resetTo;
+    }
+    // Record on the holder so phases.ts / engine can pick this up and resolve
+    // the detonation's effect with the correct caster/opponent context. The
+    // engine reads `holder.signatureState["__pendingDetonation:<id>"] = 1`
+    // and dispatches the matching definition's effect.
+    holder.signatureState[`__pendingDetonation:${status}`] = 1;
+  }
+  return events;
 }
 
 /** Remove up to N stacks. If status reaches 0, fires onRemove and emits removed. */
@@ -174,11 +249,17 @@ export function removeStatus(
   return { events, pendingDamage };
 }
 
-/** Strip a status entirely — removes all stacks, returns events. */
+/** Strip a status entirely — removes all stacks, returns events. Records the
+ *  stripped-stack-count on `holder.lastStripped[status]` so downstream
+ *  conditional-bonus checks can read it (e.g. Solar Blade's per-Verdict-stack
+ *  bonus). The record persists until the holder's next phase. */
 export function stripStatus(holder: HeroSnapshot, status: StatusId): { events: GameEvent[]; pendingDamage: number } {
   const inst = holder.statuses.find(s => s.id === status);
   if (!inst) return { events: [], pendingDamage: 0 };
-  return removeStatus(holder, status, inst.stacks, "stripped");
+  const stacksBefore = inst.stacks;
+  const result = removeStatus(holder, status, inst.stacks, "stripped");
+  holder.lastStripped[status] = stacksBefore;
+  return result;
 }
 
 /** Tick all statuses on `holder` whose tickPhase matches. Used by phases.ts. */

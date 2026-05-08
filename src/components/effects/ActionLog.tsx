@@ -137,6 +137,14 @@ function formatEvent(ev: GameEvent): string | null {
     case "rage-changed":       return ev.stacks > 0 ? `${p(ev.player)} Rage ${ev.stacks}` : null;
     case "counter-prompt":     return `${p(ev.holder)} counter?`;
     case "counter-resolved":   return ev.accepted ? `${p(ev.holder)} counters!` : null;
+    case "passive-counter-changed": return ev.delta > 0 ? `${p(ev.player)} +${ev.delta} ${ev.passiveKey}` : null;
+    case "status-detonated":   return `${ev.status.toUpperCase()} detonates on ${p(ev.holder)}!`;
+    case "ability-modifier-added":   return null;     // covered by card-played
+    case "ability-modifier-removed": return null;
+    case "symbol-bend-applied":  return `${p(ev.player)} ${ev.from}→${ev.to}`;
+    case "symbol-bend-expired":  return null;
+    case "bank-spend-prompt":    return `${p(ev.holder)} ${ev.passiveKey}? (${ev.available})`;
+    case "bank-spent":           return ev.amount > 0 ? `${p(ev.holder)} spends ${ev.amount} ${ev.passiveKey}` : null;
   }
 }
 

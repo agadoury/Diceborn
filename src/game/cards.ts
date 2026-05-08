@@ -11,16 +11,21 @@
 
 import type {
   AbilityEffect,
+  ActiveAbilityModifier,
+  ActiveSymbolBend,
   Card,
   CardId,
+  DieFace,
   GameEvent,
   GameState,
   HeroSnapshot,
+  StateCheck,
+  SymbolId,
 } from "./types";
 import { CP_CAP, HAND_CAP } from "./types";
-import { applyStatus, stripStatus, stacksOf } from "./status";
+import { applyStatus, stripStatus, stacksOf, getStatusDef } from "./status";
 import { dealDamage, heal } from "./damage";
-import { rollOn, shuffleInPlace } from "./rng";
+import { nextInt, rollOn, shuffleInPlace } from "./rng";
 
 // ── Custom card registry ────────────────────────────────────────────────────
 export interface CustomCardCtx {
@@ -114,8 +119,249 @@ export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent
       }
       return handler({ state: ctx.state, caster: ctx.caster, opponent: ctx.opponent, targetDie: ctx.targetDie });
     }
+    // ── Correction 6 — first-class primitives ────────────────────────────
+    case "set-die-face":
+      return setDieFace(ctx.state, ctx.caster, effect, ctx.targetDie);
+    case "reroll-dice":
+      return rerollDice(ctx.state, ctx.caster, effect);
+    case "face-symbol-bend":
+      return applySymbolBend(ctx.state, ctx.caster, effect);
+    case "ability-upgrade":
+      return addAbilityModifier(ctx.caster, {
+        source: "card",
+        scope: effect.scope,
+        modifications: effect.modifications,
+        permanent: effect.permanent,
+      });
+    case "passive-counter-modifier":
+      return modifyPassiveCounter(ctx.caster, effect);
+    case "persistent-buff":
+      return addAbilityModifier(ctx.caster, {
+        source: "card",
+        scope: effect.scope,
+        modifications: [effect.modifier],
+        permanent: true,
+        discardOn: effect.discardOn,
+      }, effect.id);
+    case "bonus-dice-damage":
+      return resolveBonusDiceDamage(ctx.state, ctx.caster, ctx.opponent, effect);
   }
 }
+
+// ── New-primitive resolvers ─────────────────────────────────────────────────
+
+function setDieFace(
+  _state: GameState,
+  caster: HeroSnapshot,
+  effect: Extract<AbilityEffect, { kind: "set-die-face" }>,
+  targetDie?: number,
+): GameEvent[] {
+  const events: GameEvent[] = [];
+  const dice = caster.dice;
+  const eligibleIdx: number[] = [];
+  for (let i = 0; i < dice.length; i++) {
+    const face = dice[i].faces[dice[i].current];
+    if (effect.filter === "any") {
+      eligibleIdx.push(i);
+    } else if (effect.filter.kind === "specific-symbol") {
+      if (face.symbol === effect.filter.symbol) eligibleIdx.push(i);
+    } else if (effect.filter.kind === "specific-face") {
+      if (face.faceValue === effect.filter.faceValue) eligibleIdx.push(i);
+    }
+  }
+  // If a specific die was indicated and it's eligible, prefer it.
+  const ordered = targetDie != null && eligibleIdx.includes(targetDie)
+    ? [targetDie, ...eligibleIdx.filter(i => i !== targetDie)]
+    : eligibleIdx;
+
+  let setCount = 0;
+  for (const idx of ordered) {
+    if (setCount >= effect.count) break;
+    const die = dice[idx];
+    const targetFaceIdx = findFaceIndex(die.faces, effect.target);
+    if (targetFaceIdx < 0) continue;
+    const from = die.current;
+    if (from === targetFaceIdx) { setCount++; continue; }
+    die.current = targetFaceIdx;
+    events.push({ t: "die-face-changed", player: caster.player, die: idx, from, to: targetFaceIdx, cause: "card" });
+    setCount++;
+  }
+  return events;
+}
+
+function findFaceIndex(faces: readonly DieFace[], target: { kind: "symbol"; symbol: SymbolId } | { kind: "face"; faceValue: 1|2|3|4|5|6 }): number {
+  if (target.kind === "symbol") return faces.findIndex(f => f.symbol === target.symbol);
+  return faces.findIndex(f => f.faceValue === target.faceValue);
+}
+
+function rerollDice(
+  state: GameState,
+  caster: HeroSnapshot,
+  effect: Extract<AbilityEffect, { kind: "reroll-dice" }>,
+): GameEvent[] {
+  const events: GameEvent[] = [];
+  const eligible = caster.dice.filter(d => {
+    if (!effect.ignoresLock && d.locked) return false;
+    if (effect.filter === "all") return true;
+    if (effect.filter === "not-locked") return !d.locked;
+    if (effect.filter.kind === "not-showing-symbols") {
+      return !effect.filter.symbols.includes(d.faces[d.current].symbol);
+    }
+    return true;
+  });
+  for (const d of eligible) {
+    const r = nextInt(state.rngSeed, state.rngCursor, d.faces.length);
+    state.rngCursor = r.cursor;
+    d.current = r.value;
+  }
+  events.push({
+    t: "dice-rolled",
+    player: caster.player,
+    dice: caster.dice.map(d => ({ index: d.index, current: d.current, symbol: d.faces[d.current].symbol, locked: d.locked })),
+    attemptNumber: 1,
+  });
+  return events;
+}
+
+function applySymbolBend(
+  state: GameState,
+  caster: HeroSnapshot,
+  effect: Extract<AbilityEffect, { kind: "face-symbol-bend" }>,
+): GameEvent[] {
+  const id = `bend-${state.rngCursor}-${caster.symbolBends.length}`;
+  let expires: ActiveSymbolBend["expires"];
+  if (effect.duration === "this-roll") {
+    expires = { kind: "this-roll", appliedAtAttempt: caster.rollAttemptsRemaining };
+  } else if (effect.duration === "this-turn") {
+    expires = { kind: "this-turn", appliedOnTurn: state.turn };
+  } else {
+    expires = { kind: "until-status", status: effect.duration.status, on: effect.duration.on };
+  }
+  caster.symbolBends.push({ id, fromSymbol: effect.from_symbol, toSymbol: effect.to_symbol, expires });
+  return [{ t: "symbol-bend-applied", player: caster.player, bendId: id, from: effect.from_symbol, to: effect.to_symbol }];
+}
+
+let _modIdCounter = 1;
+function addAbilityModifier(
+  caster: HeroSnapshot,
+  spec: Omit<ActiveAbilityModifier, "id">,
+  givenId?: string,
+): GameEvent[] {
+  const id = givenId ?? `mod-${_modIdCounter++}`;
+  caster.abilityModifiers.push({ id, ...spec });
+  return [{ t: "ability-modifier-added", player: caster.player, modifierId: id, source: spec.source }];
+}
+
+function modifyPassiveCounter(
+  caster: HeroSnapshot,
+  effect: Extract<AbilityEffect, { kind: "passive-counter-modifier" }>,
+): GameEvent[] {
+  const before = caster.signatureState[effect.passiveKey] ?? 0;
+  const after = effect.operation === "set" ? effect.value : before + effect.value;
+  // Respect cap from hero passive definition (read by phases.ts when the cap
+  // is known); cards-context can't see it, so allow if respectsCap: false,
+  // otherwise clamp at CP_CAP as a sane default.
+  const clamped = effect.respectsCap === false ? after : Math.min(after, CP_CAP);
+  caster.signatureState[effect.passiveKey] = Math.max(0, clamped);
+  const delta = caster.signatureState[effect.passiveKey] - before;
+  if (delta === 0) return [];
+  return [{ t: "passive-counter-changed", player: caster.player, passiveKey: effect.passiveKey, delta, total: caster.signatureState[effect.passiveKey] }];
+}
+
+function resolveBonusDiceDamage(
+  state: GameState,
+  caster: HeroSnapshot,
+  opponent: HeroSnapshot,
+  effect: Extract<AbilityEffect, { kind: "bonus-dice-damage" }>,
+): GameEvent[] {
+  const events: GameEvent[] = [];
+  const faceCount = caster.dice[0]?.faces.length ?? 6;
+  const rolledFaces: DieFace[] = [];
+  for (let i = 0; i < effect.bonusDice; i++) {
+    const r = nextInt(state.rngSeed, state.rngCursor, faceCount);
+    state.rngCursor = r.cursor;
+    rolledFaces.push(caster.dice[0]!.faces[r.value]);
+  }
+  let amount = 0;
+  if (effect.damageFormula === "sum-of-faces") {
+    amount = rolledFaces.reduce((a, f) => a + f.faceValue, 0);
+  } else if (effect.damageFormula === "highest-face") {
+    amount = Math.max(0, ...rolledFaces.map(f => f.faceValue));
+  } else if (effect.damageFormula.kind === "count-symbol") {
+    amount = rolledFaces.filter(f => f.symbol === (effect.damageFormula as { symbol: SymbolId }).symbol).length;
+  }
+  const r = dealDamage(caster.player, opponent, amount, effect.type, 0);
+  events.push(...r.events);
+  if (effect.thresholdBonus && amount >= effect.thresholdBonus.threshold) {
+    events.push(...resolveEffect(effect.thresholdBonus.bonus, { state, caster, opponent }));
+  }
+  return events;
+}
+
+// ── Discard-trigger evaluator + state-check helper (Correction 6) ───────────
+
+/** Called when an event happens that may discard ability modifiers (e.g. a
+ *  T4 hit clears Ancestral Spirits). Iterates each player's modifiers and
+ *  removes those whose `discardOn` matches the event. */
+export function evaluateModifierDiscards(state: GameState, ev: GameEvent): GameEvent[] {
+  const events: GameEvent[] = [];
+  for (const pid of ["p1", "p2"] as const) {
+    const player = state.players[pid];
+    const keep: ActiveAbilityModifier[] = [];
+    for (const m of player.abilityModifiers) {
+      if (!m.discardOn) { keep.push(m); continue; }
+      const d = m.discardOn;
+      let match = false;
+      if (d.kind === "damage-taken-from-tier" && ev.t === "damage-dealt" && ev.to === pid) {
+        // Damage-tier requires reading the originating ability — we approximate
+        // by carrying tier on damage-dealt? Currently we do not. Defer: leave
+        // intact (tier-aware discard will need a richer event payload).
+      } else if (d.kind === "status-removed" && ev.t === "status-removed" && ev.holder === pid && ev.status === d.status) {
+        match = true;
+      } else if (d.kind === "match-ends" && ev.t === "match-won") {
+        match = true;
+      }
+      if (match) {
+        events.push({ t: "ability-modifier-removed", player: pid, modifierId: m.id, reason: "discard-trigger" });
+      } else {
+        keep.push(m);
+      }
+    }
+    player.abilityModifiers = keep;
+  }
+  return events;
+}
+
+/** Evaluate a state-check predicate against the engine state. Used by
+ *  conditional damage bonuses and critical evaluations. */
+export function checkState(
+  state: GameState,
+  caster: HeroSnapshot,
+  opponent: HeroSnapshot,
+  check: StateCheck,
+  firingFaces?: ReadonlyArray<DieFace>,
+): boolean {
+  void state;
+  switch (check.kind) {
+    case "opponent-has-status-min": return stacksOf(opponent, check.status) >= check.count;
+    case "self-has-status-min":     return stacksOf(caster, check.status) >= check.count;
+    case "self-stripped-status":    return (caster.lastStripped[check.status] ?? 0) > 0;
+    case "self-low-hp":             return caster.isLowHp;
+    case "passive-counter-min":     return (caster.signatureState[check.passiveKey] ?? 0) >= check.count;
+    case "combo-symbol-count":
+      if (!firingFaces) return false;
+      return firingFaces.filter(f => f.symbol === check.symbol).length >= check.count;
+    case "combo-n-of-a-kind": {
+      if (!firingFaces) return false;
+      const counts = new Map<number, number>();
+      for (const f of firingFaces) counts.set(f.faceValue, (counts.get(f.faceValue) ?? 0) + 1);
+      return Math.max(0, ...counts.values()) >= check.count;
+    }
+  }
+}
+
+void rollOn;            // re-export keeps the AI/sim sharing the seeded stream
+void _modIdCounter;     // counter is module-local; signal usage
 
 // ── Hand / deck / discard ───────────────────────────────────────────────────
 export function drawCards(state: GameState, hero: HeroSnapshot, n: number): GameEvent[] {
@@ -182,7 +428,35 @@ export function buildDeck(state: GameState, cards: ReadonlyArray<Card>): Card[] 
   return deck;
 }
 
-/** Whether a given card can be played given current state & costs. */
+/** Validate a hero's deck composition per Correction 6 §9: exactly 12 cards,
+ *  exactly 4 Masteries (one per T1 / T2 / T3 / defensive). T4 abilities have
+ *  no Mastery — power lives at the curve peak. Returns issues found; an
+ *  empty array means the deck is conformant. */
+export function validateDeckComposition(cards: ReadonlyArray<Card>): string[] {
+  const issues: string[] = [];
+  if (cards.length !== 12) {
+    issues.push(`deck size is ${cards.length}, expected exactly 12`);
+  }
+  const masteries = cards.filter(c => c.kind === "mastery");
+  if (masteries.length !== 4) {
+    issues.push(`deck contains ${masteries.length} mastery cards, expected exactly 4`);
+  }
+  const tiers = new Set(masteries.map(m => m.masteryTier));
+  for (const required of [1, 2, 3, "defensive"] as const) {
+    if (!tiers.has(required)) issues.push(`missing mastery for tier ${required}`);
+  }
+  for (const m of masteries) {
+    if ((m.masteryTier as number | string) === 4) {
+      issues.push(`mastery card "${m.name}" targets T4 — T4 ultimates intentionally have no mastery`);
+    }
+  }
+  return issues;
+}
+
+/** Whether a given card can be played given current state & costs.
+ *  Per Correction 6 §1c: state-threshold effects on active statuses can
+ *  block specific card kinds (e.g. Verdict at 3+ blocks main-phase + instants
+ *  on the holder for one Main Phase). */
 export function canPlay(state: GameState, hero: HeroSnapshot, opponent: HeroSnapshot, card: Card): boolean {
   if (hero.cp < card.cost) return false;
   if (card.playable) {
@@ -211,6 +485,25 @@ export function canPlay(state: GameState, hero: HeroSnapshot, opponent: HeroSnap
     case "instant":
       // Instants are always playable subject to CP + their own trigger.
       break;
+    case "mastery":
+      // Masteries are played from the main phase like persistent buffs.
+      // They occupy a slot per `masteryTier`; if the slot is full, refuse.
+      if (state.phase !== "main-pre" && state.phase !== "main-post") return false;
+      if (card.masteryTier != null) {
+        const slot = card.masteryTier;
+        if ((hero.masterySlots as Record<string, unknown>)[slot]) return false;
+      }
+      break;
+  }
+  // State-threshold blocks: walk the holder's active statuses and reject if
+  // any threshold-effect blocks this card kind.
+  for (const inst of hero.statuses) {
+    const def = getStatusDef(inst.id);
+    const blocks = def?.stateThresholdEffects ?? [];
+    for (const ste of blocks) {
+      if (inst.stacks < ste.threshold) continue;
+      if (ste.effect.kind === "block-card-kind" && ste.effect.cardKind === card.kind) return false;
+    }
   }
   void opponent;
   return true;

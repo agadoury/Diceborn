@@ -26,7 +26,8 @@ import type {
 import { ROLL_ATTEMPTS } from "./types";
 import { getHero } from "../content";
 import { tickStatusesAt, applyStatus, stacksOf } from "./status";
-import { drawCards, gainCp, autoDiscardOverHandCap, resolveEffect } from "./cards";
+import { drawCards, gainCp, autoDiscardOverHandCap, resolveEffect, checkState } from "./cards";
+import { listRegisteredStatuses, getStatusDef } from "./status";
 import { dealDamage } from "./damage";
 import {
   evaluateLadder,
@@ -34,6 +35,7 @@ import {
   computeComboExtras,
   classifyCrit,
   rollUnlocked,
+  bentFaces,
 } from "./dice";
 import { nextInt } from "./rng";
 
@@ -217,7 +219,9 @@ export function beginAttack(state: GameState): GameEvent[] {
   const hero = getHero(active.hero);
 
   // Picker: highest tier matched, then highest base damage among ties.
-  const faces = active.dice.map(d => d.faces[d.current]);
+  // Apply any active symbol bends so the matcher sees the bent symbols.
+  const rawFaces = active.dice.map(d => d.faces[d.current]);
+  const faces = bentFaces(rawFaces, active.symbolBends);
   let firingIndex = -1;
   let firingTier = -1;
   let firingBaseDamage = -Infinity;
@@ -231,10 +235,27 @@ export function beginAttack(state: GameState): GameEvent[] {
       firingBaseDamage = dmg;
     }
   }
-  if (firingIndex < 0) return events;        // nothing landed — turn fizzled.
+  if (firingIndex < 0) {
+    // Offense produced no ability. Per Correction 6 §7, the caster's own
+    // defensive ladder is consulted for an `offensiveFallback` block —
+    // useful for "consolation prize" mechanics like Bloodoath that heal +
+    // grant a passive stack when offense whiffs.
+    events.push(...tryOffensiveFallback(state));
+    return events;
+  }
 
   const ability = hero.abilityLadder[firingIndex];
-  const isCritical = classifyCrit(ability, active.dice);
+  // Critical Ultimate (Correction 6 §12): if the ability declares a more-
+  // restrictive critical combo and that matches, escalate the crit class to
+  // "major" so the choreographer plays the enhanced cinematic. The
+  // criticalEffect's mechanical bonuses (damage multiplier / override /
+  // additions) are applied during applyAttackEffects below.
+  let isCritical = classifyCrit(ability, active.dice);
+  let critTriggered = false;
+  if (ability.criticalCondition && comboMatchesFaces(ability.criticalCondition, faces)) {
+    isCritical = "major";
+    critTriggered = true;
+  }
   const upgradeBonus =
     ability.tier === 1 ? (active.upgrades[1] ?? 0) * 1 :
     ability.tier === 3 ? (active.upgrades[3] ?? 0) * 2 :
@@ -271,7 +292,7 @@ export function beginAttack(state: GameState): GameEvent[] {
 
   if (!defendable) {
     // Undefendable / pure / ultimate: skip the defense flow entirely.
-    events.push(...applyAttackEffects(state, firingIndex, faces, damageBonus, critFlat, critMul, isCritical, /*defensiveReduction*/ 0));
+    events.push(...applyAttackEffects(state, firingIndex, faces, damageBonus, critFlat, critMul, isCritical, /*defensiveReduction*/ 0, critTriggered));
     return events;
   }
 
@@ -288,6 +309,7 @@ export function beginAttack(state: GameState): GameEvent[] {
     critFlat,
     critMul,
     isCritical,
+    critTriggered,
     firingFaces: faces,
   };
   return events;
@@ -436,6 +458,7 @@ export function resolveDefenseChoice(state: GameState, abilityIndex: number | nu
     pa.critMul,
     pa.isCritical,
     reduction,
+    pa.critTriggered,
   ));
 
   state.pendingAttack = undefined;
@@ -444,7 +467,8 @@ export function resolveDefenseChoice(state: GameState, abilityIndex: number | nu
 
 /** Apply the picked offensive ability's effects + on-hit + CP triggers + lethal.
  *  Shared between the undefendable branch in `beginAttack` and the
- *  defendable resolution in `resolveDefenseChoice`. */
+ *  defendable resolution in `resolveDefenseChoice`. When `critTriggered`,
+ *  consumes the ability's `criticalEffect` (Correction 6 §12). */
 function applyAttackEffects(
   state: GameState,
   abilityIndex: number,
@@ -454,6 +478,7 @@ function applyAttackEffects(
   critMul: number,
   isCritical: "minor" | "major" | false,
   defensiveReduction: number,
+  critTriggered: boolean,
 ): GameEvent[] {
   const events: GameEvent[] = [];
   const active = state.players[state.activePlayer];
@@ -461,12 +486,46 @@ function applyAttackEffects(
   const hero = getHero(active.hero);
   const ability = hero.abilityLadder[abilityIndex];
 
+  // Critical Ultimate damage modifiers — applied once at the top of the
+  // effect resolution. damageOverride takes precedence over multiplier.
+  // Cosmetic-only crits leave damageBonus untouched.
+  let effectiveBonus = damageBonus;
+  let critEffectMul = 1;
+  if (critTriggered && ability.criticalEffect && !ability.criticalEffect.cosmeticOnly) {
+    if (ability.criticalEffect.damageOverride != null) {
+      // Override is realised by replacing the leaf damage; for a clean
+      // implementation we add the diff between override and the picker's
+      // best estimate to damageBonus (works for single-leaf damage abilities).
+      const baseEstimate = effectMaxDamage(ability.effect);
+      effectiveBonus += (ability.criticalEffect.damageOverride - baseEstimate);
+    } else if (ability.criticalEffect.damageMultiplier != null) {
+      critEffectMul = ability.criticalEffect.damageMultiplier;
+    }
+  }
+
   events.push(...resolveAbilityEffect(state, ability.effect, {
     caster: active, opponent,
-    damageBonus, defensiveReduction, critFlat, critMul,
+    damageBonus: effectiveBonus,
+    defensiveReduction,
+    critFlat,
+    critMul: critMul * critEffectMul,
     firingCombo: ability.combo,
     firingFaces,
+    abilityName: ability.name,
+    abilityTier: ability.tier,
   }));
+
+  // Critical effect-additions (extra effects that fire on top of the base).
+  if (critTriggered && ability.criticalEffect?.effectAdditions) {
+    for (const add of ability.criticalEffect.effectAdditions) {
+      events.push(...resolveAbilityEffect(state, add, {
+        caster: active, opponent,
+        damageBonus: 0, defensiveReduction: 0, critFlat: 0, critMul: 1,
+        firingCombo: ability.combo, firingFaces,
+        abilityName: ability.name, abilityTier: ability.tier,
+      }));
+    }
+  }
 
   // On-hit signature application.
   if (hero.onHitApplyStatus) {
@@ -543,6 +602,9 @@ interface AbilityCtx {
    *  to compute "extras beyond combo minimum." */
   firingCombo?: import("./types").DiceCombo;
   firingFaces?: ReadonlyArray<import("./types").DieFace>;
+  /** Name + tier of the firing ability — used by ability-modifier scope matching. */
+  abilityName?: string;
+  abilityTier?: import("./types").AbilityTier;
 }
 
 /** Picker-time base damage estimate for an ability. Compound effects sum
@@ -561,22 +623,67 @@ function effectMaxDamage(effect: import("./types").AbilityEffect): number {
 }
 
 function resolveAbilityEffect(state: GameState, effect: import("./types").AbilityEffect, ctx: AbilityCtx): GameEvent[] {
-  // Walk the effect tree; for damage leaves apply critFlat + critMul + damageBonus.
+  // Walk the effect tree; for damage leaves apply crit + damageBonus + ability
+  // modifiers + passive token modifiers + conditional bonus + self_cost.
   if (effect.kind === "damage") {
-    const total = Math.ceil((effect.amount * ctx.critMul) + ctx.critFlat) + ctx.damageBonus;
-    const r = dealDamage(ctx.caster.player, ctx.opponent, total, effect.type, ctx.defensiveReduction);
-    return r.events;
+    const out: GameEvent[] = [];
+    let amount = effect.amount;
+    let type = effect.type;
+    // Active ability-upgrade modifiers (masteries, persistent buffs).
+    amount = applyModifiersToBaseDamage(ctx.caster, ctx.abilityName ?? "", ctx.abilityTier ?? 0, amount, ctx.firingFaces);
+    type = applyModifiersToDamageType(ctx.caster, ctx.abilityName ?? "", ctx.abilityTier ?? 0, type, ctx.firingFaces) ?? type;
+    // Conditional damage-type override on the effect itself.
+    if (effect.conditional_type_override && checkState(state, ctx.caster, ctx.opponent, effect.conditional_type_override.condition, ctx.firingFaces)) {
+      type = effect.conditional_type_override.overrideTo;
+    }
+    // Conditional bonus on the effect itself.
+    let condBonus = 0;
+    if (effect.conditional_bonus && checkState(state, ctx.caster, ctx.opponent, effect.conditional_bonus.condition, ctx.firingFaces)) {
+      condBonus = computeConditionalBonus(ctx.caster, ctx.opponent, effect.conditional_bonus);
+    }
+    // Passive-token modifier on attacker (e.g. Frost-bite -1 dmg per stack).
+    const tokenAdj = aggregatePassiveModifiers(ctx.caster, "on-offensive-ability", "damage");
+    let total = Math.ceil((amount * ctx.critMul) + ctx.critFlat) + ctx.damageBonus + condBonus + tokenAdj;
+    if (total < 0) total = 0;
+    const isDefendable = (type === "normal" || type === "ultimate" || type === "collateral");
+    const r = dealDamage(ctx.caster.player, ctx.opponent, total, type, isDefendable ? ctx.defensiveReduction : 0);
+    out.push(...r.events);
+    // self_cost: unblockable HP loss to caster, doesn't trigger on-hit / passive gains.
+    if (effect.self_cost && effect.self_cost > 0) {
+      const sc = dealDamage(ctx.caster.player, ctx.caster, effect.self_cost, "pure", 0);
+      out.push(...sc.events);
+    }
+    return out;
   }
   if (effect.kind === "scaling-damage") {
+    const out: GameEvent[] = [];
     let extras = 0;
     if (ctx.firingCombo && ctx.firingFaces) {
       extras = computeComboExtras(ctx.firingCombo, ctx.firingFaces);
     }
     const clamped = Math.min(extras, effect.maxExtra);
-    const baseAmt = effect.baseAmount + clamped * effect.perExtra;
-    const total = Math.ceil(baseAmt * ctx.critMul + ctx.critFlat) + ctx.damageBonus;
-    const r = dealDamage(ctx.caster.player, ctx.opponent, total, effect.type, ctx.defensiveReduction);
-    return r.events;
+    let baseAmt = effect.baseAmount + clamped * effect.perExtra;
+    let type = effect.type;
+    baseAmt = applyModifiersToBaseDamage(ctx.caster, ctx.abilityName ?? "", ctx.abilityTier ?? 0, baseAmt, ctx.firingFaces);
+    type = applyModifiersToDamageType(ctx.caster, ctx.abilityName ?? "", ctx.abilityTier ?? 0, type, ctx.firingFaces) ?? type;
+    if (effect.conditional_type_override && checkState(state, ctx.caster, ctx.opponent, effect.conditional_type_override.condition, ctx.firingFaces)) {
+      type = effect.conditional_type_override.overrideTo;
+    }
+    let condBonus = 0;
+    if (effect.conditional_bonus && checkState(state, ctx.caster, ctx.opponent, effect.conditional_bonus.condition, ctx.firingFaces)) {
+      condBonus = computeConditionalBonus(ctx.caster, ctx.opponent, effect.conditional_bonus);
+    }
+    const tokenAdj = aggregatePassiveModifiers(ctx.caster, "on-offensive-ability", "damage");
+    let total = Math.ceil(baseAmt * ctx.critMul + ctx.critFlat) + ctx.damageBonus + condBonus + tokenAdj;
+    if (total < 0) total = 0;
+    const isDefendable = (type === "normal" || type === "ultimate" || type === "collateral");
+    const r = dealDamage(ctx.caster.player, ctx.opponent, total, type, isDefendable ? ctx.defensiveReduction : 0);
+    out.push(...r.events);
+    if (effect.self_cost && effect.self_cost > 0) {
+      const sc = dealDamage(ctx.caster.player, ctx.caster, effect.self_cost, "pure", 0);
+      out.push(...sc.events);
+    }
+    return out;
   }
   if (effect.kind === "compound") {
     const out: GameEvent[] = [];
@@ -590,6 +697,167 @@ function resolveAbilityEffect(state: GameState, effect: import("./types").Abilit
   }
   return resolveEffect(effect, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
 }
+
+// ── Offensive fallback (Correction 6 §7) ────────────────────────────────────
+function tryOffensiveFallback(state: GameState): GameEvent[] {
+  const events: GameEvent[] = [];
+  const active = state.players[state.activePlayer];
+  const hero = getHero(active.hero);
+  const dl = hero.defensiveLadder;
+  if (!dl) return events;
+  const candidates = dl.filter(d => d.offensiveFallback);
+  if (candidates.length === 0) return events;
+  // Pick the first matching fallback. Roll its dice count once and check the
+  // (possibly overridden) combo. If it lands, resolve the fallback effect.
+  for (const def of candidates) {
+    const fb = def.offensiveFallback!;
+    const diceCount = fb.diceCount ?? def.defenseDiceCount ?? 3;
+    const rolledFaces: import("./types").DieFace[] = [];
+    const dieFaceCount = active.dice[0]?.faces.length ?? 6;
+    for (let i = 0; i < diceCount; i++) {
+      const r = nextInt(state.rngSeed, state.rngCursor, dieFaceCount);
+      state.rngCursor = r.cursor;
+      rolledFaces.push(active.dice[0]!.faces[r.value]);
+    }
+    const combo = fb.combo ?? def.combo;
+    if (!comboMatchesFaces(combo, rolledFaces)) continue;
+    // Fire the fallback effect — uses the standard resolveEffect path.
+    events.push(...resolveEffect(fb.effect, { state, caster: active, opponent: state.players[other(active.player)] }));
+    break;
+  }
+  return events;
+}
+
+// ── Modifier evaluators (Correction 6) ──────────────────────────────────────
+
+/** True if an ActiveAbilityModifier's scope matches the firing ability. */
+function modifierMatches(m: import("./types").ActiveAbilityModifier, abilityName: string, tier: number): boolean {
+  switch (m.scope.kind) {
+    case "ability-ids": return m.scope.ids.some(id => id.toLowerCase() === abilityName.toLowerCase());
+    case "all-tier":    return m.scope.tier === tier;
+    case "all-defenses": return false;       // defensive scope; not for offensive ladder
+  }
+}
+
+/** Sum of all ability-modifier base-damage adjustments matching the firing ability. */
+function applyModifiersToBaseDamage(
+  caster: HeroSnapshot,
+  abilityName: string,
+  tier: number,
+  base: number,
+  firingFaces?: ReadonlyArray<import("./types").DieFace>,
+): number {
+  let amount = base;
+  for (const m of caster.abilityModifiers) {
+    if (!modifierMatches(m, abilityName, tier)) continue;
+    for (const mod of m.modifications) {
+      if (mod.field !== "base-damage" && mod.field !== "scaling-damage-base") continue;
+      if (mod.conditional && !conditionalMatches(mod.conditional, caster, firingFaces)) continue;
+      const val = typeof mod.value === "number" ? mod.value : 0;
+      if (mod.operation === "set") amount = val;
+      else if (mod.operation === "add") amount += val;
+      else if (mod.operation === "multiply") amount = Math.ceil(amount * val);
+    }
+  }
+  return amount;
+}
+
+/** Read damage-type override modifier. Returns null if no modifier sets it. */
+function applyModifiersToDamageType(
+  caster: HeroSnapshot,
+  abilityName: string,
+  tier: number,
+  base: import("./types").DamageType,
+  firingFaces?: ReadonlyArray<import("./types").DieFace>,
+): import("./types").DamageType | null {
+  for (const m of caster.abilityModifiers) {
+    if (!modifierMatches(m, abilityName, tier)) continue;
+    for (const mod of m.modifications) {
+      if (mod.field !== "damage-type") continue;
+      if (mod.conditional && !conditionalMatches(mod.conditional, caster, firingFaces)) continue;
+      if (typeof mod.value === "string") return mod.value as import("./types").DamageType;
+    }
+  }
+  void base;
+  return null;
+}
+
+/** Cheap conditional-state evaluator that only needs the caster + firing dice
+ *  (no opponent/state lookup needed for the modifier conditions we support
+ *  inside applyModifiers*). */
+function conditionalMatches(
+  cond: import("./types").StateCheck,
+  caster: HeroSnapshot,
+  firingFaces?: ReadonlyArray<import("./types").DieFace>,
+): boolean {
+  switch (cond.kind) {
+    case "self-low-hp":              return caster.isLowHp;
+    case "self-has-status-min":      return (caster.statuses.find(s => s.id === cond.status)?.stacks ?? 0) >= cond.count;
+    case "passive-counter-min":      return (caster.signatureState[cond.passiveKey] ?? 0) >= cond.count;
+    case "combo-symbol-count":
+      return !!firingFaces && firingFaces.filter(f => f.symbol === cond.symbol).length >= cond.count;
+    case "combo-n-of-a-kind": {
+      if (!firingFaces) return false;
+      const counts = new Map<number, number>();
+      for (const f of firingFaces) counts.set(f.faceValue, (counts.get(f.faceValue) ?? 0) + 1);
+      return Math.max(0, ...counts.values()) >= cond.count;
+    }
+    default: return false;
+  }
+}
+
+/** Sum per-stack passive modifiers from active statuses on the caster matching
+ *  the trigger / field. Frost-bite contributes -1 dmg per stack on
+ *  on-offensive-ability + damage. */
+function aggregatePassiveModifiers(
+  caster: HeroSnapshot,
+  trigger: "on-offensive-ability" | "on-defensive-roll" | "on-card-played" | "always",
+  field: "damage" | "defensive-dice-count" | "card-cost",
+): number {
+  let total = 0;
+  for (const inst of caster.statuses) {
+    const def = getStatusDef(inst.id);
+    const pm = def?.passiveModifier;
+    if (!pm) continue;
+    if (pm.scope !== "holder") continue;     // applier-scope handled at the source side
+    if (pm.trigger !== trigger) continue;
+    if (pm.field !== field) continue;
+    let contrib = pm.valuePerStack * inst.stacks;
+    if (pm.cap?.max != null) contrib = Math.min(contrib, pm.cap.max);
+    if (pm.cap?.min != null) contrib = Math.max(contrib, pm.cap.min);
+    total += contrib;
+  }
+  return total;
+}
+
+/** Compute the bonus contribution from a `ConditionalBonus`. */
+function computeConditionalBonus(
+  caster: HeroSnapshot,
+  opponent: HeroSnapshot,
+  cb: import("./types").ConditionalBonus,
+): number {
+  let units = 0;
+  switch (cb.source) {
+    case "opponent-status-stacks":
+      units = opponent.statuses.find(s => s.id === (cb.sourceStatus ?? (cb.condition.kind.endsWith("status-min") ? (cb.condition as { status: string }).status : "")))?.stacks ?? 0;
+      break;
+    case "self-status-stacks":
+      units = caster.statuses.find(s => s.id === (cb.sourceStatus ?? ""))?.stacks ?? 0;
+      break;
+    case "stripped-stack-count":
+      units = caster.lastStripped[cb.sourceStatus ?? ""] ?? 0;
+      break;
+    case "self-passive-counter":
+      units = caster.signatureState[cb.sourcePassiveKey ?? ""] ?? 0;
+      break;
+    case "fixed-one":
+      units = 1;
+      break;
+  }
+  return units * cb.bonusPerUnit;
+}
+
+void listRegisteredStatuses;
 
 // ── Ladder emission ─────────────────────────────────────────────────────────
 export function emitLadderState(state: GameState, hero: HeroDefinition, active: HeroSnapshot): GameEvent[] {

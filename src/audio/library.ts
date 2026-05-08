@@ -38,5 +38,13 @@ export function sfxForEvent(ev: GameEvent): Sfx | null {
     case "rage-changed":       return "rage-pulse";
     case "counter-prompt":     return "ui-tap";
     case "counter-resolved":   return ev.accepted ? "card-thud" : "ui-back";
+    case "passive-counter-changed": return ev.delta > 0 ? "rage-pulse" : null;
+    case "status-detonated":   return "damage-thud";
+    case "ability-modifier-added":   return "card-thud";
+    case "ability-modifier-removed": return "ui-back";
+    case "symbol-bend-applied":  return "heal-shimmer";
+    case "symbol-bend-expired":  return null;
+    case "bank-spend-prompt":    return "ui-tap";
+    case "bank-spent":           return "rage-pulse";
   }
 }

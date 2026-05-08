@@ -251,6 +251,10 @@ function LadderDemo() {
       ladderState: blankLadder(),
       isLowHp: false,
       nextAbilityBonusDamage: 0,
+      abilityModifiers: [],
+      symbolBends: [],
+      lastStripped: {},
+      masterySlots: {},
     };
   }, [hero, dice, attemptsRemaining]);
 

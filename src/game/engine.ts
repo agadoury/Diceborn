@@ -48,6 +48,8 @@ export function applyAction(state: GameState, action: Action): ApplyResult {
     case "end-turn":        events.push(...endTurn(next)); break;
     case "respond-to-counter": events.push(...respondToCounter(next, action.accept)); break;
     case "select-defense":  events.push(...selectDefense(next, action.abilityIndex)); break;
+    case "spend-bank":      events.push(...resolveBankSpend(next, action.amount)); break;
+    case "decline-bank-spend": events.push(...resolveBankSpend(next, 0)); break;
     case "concede":         events.push(...endMatch(next, other(action.player))); break;
   }
 
@@ -68,9 +70,14 @@ function startMatch(
     p1: makeHeroSnapshot("p1", p1, state),
     p2: makeHeroSnapshot("p2", p2, state),
   };
-  // Hero-specific starting state plugs in here when content is registered.
-  // Engine dispatches on hero.signatureMechanic.implementation.kind to apply
-  // any opening-state tokens (e.g. starting Protect, starting buffs).
+  // Bankable signature passive: seed signatureState[passiveKey] with bankStartsAt.
+  for (const pid of ["p1", "p2"] as const) {
+    const heroDef = getHero(state.players[pid].hero);
+    const impl = heroDef.signatureMechanic?.implementation;
+    if (impl?.passiveKey != null && typeof impl.bankStartsAt === "number") {
+      state.players[pid].signatureState[impl.passiveKey] = impl.bankStartsAt;
+    }
+  }
   // Initial draws.
   const events: GameEvent[] = [];
   events.push({
@@ -118,6 +125,10 @@ function makeHeroSnapshot(player: PlayerId, heroId: HeroId, state: GameState): H
     ],
     isLowHp: false,
     nextAbilityBonusDamage: 0,
+    abilityModifiers: [],
+    symbolBends: [],
+    lastStripped: {},
+    masterySlots: {},
   };
 }
 
@@ -261,6 +272,10 @@ function playCard(state: GameState, cardId: string, targetDie?: number, _targetP
   // Move card to discard FIRST so handlers that read hand don't double-resolve.
   active.hand = active.hand.filter(c => c.id !== cardId);
   active.discard.push(card);
+  // Mastery cards occupy a Hero Upgrade slot for the rest of the match.
+  if (card.kind === "mastery" && card.masteryTier != null && (card.occupiesSlot ?? true)) {
+    active.masterySlots[card.masteryTier as 1 | 2 | 3 | "defensive"] = card.id;
+  }
   events.push({ t: "card-played", player: active.player, cardId, target: targetDie != null ? { die: targetDie } : undefined });
 
   // Resolve effect
@@ -297,6 +312,29 @@ function selectDefense(state: GameState, abilityIndex: number | null): GameEvent
   return events;
 }
 
+/** Resolve a pending bankable-passive spend prompt. `amount` is the number
+ *  of tokens the player commits (0 = decline). Engine deducts the tokens,
+ *  emits `bank-spent`, and clears `pendingBankSpend`. The actual effect
+ *  resolution happens in the caller's flow (phases.ts re-checks pending
+ *  after this action and continues). */
+function resolveBankSpend(state: GameState, amount: number): GameEvent[] {
+  const pbs = state.pendingBankSpend;
+  if (!pbs) return [];
+  const events: GameEvent[] = [];
+  const holder = state.players[pbs.holder];
+  const spend = Math.max(0, Math.min(amount, pbs.available));
+  if (spend > 0) {
+    holder.signatureState[pbs.passiveKey] = (holder.signatureState[pbs.passiveKey] ?? 0) - spend;
+    events.push({ t: "bank-spent", holder: pbs.holder, passiveKey: pbs.passiveKey, amount: spend });
+    events.push({ t: "passive-counter-changed", player: pbs.holder, passiveKey: pbs.passiveKey, delta: -spend, total: holder.signatureState[pbs.passiveKey] });
+  }
+  state.pendingBankSpend = undefined;
+  // Stash the spent count on signatureState under a transient key so the
+  // attack/defense resolver can apply the spend's effect on resume.
+  holder.signatureState["__lastSpend"] = spend;
+  return events;
+}
+
 function respondToCounter(state: GameState, accept: boolean): GameEvent[] {
   const pending = state.pendingCounter;
   if (!pending) return [];
@@ -329,6 +367,7 @@ function cloneState(state: GameState): GameState {
     },
     log: state.log.slice(),
     pendingAttack: state.pendingAttack ? { ...state.pendingAttack } : undefined,
+    pendingBankSpend: state.pendingBankSpend ? { ...state.pendingBankSpend } : undefined,
   };
 }
 function clonePlayer(p: HeroSnapshot | undefined): HeroSnapshot {
@@ -344,6 +383,10 @@ function clonePlayer(p: HeroSnapshot | undefined): HeroSnapshot {
     upgrades: { ...p.upgrades },
     signatureState: { ...p.signatureState },
     ladderState: [...p.ladderState] as HeroSnapshot["ladderState"],
+    abilityModifiers: p.abilityModifiers.map(m => ({ ...m, modifications: m.modifications.map(x => ({ ...x })) })),
+    symbolBends: p.symbolBends.map(b => ({ ...b })),
+    lastStripped: { ...p.lastStripped },
+    masterySlots: { ...p.masterySlots },
   };
 }
 

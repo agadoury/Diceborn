@@ -21,6 +21,7 @@ const KIND_LABEL: Record<Card["kind"], string> = {
   "main-phase":  "ACTION",
   "roll-phase":  "ROLL",
   instant:       "INSTANT",
+  mastery:       "MASTERY",
 };
 
 export function CardView({ card, accent = "var(--c-brand)", className, lifted }: CardViewProps) {
