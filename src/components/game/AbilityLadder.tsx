@@ -52,25 +52,61 @@ export function AbilityLadder({ hero, rows, className, isOpponentView = false }:
     prevLethalRef.current = newLethal;
   }, [rows]);
 
-  // Render Tier 4 → Tier 1 (top → bottom).
-  const visualOrder = [3, 2, 1, 0];
+  // Group abilities by tier and render T4 → T1. Within a tier, order by
+  // base damage descending so the most-impactful row sits at the top.
+  const grouped = ([4, 3, 2, 1] as const).map(tier => ({
+    tier,
+    items: hero.abilityLadder
+      .map((ability, idx) => ({ ability, idx, state: rows[idx] }))
+      .filter(x => x.ability.tier === tier)
+      .sort((a, b) => effectMaxDamage(b.ability.effect) - effectMaxDamage(a.ability.effect)),
+  })).filter(g => g.items.length > 0);
 
   return (
     <div
       className={cn("flex flex-col gap-2 sm:gap-3 w-full", className)}
       aria-label={`${hero.name} ability ladder`}
     >
-      {visualOrder.map(idx => (
-        <Row
-          key={idx}
-          ability={hero.abilityLadder[idx]}
-          state={rows[idx]}
-          accent={hero.accentColor}
-          isOpponentView={isOpponentView}
-        />
+      {grouped.map(group => (
+        <div key={group.tier} className="flex flex-col gap-1 sm:gap-1.5">
+          {/* Tier header — only render if this hero has multiple tiers visible
+              or has multiple abilities in any tier. Always render for clarity. */}
+          <div className="flex items-center gap-2 px-1 text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-muted/80">
+            <span className="font-display">Tier {group.tier}</span>
+            <span className="flex-1 h-px bg-white/5" />
+            <span>{tierName(group.tier)}</span>
+          </div>
+          {group.items.map(({ ability, idx, state }) => (
+            <Row
+              key={idx}
+              ability={ability}
+              state={state}
+              accent={hero.accentColor}
+              isOpponentView={isOpponentView}
+            />
+          ))}
+        </div>
       ))}
     </div>
   );
+}
+
+function tierName(t: 1 | 2 | 3 | 4): string {
+  switch (t) {
+    case 1: return "Basic";
+    case 2: return "Strong";
+    case 3: return "Signature";
+    case 4: return "Ultimate";
+  }
+}
+
+function effectMaxDamage(effect: import("@/game/types").AbilityEffect): number {
+  switch (effect.kind) {
+    case "damage":         return effect.amount;
+    case "scaling-damage": return effect.baseAmount + effect.perExtra * effect.maxExtra;
+    case "compound":       return effect.effects.reduce((acc, e) => acc + effectMaxDamage(e), 0);
+    default:               return 0;
+  }
 }
 
 function Row({

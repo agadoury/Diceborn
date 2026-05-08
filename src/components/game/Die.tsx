@@ -140,6 +140,24 @@ export function Die({
           <g transform="translate(8 8) scale(0.84)" style={{ color: tint }}>
             {Glyph ? <Glyph /> : null}
           </g>
+          {/* Face-value corner badge — small numeric indicator so straights
+              and n-of-a-kind combos remain readable when multiple faces
+              share a symbol. Hidden during tumble (face is mid-cycle). */}
+          {state !== "tumbling" && faces[displayed]?.faceValue != null && (
+            <g transform="translate(70 70)">
+              <circle r="13" fill="rgba(15,8,20,0.85)" stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
+              <text
+                x="0" y="5"
+                textAnchor="middle"
+                fontFamily="Rubik, ui-monospace, monospace"
+                fontWeight={700}
+                fontSize="14"
+                fill="rgba(255,255,255,0.85)"
+              >
+                {faces[displayed].faceValue}
+              </text>
+            </g>
+          )}
         </svg>
 
         {/* Lock glow halo */}
