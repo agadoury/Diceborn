@@ -25,6 +25,7 @@ import type {
 } from "./types";
 import { CP_CAP, HAND_CAP } from "./types";
 import { applyStatus, stripStatus, stacksOf, getStatusDef } from "./status";
+import { getHero } from "../content";
 import { dealDamage, heal } from "./damage";
 import { nextInt, rollOn, shuffleInPlace } from "./rng";
 
@@ -147,8 +148,37 @@ export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent
         const intercept = maybeQueueStatusRemovalIntercept(ctx.state, target, ctx.caster.player, effect.status);
         if (intercept) return intercept;
       }
-      const r = stripStatus(target, effect.status);
-      return r.events;
+      // Wildcard expansion — `any-positive` strips one (1 stack) of the
+      // target's first buff-type status. Multi-status player choice would
+      // need UI support; for now we pick deterministically.
+      const statusToStrip = effect.status === "any-positive"
+        ? findFirstBuffStatusId(target)
+        : effect.status;
+      if (!statusToStrip) return [];
+      // Snapshot applier-of-status BEFORE stripping; once stripped we lose
+      // the inst.appliedBy reference.
+      const stripped = target.statuses.find(s => s.id === statusToStrip);
+      const stripCount = stripped?.stacks ?? 0;
+      const applierId = stripped?.appliedBy;
+      const events: GameEvent[] = [];
+      if (effect.status === "any-positive" || effect.stacks >= (stripped?.stacks ?? 0)) {
+        events.push(...stripStatus(target, statusToStrip).events);
+      } else {
+        // Decrement-style remove (rare): trim N without firing onRemove.
+        if (stripped) {
+          stripped.stacks = Math.max(0, stripped.stacks - effect.stacks);
+          if (stripped.stacks === 0) {
+            target.statuses = target.statuses.filter(s => s.id !== statusToStrip);
+          }
+        }
+      }
+      // Resource trigger on the *original applier*: opponent-removed-self-status.
+      // The trigger fires when the strip is initiated by someone other than
+      // the applier (i.e. opponent-initiated cleanse).
+      if (applierId && applierId !== ctx.caster.player && stripCount > 0) {
+        events.push(...dispatchOpponentRemovedSelfStatusTrigger(ctx.state, applierId, statusToStrip, stripCount));
+      }
+      return events;
     }
     case "heal": {
       const target = effect.target === "self" ? ctx.caster : ctx.opponent;
@@ -351,6 +381,41 @@ function addAbilityModifier(
   const id = givenId ?? `mod-${_modIdCounter++}`;
   caster.abilityModifiers.push({ id, ...spec });
   return [{ t: "ability-modifier-added", player: caster.player, modifierId: id, source: spec.source }];
+}
+
+/** Pick the first buff-type status currently on `holder`. Returns undefined
+ *  when none. Used by the `any-positive` wildcard target on remove-status. */
+function findFirstBuffStatusId(holder: HeroSnapshot): import("./types").StatusId | undefined {
+  for (const inst of holder.statuses) {
+    const def = getStatusDef(inst.id);
+    if (def?.type === "buff") return inst.id;
+  }
+  return undefined;
+}
+
+/** Dispatch the `opponentRemovedSelfStatus` resource trigger on the applier
+ *  of a stripped status. When `perStack` is set, the gain is multiplied by
+ *  the number of stacks that were stripped. */
+function dispatchOpponentRemovedSelfStatusTrigger(
+  state: GameState,
+  applier: import("./types").PlayerId,
+  status: import("./types").StatusId,
+  strippedCount: number,
+): GameEvent[] {
+  const events: GameEvent[] = [];
+  const applierSnap = state.players[applier];
+  const heroDef = getHero(applierSnap.hero);
+  for (const trig of heroDef.resourceIdentity.cpGainTriggers) {
+    if (trig.on !== "opponentRemovedSelfStatus") continue;
+    if (trig.status && trig.status !== status) continue;
+    const gain = trig.perStack ? trig.gain * strippedCount : trig.gain;
+    const before = applierSnap.cp;
+    const cap = trig.capAt ?? CP_CAP;
+    applierSnap.cp = Math.min(cap, before + gain);
+    const delta = applierSnap.cp - before;
+    if (delta !== 0) events.push({ t: "cp-changed", player: applier, delta, total: applierSnap.cp });
+  }
+  return events;
 }
 
 /** When an opponent's effect is about to strip a status from `holder`,
@@ -689,6 +754,12 @@ export function canPlay(state: GameState, hero: HeroSnapshot, opponent: HeroSnap
       const value = pc.metric === "self-hp" ? hero.hp : opponent.hp;
       if (pc.op === "<=" && !(value <= pc.value)) return false;
       if (pc.op === ">=" && !(value >= pc.value)) return false;
+    } else if (pc.kind === "incoming-attack-damage-type") {
+      // Only meaningful while a `pendingAttack` is held (instant card flow).
+      const dt = state.pendingAttack?.damageType;
+      if (!dt) return false;
+      if (pc.op === "is"     && dt !== pc.value) return false;
+      if (pc.op === "is-not" && dt === pc.value) return false;
     }
   }
   // Phase gating per Correction 5: roll-phase / roll-action cards are

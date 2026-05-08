@@ -15,6 +15,7 @@ the data wins; this folder is updated to match.
 | Hero | Archetype | Complexity | File |
 |---|---|---|---|
 | The Berserker | Rush | 1 | [berserker.md](./berserker.md) |
+| The Pyromancer | Burn | 3 | [pyromancer.md](./pyromancer.md) |
 
 When adding a hero:
 1. Create `src/content/heroes/<id>.ts` and register it in `src/content/index.ts`.

@@ -137,7 +137,7 @@ export interface ConditionalTypeOverride {
 export type AbilityUpgradeField =
   | "base-damage" | "scaling-damage-base" | "scaling-damage-per-extra" | "scaling-damage-max-extra"
   | "damage-type" | "self-cost" | "damage-self-cost"
-  | "damage-conditional-bonus-bonus-per-unit"
+  | "damage-conditional-bonus" | "damage-conditional-bonus-bonus-per-unit"
   | "heal-amount" | "self-heal-amount" | "heal-conditional-bonus"
   | "applied-status-stacks" | "applied-status-stacks-self" | "applied-status-stacks-on-success"
   | "applied-status-conditional-bonus"
@@ -152,7 +152,11 @@ export type AbilityUpgradeField =
 export interface AbilityUpgradeMod {
   field: AbilityUpgradeField;
   operation: "set" | "add" | "multiply";
-  value: number | string;
+  /** Numeric for most fields; a `DamageType` string for `damage-type`; the
+   *  full `ConditionalBonus` object for `damage-conditional-bonus` /
+   *  `applied-status-conditional-bonus` (so a Mastery can stamp an entire
+   *  conditional_bonus structure onto an ability that doesn't ship with one). */
+  value: number | string | ConditionalBonus;
   /** If present, the modification only applies when this state-check holds at
    *  the moment the ability resolves (e.g. "Cleave +2 dmg when 4+ axes"). */
   conditional?: StateCheck;
@@ -375,10 +379,12 @@ export interface Card {
   effect: AbilityEffect;
   /** Optional gating, evaluated against game state at play-time. */
   playable?: { minHpFraction?: number; maxHpFraction?: number };
-  /** Richer play-time gate. Currently only `match-state-threshold` is wired
-   *  into `canPlay`; extend the union as new requirements appear. */
+  /** Richer play-time gate. Currently `match-state-threshold` covers HP
+   *  thresholds and `incoming-attack-damage-type` gates Instants on the
+   *  pendingAttack's damage type (Phoenix Veil — "not Ultimate"). */
   playCondition?:
-    | { kind: "match-state-threshold"; metric: "self-hp" | "opponent-hp"; op: "<=" | ">="; value: number };
+    | { kind: "match-state-threshold"; metric: "self-hp" | "opponent-hp"; op: "<=" | ">="; value: number }
+    | { kind: "incoming-attack-damage-type"; op: "is" | "is-not"; value: DamageType };
   /** When true, the card may only be played a single time per match. The
    *  engine records the cardId in `consumedOncePerMatchCards` on play. */
   oncePerMatch?: boolean;

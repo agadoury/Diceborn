@@ -24,9 +24,13 @@ import type {
 import {
   STARTING_HP, STARTING_CP, STARTING_HAND, ROLL_ATTEMPTS, HP_CAP_BONUS,
 } from "./types";
-import { getHero, getDeckCards } from "../content";
+import { getHero, getDeckCards, HEROES } from "../content";
+
+// Wire the status engine's applier-hero lookup once. status.ts can't import
+// the content registry directly (cycle), so we hand it a lookup function.
+setHeroLookup((id) => HEROES[id] ?? undefined);
 import { getCustomHandler, canPlay, drawCards, sellCard, gainCp, resolveEffect, discardCard } from "./cards";
-import { stacksOf, stripStatus } from "./status";
+import { stacksOf, stripStatus, setHeroLookup } from "./status";
 import { buildDeck } from "./cards";
 import {
   enterPhase, performRoll, beginOffensivePick, commitOffensiveAbility,
@@ -426,8 +430,22 @@ function respondToStatusRemoval(state: GameState, cardId: import("./types").Card
   // Finalise.
   const prevented = psr.prevented === true;
   if (!prevented) {
-    const r = stripStatus(state.players[psr.holder], psr.status);
+    const holderSnap = state.players[psr.holder];
+    const stripped = holderSnap.statuses.find(s => s.id === psr.status);
+    const stripCount = stripped?.stacks ?? 0;
+    const originalApplier = stripped?.appliedBy;
+    const r = stripStatus(holderSnap, psr.status);
     events.push(...r.events);
+    if (originalApplier && originalApplier !== psr.applier && stripCount > 0) {
+      const applierSnap = state.players[originalApplier];
+      const heroDef = getHero(applierSnap.hero);
+      for (const trig of heroDef.resourceIdentity.cpGainTriggers) {
+        if (trig.on !== "opponentRemovedSelfStatus") continue;
+        if (trig.status && trig.status !== psr.status) continue;
+        const gain = trig.perStack ? trig.gain * stripCount : trig.gain;
+        events.push(...gainCp(applierSnap, gain));
+      }
+    }
   }
   events.push({
     t: "status-remove-attempted",

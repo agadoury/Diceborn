@@ -9,9 +9,11 @@
 import type { Card, HeroDefinition, HeroId } from "../game/types";
 import { GENERIC_CARDS } from "./cards/generic";
 import { BERSERKER } from "./heroes/berserker";
+import { PYROMANCER } from "./heroes/pyromancer";
 
 export const HEROES: Partial<Record<HeroId, HeroDefinition>> = {
   [BERSERKER.id]: BERSERKER,
+  [PYROMANCER.id]: PYROMANCER,
 };
 
 export function getHero(id: HeroId): HeroDefinition {

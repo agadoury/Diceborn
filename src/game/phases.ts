@@ -439,7 +439,12 @@ export function resolveDefenseChoice(state: GameState, abilityIndex: number | nu
     });
   } else {
     const chosen = dl[abilityIndex];
-    const diceCount = chosen.defenseDiceCount ?? 3;
+    // Base dice count + Mastery / persistent-buff `defenseDiceCount` mods +
+    // status passive modifiers (e.g. Pyromancer's defense-handicap-1 reduces
+    // by 1 per stack while it sits on the defender).
+    const masteryAdjusted = applyDefensiveNumericModifier(defender, chosen.name, "defenseDiceCount", chosen.defenseDiceCount ?? 3, undefined);
+    const passiveAdj = aggregatePassiveModifiers(defender, "on-defensive-roll", "defensive-dice-count", state);
+    const diceCount = Math.max(1, Math.min(5, masteryAdjusted + passiveAdj)) as 2 | 3 | 4 | 5;
     events.push({
       t: "defense-intended",
       defender: defender.player,
@@ -507,6 +512,16 @@ export function resolveDefenseChoice(state: GameState, abilityIndex: number | nu
     });
     if (reduction >= 2) {
       events.push({ t: "hero-state", player: defender.player, state: "defended" });
+    }
+    // Decrement any `consumesOnDefensiveRoll` tokens the defender carries.
+    for (const inst of [...defender.statuses]) {
+      const def = getStatusDef(inst.id);
+      if (!def?.consumesOnDefensiveRoll) continue;
+      inst.stacks -= 1;
+      if (inst.stacks <= 0) {
+        defender.statuses = defender.statuses.filter(s => s.id !== inst.id);
+        events.push({ t: "status-removed", status: inst.id, holder: defender.player, reason: "expired" });
+      }
     }
     // Generic CP-gain triggers tied to successful defense.
     if (landed && reduction >= 1) {
@@ -712,7 +727,12 @@ function resolveDefensiveEffect(
     }
     case "apply-status": {
       const target = effect.target === "self" ? ctx.defender : ctx.attacker;
+      // Defenders read both `applied-status-stacks` and the explicit
+      // `applied-status-stacks-on-success` synonym (the suffix is authorial
+      // intent — defensive effects only resolve when the defense's combo
+      // lands, so "on success" is implicit).
       let stacks = applyDefensiveNumericModifier(ctx.defender, ctx.abilityName ?? "", "applied-status-stacks", effect.stacks, ctx.firingFaces);
+      stacks = applyDefensiveNumericModifier(ctx.defender, ctx.abilityName ?? "", "applied-status-stacks-on-success", stacks, ctx.firingFaces);
       if (
         effect.conditional_bonus &&
         checkState(ctx.state, ctx.defender, ctx.attacker, effect.conditional_bonus.condition, ctx.firingFaces)
@@ -782,11 +802,14 @@ function resolveAbilityEffect(state: GameState, effect: import("./types").Abilit
     if (effect.conditional_type_override && checkState(state, ctx.caster, ctx.opponent, effect.conditional_type_override.condition, ctx.firingFaces)) {
       type = effect.conditional_type_override.overrideTo;
     }
-    // Conditional bonus on the effect itself — Mastery mods can adjust
-    // its `bonusPerUnit` via `damage-conditional-bonus-bonus-per-unit`.
+    // Conditional bonus on the effect itself — Mastery mods can either
+    // stamp the whole structure onto an ability that didn't ship with one
+    // (`damage-conditional-bonus`) or adjust `bonusPerUnit` on an existing
+    // one (`damage-conditional-bonus-bonus-per-unit`).
     let condBonus = 0;
-    if (effect.conditional_bonus && checkState(state, ctx.caster, ctx.opponent, effect.conditional_bonus.condition, ctx.firingFaces)) {
-      const cb = patchConditionalBonusPerUnit(ctx.caster, ctx.abilityName ?? "", ctx.abilityTier ?? 0, "damage-conditional-bonus-bonus-per-unit", effect.conditional_bonus, ctx.firingFaces);
+    const cbStructured = applyConditionalBonusStructuralMod(ctx.caster, ctx.abilityName ?? "", ctx.abilityTier ?? 0, "damage-conditional-bonus", effect.conditional_bonus, ctx.firingFaces);
+    if (cbStructured && checkState(state, ctx.caster, ctx.opponent, cbStructured.condition, ctx.firingFaces)) {
+      const cb = patchConditionalBonusPerUnit(ctx.caster, ctx.abilityName ?? "", ctx.abilityTier ?? 0, "damage-conditional-bonus-bonus-per-unit", cbStructured, ctx.firingFaces);
       condBonus = computeConditionalBonus(ctx.caster, ctx.opponent, cb);
     }
     // Passive-token modifier on attacker (e.g. Frost-bite -1 dmg per stack).
@@ -1130,6 +1153,33 @@ function applyModifiersToBonusDiceDamage(
     if (threshold !== next.thresholdBonus.threshold) next = { ...next, thresholdBonus: { ...next.thresholdBonus, threshold } };
   }
   return next;
+}
+
+/** Stamp an entire `ConditionalBonus` onto an ability whose effect leaf
+ *  may not carry one — Crater Heart adds a `+2 dmg per Cinder` rider to
+ *  Pyro Lance's damage leaf via `damage-conditional-bonus`. When no mod
+ *  matches, the original `existing` value is returned (or undefined). */
+function applyConditionalBonusStructuralMod(
+  caster: HeroSnapshot,
+  abilityName: string,
+  tier: number,
+  field: import("./types").AbilityUpgradeField,
+  existing: import("./types").ConditionalBonus | undefined,
+  firingFaces?: ReadonlyArray<import("./types").DieFace>,
+): import("./types").ConditionalBonus | undefined {
+  let result = existing;
+  for (const m of caster.abilityModifiers) {
+    if (!modifierMatches(m, abilityName, tier)) continue;
+    for (const mod of m.modifications) {
+      if (mod.field !== field) continue;
+      if (mod.conditional && !conditionalMatches(mod.conditional, caster, firingFaces)) continue;
+      // Object values stamp the entire structure.
+      if (mod.operation === "set" && typeof mod.value === "object" && mod.value !== null) {
+        result = mod.value as import("./types").ConditionalBonus;
+      }
+    }
+  }
+  return result;
 }
 
 /** Re-stamp `conditional_bonus.bonusPerUnit` from a Mastery numeric mod. */

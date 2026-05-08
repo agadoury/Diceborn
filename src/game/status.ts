@@ -13,6 +13,7 @@ import type {
   AbilityEffect,
   AbilityTier,
   CardKind,
+  DamageType,
   GameEvent,
   GameState,
   HeroSnapshot,
@@ -20,6 +21,7 @@ import type {
   StatusId,
   StatusInstance,
 } from "./types";
+import { CP_CAP } from "./types";
 
 // ── Definition shape ─────────────────────────────────────────────────────────
 export type TickPhase =
@@ -85,6 +87,10 @@ export interface StatusDefinition {
   ) => { events: GameEvent[]; pendingDamage?: number };
   /** Continuous modifier applied while stacks > 0. Read by ability resolver. */
   passiveModifier?: PassiveModifier;
+  /** When true, the holder loses 1 stack after each defensive roll they
+   *  perform. Used by single-use defensive penalty tokens like the
+   *  Pyromancer's `defense-handicap-1`. */
+  consumesOnDefensiveRoll?: boolean;
   /** Stacks threshold(s) that block specific actions on the holder. */
   stateThresholdEffects?: StateThresholdEffect[];
   /** Threshold-detonation: on apply (or upkeep), check stacks and trigger. */
@@ -211,23 +217,102 @@ export function applyStatus(
     ? applyTokenOverrideNumeric(applierSnapshot, status, "detonation-threshold", def.detonation.threshold)
     : 0;
   if (def.detonation && def.detonation.triggerTiming === "on-application-overflow" && postCount >= detThreshold) {
-    events.push({ t: "status-detonated", status, holder: holder.player, threshold: def.detonation.threshold });
-    // Reset stacks (default 0). The detonation effect is a normal AbilityEffect
-    // and is resolved by the caller / engine via the registry helper below.
+    events.push({ t: "status-detonated", status, holder: holder.player, threshold: detThreshold });
+    // Reset stacks (default 0).
     const resetTo = def.detonation.resetsStacksTo ?? 0;
     const inst2 = holder.statuses.find(s => s.id === status);
     if (inst2) {
       if (resetTo <= 0) holder.statuses = holder.statuses.filter(s => s.id !== status);
       else inst2.stacks = resetTo;
     }
-    // Record on the holder so phases.ts / engine can pick this up and resolve
-    // the detonation's effect with the correct caster/opponent context. The
-    // engine reads `holder.signatureState["__pendingDetonation:<id>"] = 1`
-    // and dispatches the matching definition's effect.
+    // Resolve the detonation effect inline. We support the most common
+    // shape — `damage` to the holder — directly here. More exotic shapes
+    // are deferred to the broader resolver via the pending flag (kept for
+    // backwards compatibility with code that may consult it).
+    events.push(...resolveDetonationEffect(def.detonation.effect, status, holder, applierSnapshot));
     holder.signatureState[`__pendingDetonation:${status}`] = 1;
+
+    // CP economy: fire `selfStatusDetonated` resource trigger on the applier.
+    // "Self" in the trigger means the applier — when *their* signature token
+    // detonates on the holder, they bank CP.
+    if (applierSnapshot) {
+      const heroDef = APPLIER_HERO_LOOKUP?.(applierSnapshot.hero);
+      if (heroDef) {
+        for (const trig of heroDef.resourceIdentity.cpGainTriggers) {
+          if (trig.on === "selfStatusDetonated" && (!trig.status || trig.status === status)) {
+            const before = applierSnapshot.cp;
+            const cap = trig.capAt ?? CP_CAP;
+            applierSnapshot.cp = Math.min(cap, before + trig.gain);
+            const delta = applierSnapshot.cp - before;
+            if (delta !== 0) events.push({ t: "cp-changed", player: applierSnapshot.player, delta, total: applierSnapshot.cp });
+          }
+        }
+      }
+    }
   }
   return events;
 }
+
+/** Resolve a detonation effect inline against the holder. Supports the
+ *  common `damage` shape with optional `detonation-amount` token override.
+ *  Falls back to a no-op for unsupported effect kinds. */
+function resolveDetonationEffect(
+  effect: AbilityEffect,
+  status: StatusId,
+  holder: HeroSnapshot,
+  applierSnapshot: HeroSnapshot | undefined,
+): GameEvent[] {
+  if (effect.kind !== "damage") return [];
+  const amount = applyTokenOverrideNumeric(applierSnapshot, status, "detonation-amount", effect.amount);
+  if (amount <= 0) return [];
+  // The detonation hits the holder (the player who carries the token).
+  // Detonation damage bypasses the defensive roll machinery — the type on
+  // the effect controls Shield/Protect interaction (typically `undefendable`
+  // which still passes through Shield/Protect; or `pure` to bypass tokens).
+  return runDetonationDamage(holder, amount, effect.type);
+}
+
+/** Minimal `dealDamage` analogue for detonation. We can't import damage.ts
+ *  from status.ts (would create a cycle). Instead we apply the same Shield
+ *  → Protect → HP order inline, emit a `damage-dealt` event, and update HP. */
+function runDetonationDamage(holder: HeroSnapshot, amount: number, type: DamageType): GameEvent[] {
+  let working = amount;
+  let mitigated = 0;
+  if (type !== "pure") {
+    const shieldStacks = stacksOf(holder, "shield");
+    const shieldReduction = Math.min(working, shieldStacks);
+    working -= shieldReduction;
+    mitigated += shieldReduction;
+    const protectStacks = stacksOf(holder, "protect");
+    if (protectStacks > 0 && working > 0) {
+      const tokensToSpend = Math.min(protectStacks, Math.ceil(working / 2));
+      const protectReduction = Math.min(working, tokensToSpend * 2);
+      working -= protectReduction;
+      mitigated += protectReduction;
+      const inst = holder.statuses.find(s => s.id === "protect");
+      if (inst) {
+        inst.stacks -= tokensToSpend;
+        if (inst.stacks <= 0) holder.statuses = holder.statuses.filter(s => s.id !== "protect");
+      }
+    }
+  }
+  const dealt = Math.max(0, Math.floor(working));
+  const before = holder.hp;
+  holder.hp = Math.max(0, before - dealt);
+  const events: GameEvent[] = [
+    { t: "damage-dealt", from: holder.player, to: holder.player, amount: dealt, type, mitigated },
+  ];
+  if (holder.hp !== before) events.push({ t: "hp-changed", player: holder.player, delta: holder.hp - before, total: holder.hp });
+  return events;
+}
+
+// status.ts can't import from `../content` (would create a cycle: content
+// imports status to register its tokens). The engine wires this lookup at
+// startup so `applyStatus` can resolve the applier's hero definition for
+// resource-trigger dispatch.
+type HeroLookup = (heroId: import("./types").HeroId) => import("./types").HeroDefinition | undefined;
+let APPLIER_HERO_LOOKUP: HeroLookup | undefined;
+export function setHeroLookup(fn: HeroLookup): void { APPLIER_HERO_LOOKUP = fn; }
 
 /** Remove up to N stacks. If status reaches 0, fires onRemove and emits removed. */
 export function removeStatus(
