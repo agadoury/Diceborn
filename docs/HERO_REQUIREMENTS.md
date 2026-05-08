@@ -179,52 +179,97 @@ The simulator will validate your ability landing rates after implementation. Aim
 
 ---
 
+## 6.5 Presentation primitives — what the renderer / choreographer / audio layer can take
+
+The mechanics above (combos, effects, statuses, cards) are the **rules engine** layer. Diceborn also has a **presentation** layer that gives each hero atmospheric weight: a tinted background, a portrait that reacts to game state, glyphs on each die face, per-ability cinematics, and audio cues. None of these are required for a hero to be playable — but a hero that fills them in feels finished.
+
+| Layer | What you can specify |
+|---|---|
+| **Lore** | Name origin, backstory paragraph, personality, motivation, voice register (gruff / formal / playful / cryptic) |
+| **Visual identity** | Accent hex (already in core), secondary palette (1–2 supporting hexes), background motif (tundra / forge / cavern / orchard / observatory / wharf), atmospheric particle behaviour (drift direction, density, hue), silhouette posture (looming / coiled / poised / hunched) |
+| **Die-face rendering** | A glyph idea or short SVG description per unique symbol (renderer will produce the actual SVG), a tint hex per symbol |
+| **Hero portrait reactive states** | What the portrait does at: full HP / mid HP / low HP (≤10) / when an Ultimate is charging / on victory / on defeat. Can be subtle (eye-glow shift) or dramatic (whole pose change) |
+| **Per-ability cinematics** | For each ability: a short camera/FX brief (e.g. "screen tilts left, three vertical slash streaks across centre, opponent flinches right; audio is 3 quick metal-on-bone hits"). Tier 4 should describe a full-screen cinematic moment (1.5–3s) |
+| **Audio identity** | A signature one-shot motif (3–6 notes, instrument family), per-event bark line snippets (hero rolls / hero lands T3 / hero lands T4 / hero takes lethal / hero wins), ambient bed under the hero's screen (wind / hearth / dripping / clockwork) |
+| **Status visuals** | If you defined a signature token, what it looks like on the HUD (icon idea, animation when applied — slam-in / fade-in / spiral) |
+
+These fields go into the optional **PRESENTATION** block in the template below. Skip any field with `(skip)` if you don't have a strong opinion — defaults will be used.
+
+---
+
 ## 7. Required output template
 
-Fill this in for ONE hero. Paste back exactly this format.
+Fill this in for ONE hero. Paste back exactly this format. Sections marked **CORE** are required for a playable hero; sections marked **PRESENTATION** are optional but strongly recommended for a hero that feels finished.
 
 ```
-=== HERO ===
+=== HERO === [CORE]
 
 ID:           <lowercase-slug>          (e.g. "tide-tracker", not a published character)
-NAME:         <DISPLAY NAME>            (all caps, original — not from a published game)
+NAME:         <DISPLAY NAME>            (all caps)
 ARCHETYPE:    <one of: rush | control | burn | combo | survival>
 COMPLEXITY:   <1–6>                     (1 = teach-the-game, 6 = expert)
-ACCENT:       #xxxxxx                   (hex color matching hero's vibe)
-QUOTE:        "<one short line>"        (hero's catchphrase, original)
+ACCENT:       #xxxxxx                   (primary hex color matching hero's vibe)
+QUOTE:        "<one short line>"        (hero's catchphrase)
 
-=== DICE ===
+=== LORE === [PRESENTATION]
+
+Origin:       <one or two sentences — where this hero is from, what shaped them>
+Personality:  <one sentence — how they speak, what they value, what cracks them>
+Motivation:   <one sentence — why they fight>
+Voice:        <gruff | formal | playful | cryptic | weary | feverish | other>
+
+=== VISUAL IDENTITY === [PRESENTATION]
+
+Secondary palette:  #xxxxxx, #xxxxxx           (1–2 hexes that pair with ACCENT)
+Background motif:   <tundra | forge | cavern | orchard | observatory | wharf | other>
+Particle behaviour: <e.g. "snow drifting down-left, sparse" / "ember sparks rising, dense">
+Silhouette posture: <looming | coiled | poised | hunched | sprawled>
+Signature motif:    <a recurring visual element — e.g. "frost cracks", "running ink", "candle flames", "tally marks">
+
+=== DICE === [CORE]
 
 Description: <one sentence on the overall feel of this hero's dice>
 
-Face 1: symbol="<id>:<sym-a>"  label="<WordA>"
-Face 2: symbol="<id>:<sym-a>"  label="<WordA>"   (faces can share a symbol)
-Face 3: symbol="<id>:<sym-b>"  label="<WordB>"
+Face 1: symbol="<id>:<sym-a>"  label="<WordA>"   glyph="<short visual idea>"  tint=#xxxxxx
+Face 2: symbol="<id>:<sym-a>"  label="<WordA>"   (faces can share a symbol — same glyph/tint)
+Face 3: symbol="<id>:<sym-b>"  label="<WordB>"   glyph="<...>"                tint=#xxxxxx
 Face 4: symbol="<id>:<sym-b>"  label="<WordB>"
-Face 5: symbol="<id>:<sym-c>"  label="<WordC>"
-Face 6: symbol="<id>:<sym-d>"  label="<WordD>"
+Face 5: symbol="<id>:<sym-c>"  label="<WordC>"   glyph="<...>"                tint=#xxxxxx
+Face 6: symbol="<id>:<sym-d>"  label="<WordD>"   glyph="<...>"                tint=#xxxxxx
 
-(Symbols are hero-scoped strings. Pick original names. Two faces sharing
-a symbol means the symbol-count combo treats them interchangeably; n-of-
-a-kind / straight still differentiate by faceValue.)
+(Symbols are hero-scoped strings. Two faces sharing a symbol means
+symbol-count treats them interchangeably; n-of-a-kind / straight still
+differentiate by faceValue. Glyph + tint are PRESENTATION — skip with
+"(skip)" if you don't have a strong idea.)
 
-=== SIGNATURE PASSIVE ===
+=== PORTRAIT REACTIVE STATES === [PRESENTATION]
 
-Name:        <NAME>           (one or two words, original — not RAGE / IGNITE / DIVINE FAVOR)
+Full HP (>20):       <one line — what does the portrait look like at rest>
+Mid HP (10–20):      <one line — first sign of strain>
+Low HP (≤10):        <one line — visibly hurt; this is also when "isLowHp" passives may fire>
+Ultimate charging:   <one line — what happens when a Tier 4 combo lands and the cinematic is about to play>
+Victory pose:        <one line>
+Defeat pose:         <one line>
+
+=== SIGNATURE PASSIVE === [CORE]
+
+Name:        <NAME>           (one or two words)
 Description: <one sentence player-facing description>
 How it fires (plain English): <when does it trigger, what does it do, what state does it manage>
+HUD readout: <how is the current state communicated to the player — e.g. "ring of pips around the portrait, 0–5", "small badge under HP showing the threshold", "screen-edge vignette intensifies"> [PRESENTATION]
 
-=== SIGNATURE TOKEN (optional) ===
+=== SIGNATURE TOKEN (optional) === [CORE if present]
 
 If your hero has a unique buff/debuff token they apply, describe it here. Otherwise write "(none — uses universal tokens only)".
 
 ID:           <id>:<token-name>
-Display name: <NAME>           (descriptive, original — not Bleeding / Smolder / Judgment)
+Display name: <NAME>
 Type:         buff | debuff
 Stack limit:  <number>
 Tick behaviour: <one of: holder's upkeep / applier's upkeep / never ticks / on specific trigger>
 Effect per stack at tick: <e.g. "1 dmg" / "1 heal" / "n/a — consumed by …">
 On-removal effect: <e.g. "+2 final dmg ignition" / "none">
+Visual: <icon idea + slam-in animation — e.g. "dripping red icon, slams in from above with a wet thud"> [PRESENTATION]
 
 === RESOURCE TRIGGER (optional) ===
 
@@ -234,7 +279,7 @@ How does this hero earn extra CP? Pick zero or more, describe in plain English.
 [your-token] ticks on opponent" / "+1 CP on every successful defense" /
 some custom condition you describe.)
 
-=== OFFENSIVE ABILITY LADDER ===
+=== OFFENSIVE ABILITY LADDER === [CORE; cinematic field is PRESENTATION]
 
 Specify any number of abilities across tiers 1–4. Each on its own block.
 
@@ -245,6 +290,9 @@ Specify any number of abilities across tiers 1–4. Each on its own block.
   Target land:  <range, e.g. 80–95%>
   ShortText:    <one-line ladder display, e.g. "5 dmg + 1 token">
   LongText:     <plain-language combo description for tooltips>
+  Cinematic:    <2–3 sentences of camera/FX brief — what plays on screen when this fires.
+                 Camera move, particle/streak description, hit-stop intensity, opponent reaction.
+                 Audio: instrument family + length, e.g. "two short timpani thuds + glass crack">
 
 [T2] NAME
   ... (same fields)
@@ -253,7 +301,10 @@ Specify any number of abilities across tiers 1–4. Each on its own block.
   ...
 
 [T4] NAME           (full-screen Ultimate cinematic — make this feel like a moment)
-  ...
+  Cinematic:    <a fuller brief — 1.5–3s of screen time. Letterboxing, slow-mo, signature
+                 motif on display, hero bark line, distinct musical sting. This is the
+                 highest-budget animation slot for the hero.>
+  Bark line:    "<one short line the hero says when this fires>"
 
 (Multiple abilities at the same tier are fine — useful for offering
 strategic flexibility. Picker fires highest-tier matched, then highest-
@@ -296,9 +347,79 @@ CARD: NAME
           "when opponent fires a Tier 4 ability" / "when opponent removes one of your tokens">
   Notes:  <any custom logic that doesn't fit the standard effects — describe in plain
           English; will be hand-coded as a custom handler>
+  Flavor: <one short italic line — flavor text shown under the rules text> [PRESENTATION]
+  FX:     <one line — what plays when card is played, e.g. "card slides up, glow pulse,
+          quick chime"> [PRESENTATION]
 
 (Repeat for each of the ~12 cards.)
+
+=== AUDIO IDENTITY === [PRESENTATION]
+
+Signature motif:    <3–6 notes + instrument family — e.g. "low cello drone + 3 ascending
+                    plucked notes" / "muted brass triplet falling a fifth">
+Ambient bed:        <what plays under this hero's screen when it's their turn — e.g. "low
+                    wind + distant bell" / "crackling hearth + slow heartbeat">
+Bark — on roll:     "<short line>"
+Bark — T3 lands:    "<short line>"
+Bark — T4 fires:    "<short line — paired with the cinematic above>"
+Bark — taking lethal hit: "<short line>"
+Bark — victory:     "<short line>"
+Bark — defeat:      "<short line>"
+
+=== TUNING / PLAYTEST NOTES === [PRESENTATION]
+
+Expected play pattern:  <2–3 sentences — what does a typical match with this hero look like?
+                        When does the hero feel powerful, when do they feel vulnerable?>
+Strong matchups:        <hero archetypes this hero beats — "punishes slow control heroes" / "out-trades burst rush heroes">
+Weak matchups:          <hero archetypes this hero struggles into>
+Anti-pattern warning:   <one or two ways the hero could feel oppressive or feel-bad if mistuned —
+                        flag these for the simulator pass>
+
+=== QUICK REFERENCE CARD === [PRESENTATION]
+
+A one-screen at-a-glance summary of the hero. Used for hero-select and reference sheets.
+Format as a tight bulleted list — keep each line short.
+
+NAME · ARCHETYPE · COMPLEXITY
+Dice: <one-line summary, e.g. "3 axe / 2 fur / 1 howl">
+Win condition: <one line>
+Signature: <name + 6-word description>
+Tier 1: <name + short>      Tier 2: <name + short>
+Tier 3: <name + short>      Tier 4: <name + short>
+Standout cards: <2–3 names that define the deck>
+"<the hero's catchphrase>"
 ```
+
+---
+
+## 7.5 Field-by-field cheat sheet — what gets used where
+
+So the writer knows what each field becomes when the hero is implemented:
+
+| Template field | Becomes | Used by |
+|---|---|---|
+| ID | `HeroId` slug | routing, save data, debug |
+| NAME | `hero.name` | hero-select, banner, action log |
+| ACCENT | `hero.accentColor` | UI theming, glows, button accents |
+| QUOTE | `hero.signatureQuote` | hero-select info panel |
+| Lore.* | render in HeroSelect info panel + How-To-Play hero pages | content pages |
+| Visual identity.background motif | drives `registerAtmosphere(heroId, ...)` config | HeroBackground |
+| Visual identity.particle behaviour | particle direction / density / hue in atmosphere config | HeroBackground |
+| Dice.glyph + tint | drives `FACE_GLYPHS[symbol]` SVG + `FACE_TINT[symbol]` hex | dieFaces.tsx |
+| Portrait reactive states | drives `registerSigil(heroId, render)` with state-aware variants | HeroPortrait |
+| Signature passive.HUD readout | drives the per-hero status badge near the HP bar | HeroPanel |
+| Signature token.Visual | slam-in animation + icon for the token chip | StatusToken component |
+| Ability.Cinematic | drives the ability cinematic + AttackEffect for that ability | Choreographer + AbilityCinematic + AttackEffect |
+| Ability T4.Bark line | spoken/displayed in the Ultimate cinematic | AbilityCinematic |
+| Card.Flavor | italic line under rules text | Card component |
+| Card.FX | brief play animation when the card is dropped | choreoStore + Card |
+| Audio identity.Signature motif | the hero's musical sting (plays on hero-select highlight + T4) | audio/sfx.ts |
+| Audio identity.Ambient bed | looped bed under the match screen for that player's turn | audio/sfx.ts |
+| Audio identity.Bark lines | short audio cues at the listed events | sfx + Choreographer |
+| Tuning notes | go into the simulator README + PR description | docs |
+| Quick reference card | renders as the HeroSelect info panel + how-to-play summary card | HeroSelect |
+
+If a field is left as `(skip)`, the renderer falls back to a generic default (concentric-circle portrait, plain dot glyph, default screen-shake hit FX, no bark line, etc.). The hero is still fully playable — just less distinctive.
 
 ---
 
