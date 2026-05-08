@@ -7,10 +7,10 @@
  */
 
 // ── IDs & primitives ────────────────────────────────────────────────────────
-export type HeroId      = "barbarian" | "pyromancer" | "paladin";
+export type HeroId      = string;             // open — heroes register their IDs in content/index.ts
 export type PlayerId    = "p1" | "p2";
-export type CardId      = string;     // e.g. "barbarian/berserk-rush"
-export type SymbolId    = string;     // hero-scoped, e.g. "barbarian:axe"
+export type CardId      = string;     // e.g. "myhero/some-card"
+export type SymbolId    = string;     // hero-scoped, e.g. "myhero:axe"
 export type StatusId    = string;     // e.g. "burn", "bleeding"
 export type AbilityTier = 1 | 2 | 3 | 4;
 
@@ -118,11 +118,11 @@ export type PassiveTrigger =
   | { on: "statusTicked"; status: StatusId; on_target: "opponent" | "self"; gain: number }
   | { on: "successfulDefense"; gain: number };
 
-export type PassiveBehavior =
-  | { kind: "rage";          threshold: number; perTurnStack: number; cap: number; perStackBonus: number }
-  | { kind: "ignite";        status: StatusId; stacksPerHit: number }
-  | { kind: "divine-favor";  startingProtect: number; protectPerDefense: number;
-                             protectCap: number; judgmentPerDefense: number };
+/** Open shape — each hero declares its own kind + parameters. The engine
+ *  in phases.ts dispatches on `kind` and applies the corresponding
+ *  passive behavior at the relevant phase boundaries. New heroes extend
+ *  this union (or use a generic kind) when they introduce new mechanics. */
+export type PassiveBehavior = { kind: string; [key: string]: unknown };
 
 export interface HeroDefinition {
   id: HeroId;

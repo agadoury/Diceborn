@@ -17,18 +17,11 @@
 import { useEffect } from "react";
 import { useChoreoStore } from "@/store/choreoStore";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
-import { BARBARIAN } from "@/content/heroes/barbarian";
+import { HEROES } from "@/content";
 import { cn } from "@/lib/cn";
 
-const HERO_DEFS = {
-  barbarian:  BARBARIAN,
-} as const;
-
-const HERO_BARK: Record<string, string> = {
-  barbarian:  "BRING ME THEIR BONES!",
-  pyromancer: "BURN!",
-  paladin:    "BY THE LIGHT!",
-};
+/** Voice-bark registry. Heroes plug in their own when registered. */
+const HERO_BARK: Record<string, string> = {};
 
 export function AbilityCinematicLayer() {
   const cinematic = useChoreoStore(s => s.cinematic);
@@ -44,14 +37,15 @@ export function AbilityCinematicLayer() {
   }, [cinematic, skip]);
 
   if (!cinematic) return null;
-  const hero = HERO_DEFS[cinematic.hero as keyof typeof HERO_DEFS] ?? BARBARIAN;
-  const accent = hero.accentColor;
+  const hero = HEROES[cinematic.hero];
+  const accent = hero?.accentColor ?? "#A855F7";
+  const heroName = hero?.name ?? cinematic.hero.toUpperCase();
   const bark = HERO_BARK[cinematic.hero] ?? "...";
 
   return (
     <div
       role="dialog"
-      aria-label={`${hero.name} fires ${cinematic.abilityName}`}
+      aria-label={`${heroName} fires ${cinematic.abilityName}`}
       onClick={skip}
       className="fixed inset-0 z-50 pointer-events-auto cursor-pointer"
       style={{
@@ -89,7 +83,7 @@ export function AbilityCinematicLayer() {
       >
         <div className="font-display tracking-[0.18em] text-4xl sm:text-6xl"
              style={{ color: accent, textShadow: `0 0 24px ${accent}aa, 0 4px 0 rgba(0,0,0,0.5)` }}>
-          {hero.name}
+          {heroName}
         </div>
         <div className="mt-2 font-display tracking-widest text-xl sm:text-3xl text-ink"
              style={{ animation: reduced ? undefined : "ability-name-in 280ms 220ms cubic-bezier(.22,1,.36,1) both" }}>

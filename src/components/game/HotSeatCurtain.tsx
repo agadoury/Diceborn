@@ -63,9 +63,8 @@ export function HotSeatCurtain({ open, nextPlayer, nextHero, onContinue }: Props
 }
 
 function prettyHero(id: HeroId): string {
-  switch (id) {
-    case "barbarian":  return "Barbarian";
-    case "pyromancer": return "Pyromancer";
-    case "paladin":    return "Paladin";
-  }
+  // Title-case the hero ID slug. Heroes can override by registering a name
+  // in their HeroDefinition (read elsewhere when the registry is consulted).
+  if (!id) return "";
+  return id.charAt(0).toUpperCase() + id.slice(1);
 }

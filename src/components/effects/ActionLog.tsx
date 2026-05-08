@@ -138,7 +138,7 @@ function formatEvent(ev: GameEvent): string | null {
 }
 
 function humanCard(id: string): string {
-  // "barbarian/blood-debt" → "Blood Debt"
+  // e.g. "myhero/some-card" → "Some Card"
   const tail = id.split("/").pop() ?? id;
   return tail.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }

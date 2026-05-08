@@ -16,12 +16,12 @@ export default function MainMenu() {
       </header>
 
       <nav className="w-full max-w-sm flex flex-col gap-3">
-        <MenuButton to="/heroes?mode=vs-ai"     label="Vs AI" recommended />
-        <MenuButton to="/heroes?mode=hot-seat"  label="Hot-Seat" />
-        <MenuButton to="/how-to-play"  label="How to play" />
-        <MenuButton to="/settings"     label="Settings" />
-        <MenuButton to="/dev/tokens"     label="Design tokens" subtle />
-        <MenuButton to="/dev/components" label="Component storybook" subtle />
+        <MenuButton to="/heroes?mode=vs-ai"    label="Vs AI" recommended />
+        <MenuButton to="/heroes?mode=hot-seat" label="Hot-Seat" />
+        <MenuButton to="/how-to-play"          label="How to play" />
+        <MenuButton to="/settings"             label="Settings" />
+        <MenuButton to="/dev/tokens"           label="Design tokens" subtle />
+        <MenuButton to="/dev/components"       label="Component storybook" subtle />
       </nav>
 
       <footer className="text-muted text-sm text-center pb-2">

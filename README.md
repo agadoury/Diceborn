@@ -58,8 +58,8 @@ src/
 │   ├── ai.ts           Heuristic AI — calls evaluateLadder for shared reach
 │   └── match-summary.ts Descriptor + stats from the GameEvent log
 ├── content/     # Hero & card data files. Pure declarations — no engine code.
-│   ├── heroes/{barbarian,pyromancer,paladin}.ts
-│   └── cards/{generic,barbarian,pyromancer,paladin}.ts
+│   ├── heroes/      Per-hero HeroDefinition modules (currently empty)
+│   └── cards/       Hero-specific + generic card lists (generic.ts only)
 ├── store/       # Zustand: gameStore, choreoStore, uiStore.
 ├── components/  # ui/ primitives, game/ board parts, effects/, screens/.
 ├── audio/       # Synth-placeholder SFX library + Howler-ready manager facade.
@@ -76,20 +76,16 @@ gate their interactivity on `useInputUnlocked()` (queue drained).
 This separation is what enables the juice: the engine resolves a turn
 instantly; the presentation layer takes 2-6 seconds to *show* it.
 
-## Heroes (MVP)
+## Heroes
 
-| Hero       | Archetype | Complexity | Signature                  | Token   |
-|------------|-----------|------------|----------------------------|---------|
-| Barbarian  | rush      | 1          | RAGE — +1 dmg/stack at low HP | Bleeding |
-| Pyromancer | burn      | 3          | IGNITE — every hit applies Smolder | Smolder |
-| Paladin    | survival  | 2          | DIVINE FAVOR — defense → Protect + Judgment | Judgment |
+No heroes are currently registered. Drop a `HeroDefinition` module in
+`src/content/heroes/` and register it in `src/content/index.ts` to
+populate the menu, hero-select, simulator, and dev showcase.
 
-Landing-rate audit (10,000 trials per tier, **3 attempts** = 1 initial roll + 2 rerolls):
+Landing-rate audit runs against whichever heroes are registered:
 
-```
-BARBARIAN     T1 87.3%   T2 61.8%   T3 48.6%   T4 20.5%   ✓ all in band
-PYROMANCER    T1 87.3%   T2 61.8%   T3 36.8%   T4 24.8%   ✓ all in band
-PALADIN       T1 87.3%   T2 61.8%   T3 48.6%   T4 24.8%   ✓ all in band
+```sh
+npm run simulate -- --rates
 ```
 
 ## Mobile-first acceptance

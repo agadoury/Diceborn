@@ -301,14 +301,15 @@ function playEvent(ev: GameEvent, ctx: PlayCtx): number {
   }
 }
 
-/** Reads the live game state to map a player slot to its hero. Falls back
- *  to barbarian if game state isn't ready (test bench events). */
+/** Reads the live game state to map a player slot to its hero. Returns
+ *  empty string if no game state — the cinematic layer renders generic
+ *  fallbacks (no name, no bark) when the hero isn't registered. */
 function heroIdFromPlayer(p: string): HeroId {
   try {
     const live = useGameStore.getState().state;
     if (live && (p === "p1" || p === "p2")) return live.players[p as PlayerId].hero;
   } catch { /* */ }
-  return "barbarian";
+  return "";
 }
 
 function accentFor(hero: HeroId): string {

@@ -26,7 +26,7 @@ import {
 } from "./types";
 import { getHero, getDeckCards } from "../content";
 import { getCustomHandler, canPlay, drawCards, sellCard, gainCp, resolveEffect, discardCard } from "./cards";
-import { applyStatus, stacksOf } from "./status";
+import { stacksOf } from "./status";
 import { buildDeck } from "./cards";
 import {
   enterPhase, performRoll, resolveOffensiveAbility, emitLadderState, other, endMatch,
@@ -67,21 +67,9 @@ function startMatch(
     p1: makeHeroSnapshot("p1", p1, state),
     p2: makeHeroSnapshot("p2", p2, state),
   };
-  // Apply hero-specific starting state (Paladin's 2 starting Protect tokens, etc.).
-  for (const pid of ["p1", "p2"] as const) {
-    const snap = state.players[pid];
-    const def = getHero(snap.hero);
-    if (def.signatureMechanic.implementation.kind === "divine-favor") {
-      const start = def.signatureMechanic.implementation.startingProtect;
-      if (start > 0) {
-        // Direct apply (Paladin's starting Protects come from the hero's identity).
-        const e = applyStatus(snap, pid, "protect", start);
-        // We don't surface these as events on the very first turn — they're part of setup.
-        // (But emitting is harmless; choreographer can choose to ignore on match-start.)
-        for (const ev of e) (state.log as unknown as GameEvent[]).push?.(ev as never);
-      }
-    }
-  }
+  // Hero-specific starting state plugs in here when content is registered.
+  // Engine dispatches on hero.signatureMechanic.implementation.kind to apply
+  // any opening-state tokens (e.g. starting Protect, starting buffs).
   // Initial draws.
   const events: GameEvent[] = [];
   events.push({

@@ -1,18 +1,18 @@
 /**
  * /dev/components — the storybook + dice playground.
  *
- * Step 3 acceptance gate: every primitive demoed in its states,
- * dice playground proves the tumble feels good 20 times in a row,
- * ladder demo shows live highlighting + LETHAL via opponent-HP slider,
- * status track demo applies/ticks/removes each token.
+ * Hero-bound demos (dice playground, ladder demo, card showcase) require
+ * at least one hero registered in src/content/index.ts. They render an
+ * empty-state notice when the registry is empty.
+ *
+ * Hero-agnostic demos (Choreographer test bench, status track demo,
+ * UI primitives) work regardless and are always shown.
  */
 import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { BARBARIAN } from "@/content/heroes/barbarian";
-import { BARBARIAN_CARDS } from "@/content/cards/barbarian";
-import { GENERIC_CARDS } from "@/content/cards/generic";
+import { GENERIC_CARDS, HEROES } from "@/content";
 import { evaluateLadder } from "@/game/dice";
-import type { Die, GameEvent, HeroSnapshot, LadderRowState, StatusInstance } from "@/game/types";
+import type { Die, GameEvent, HeroDefinition, HeroSnapshot, LadderRowState, StatusInstance } from "@/game/types";
 
 import { Button } from "@/components/ui/Button";
 import { HealthBar } from "@/components/ui/HealthBar";
@@ -27,15 +27,10 @@ import { audio } from "@/audio/manager";
 import { vibrate } from "@/hooks/useHaptics";
 import { enqueueEvents, useChoreoStore } from "@/store/choreoStore";
 
-const SYM_FACES = BARBARIAN.diceIdentity.faces;
-
-function freshDice(): Die[] {
-  return [0, 1, 2, 3, 4].map(i => ({
-    index: i as Die["index"],
-    faces: SYM_FACES,
-    current: i % SYM_FACES.length,
-    locked: false,
-  }));
+/** Returns the first registered hero, or null if the registry is empty. */
+function firstHero(): HeroDefinition | null {
+  const ids = Object.keys(HEROES);
+  return ids.length > 0 ? HEROES[ids[0]] ?? null : null;
 }
 
 export default function DevComponents() {
@@ -66,7 +61,7 @@ export default function DevComponents() {
 }
 
 /* ────────────────────────────────────────────────────────────────────────
-   0. CHOREOGRAPHER TEST BENCH — fire any event type and feel the result.
+   0. CHOREOGRAPHER TEST BENCH — generic event firing, hero-agnostic.
    ──────────────────────────────────────────────────────────────────────── */
 function ChoreoTestBench() {
   const queueLen = useChoreoStore(s => s.queue.length);
@@ -83,7 +78,7 @@ function ChoreoTestBench() {
   return (
     <Section
       title="Choreographer test bench"
-      hint="Fire engine events; the Choreographer runs each as a timed visual+audio+haptic beat. Tap any cinematic to skip. Audio unlocks on first interaction (iOS)."
+      hint="Fire engine events; the Choreographer runs each as a timed visual+audio+haptic beat. Audio unlocks on first interaction (iOS)."
     >
       <div className="surface rounded-card p-4 flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
@@ -118,50 +113,8 @@ function ChoreoTestBench() {
           <Button sound={null} onClick={() => fire({ t: "heal-applied", player: "p1", amount: 5 })}>
             heal 5
           </Button>
-          <Button sound={null} onClick={() => fire({ t: "ability-triggered", player: "p1", tier: 1, abilityName: "CLEAVE", isCritical: false })}>
-            T1 CLEAVE
-          </Button>
-          <Button sound={null} onClick={() => fire({ t: "ability-triggered", player: "p1", tier: 2, abilityName: "AXE SWING", isCritical: "minor" })}>
-            T2 AXE SWING (minor crit)
-          </Button>
-          <Button sound={null} onClick={() => fire({ t: "ability-triggered", player: "p1", tier: 3, abilityName: "BERSERKER FRENZY", isCritical: false })}>
-            T3 BERSERKER FRENZY
-          </Button>
-          <Button sound={null} onClick={() => fire({ t: "ability-triggered", player: "p1", tier: 1, abilityName: "FIREBOLT", isCritical: false })}>
-            FIREBOLT
-          </Button>
-          <Button sound={null} onClick={() => fire({ t: "ability-triggered", player: "p1", tier: 2, abilityName: "FIRE LANCE", isCritical: false })}>
-            FIRE LANCE
-          </Button>
-          <Button sound={null} onClick={() => fire({ t: "ability-triggered", player: "p1", tier: 3, abilityName: "FIREBALL", isCritical: false })}>
-            FIREBALL
-          </Button>
-          <Button sound={null} onClick={() => fire({ t: "ability-triggered", player: "p1", tier: 1, abilityName: "SMITE", isCritical: false })}>
-            SMITE
-          </Button>
-          <Button sound={null} onClick={() => fire({ t: "ability-triggered", player: "p1", tier: 2, abilityName: "RIGHTEOUS BLOW", isCritical: false })}>
-            RIGHTEOUS BLOW
-          </Button>
-          <Button sound={null} onClick={() => fire({ t: "ability-triggered", player: "p1", tier: 3, abilityName: "DIVINE DECREE", isCritical: false })}>
-            DIVINE DECREE
-          </Button>
-          <Button sound={null} onClick={() => fire({ t: "ultimate-fired", player: "p1", abilityName: "BLOOD HARVEST", isCritical: false })} variant="primary">
-            ULTIMATE
-          </Button>
-          <Button sound={null} onClick={() => fire({ t: "ultimate-fired", player: "p1", abilityName: "BLOOD HARVEST", isCritical: true })} variant="primary">
-            CRIT ULT
-          </Button>
-          <Button sound={null} onClick={() => fire({ t: "status-applied", status: "bleeding", holder: "p2", applier: "p1", stacks: 1, total: 3 })}>
-            +1 bleeding
-          </Button>
-          <Button sound={null} onClick={() => fire({ t: "status-applied", status: "stun", holder: "p2", applier: "p1", stacks: 1, total: 1 })}>
-            +stun
-          </Button>
-          <Button sound={null} onClick={() => fire({ t: "status-removed", status: "bleeding", holder: "p2", reason: "expired" })}>
-            -bleeding
-          </Button>
           <Button sound={null} onClick={() => fire({ t: "rage-changed", player: "p1", stacks: 3 })}>
-            rage = 3
+            sig stack = 3
           </Button>
           <Button sound={null} onClick={() => fire({ t: "turn-started", player: "p1", turn: 4 })}>
             turn started
@@ -173,60 +126,41 @@ function ChoreoTestBench() {
             draw
           </Button>
         </div>
-
-        <div className="text-xs text-muted">
-          <strong className="text-ink">Combo plays:</strong>
-          <div className="flex flex-wrap gap-2 mt-2">
-            <Button size="sm" sound={null} onClick={() => fire([
-              { t: "ability-triggered", player: "p1", tier: 2, abilityName: "AXE SWING", isCritical: false },
-              { t: "damage-dealt", from: "p1", to: "p2", amount: 7, type: "normal", mitigated: 0 },
-              { t: "status-applied", status: "bleeding", holder: "p2", applier: "p1", stacks: 1, total: 1 },
-            ])}>full T2 hit</Button>
-            <Button size="sm" sound={null} onClick={() => fire([
-              { t: "ultimate-fired", player: "p1", abilityName: "BLOOD HARVEST", isCritical: false },
-              { t: "damage-dealt", from: "p1", to: "p2", amount: 16, type: "ultimate", mitigated: 0 },
-              { t: "status-applied", status: "bleeding", holder: "p2", applier: "p1", stacks: 3, total: 3 },
-              { t: "status-applied", status: "stun",     holder: "p2", applier: "p1", stacks: 1, total: 1 },
-            ])}>full ULT sequence</Button>
-            <Button size="sm" sound={null} onClick={() => fire([
-              { t: "damage-dealt", from: "p2", to: "p1", amount: 11, type: "normal", mitigated: 0 },
-              { t: "hp-changed", player: "p1", delta: -11, total: 19 },
-              { t: "match-won", winner: "p2" },
-            ])}>lethal flow</Button>
-          </div>
-        </div>
       </div>
     </Section>
   );
 }
 
 /* ────────────────────────────────────────────────────────────────────────
-   1. DICE PLAYGROUND — the §3 acceptance gate.
-   "I can roll dice 20 times in a row and it feels good every single time."
+   1. DICE PLAYGROUND — requires a registered hero.
    ──────────────────────────────────────────────────────────────────────── */
 function DicePlayground() {
-  const [dice, setDice] = useState<Die[]>(() => freshDice());
+  const hero = firstHero();
+  const [dice, setDice] = useState<Die[]>(() => freshDice(hero));
   const [rollKey, setRollKey] = useState(0);
   const [centerStage, setCenterStage] = useState(false);
   const [rollsThisSession, setRollsThisSession] = useState(0);
   const tumbleTimerRef = useRef<number | null>(null);
 
-  // Roll: pick fresh face indices for unlocked dice, bump rollKey.
+  if (!hero) {
+    return <EmptyHeroDemo title="Dice playground" />;
+  }
+
   function roll() {
+    if (!hero) return;
     setCenterStage(true);
     setDice(prev => prev.map(d =>
-      d.locked ? d : { ...d, current: Math.floor(Math.random() * SYM_FACES.length) },
+      d.locked ? d : { ...d, current: Math.floor(Math.random() * hero.diceIdentity.faces.length) },
     ));
     setRollKey(k => k + 1);
     setRollsThisSession(n => n + 1);
     if (tumbleTimerRef.current) window.clearTimeout(tumbleTimerRef.current);
-    // Dice tumble totals ~990ms mobile / ~1240ms desktop; release center-stage after.
     tumbleTimerRef.current = window.setTimeout(() => setCenterStage(false), 1300);
   }
 
   function reset() {
     sfx("ui-back");
-    setDice(freshDice());
+    setDice(freshDice(hero));
     setRollKey(0);
     setRollsThisSession(0);
     setCenterStage(false);
@@ -245,21 +179,20 @@ function DicePlayground() {
         className="relative rounded-card surface p-4 overflow-hidden"
         style={{
           background: centerStage
-            ? `radial-gradient(ellipse at 50% 38%, ${BARBARIAN.accentColor}22 0%, var(--c-arena-0) 70%)`
+            ? `radial-gradient(ellipse at 50% 38%, ${hero.accentColor}22 0%, var(--c-arena-0) 70%)`
             : "linear-gradient(180deg, rgba(43,23,64,0.85) 0%, rgba(15,8,20,0.85) 100%)",
           transition: "background 200ms ease-out",
         }}
       >
-        {/* Other-UI dimming proxy: a faint banner that dims while center-stage */}
         <div className="flex items-center justify-between text-xs text-muted mb-2"
              style={{ opacity: centerStage ? 0.4 : 1, transition: "opacity 200ms" }}>
-          <span>Hero: <strong className="text-ink">Barbarian</strong></span>
+          <span>Hero: <strong className="text-ink">{hero.name}</strong></span>
           <span>rolls this session: <strong className="text-ink font-num">{rollsThisSession}</strong></span>
         </div>
 
         <DiceTray
           dice={dice}
-          accent={BARBARIAN.accentColor}
+          accent={hero.accentColor}
           rollKey={rollKey}
           centerStage={centerStage}
           onToggleLock={toggleLock}
@@ -267,7 +200,7 @@ function DicePlayground() {
 
         <div className="flex items-center justify-center gap-3 mt-4">
           <Button variant="ghost" size="md" onClick={reset} sound="ui-back">Reset</Button>
-          <Button variant="primary" size="lg" onClick={roll} heroAccent={BARBARIAN.accentColor} sound={null}>
+          <Button variant="primary" size="lg" onClick={roll} heroAccent={hero.accentColor} sound={null}>
             🎲 ROLL
           </Button>
           <Button
@@ -283,40 +216,56 @@ function DicePlayground() {
   );
 }
 
+function freshDice(hero: HeroDefinition | null): Die[] {
+  if (!hero) return [];
+  const faces = hero.diceIdentity.faces;
+  return [0, 1, 2, 3, 4].map(i => ({
+    index: i as Die["index"],
+    faces,
+    current: i % faces.length,
+    locked: false,
+  }));
+}
+
 /* ────────────────────────────────────────────────────────────────────────
-   2. LADDER DEMO — lock dice, drag opponent HP slider, watch LETHAL fire.
+   2. LADDER DEMO — requires a registered hero.
    ──────────────────────────────────────────────────────────────────────── */
 function LadderDemo() {
-  const [dice, setDice] = useState<Die[]>(() => freshDice());
-  const [attemptsRemaining, setAttemptsRemaining] = useState<0 | 1 | 2>(2);
+  const hero = firstHero();
+  const [dice, setDice] = useState<Die[]>(() => freshDice(hero));
+  const [attemptsRemaining, setAttemptsRemaining] = useState<number>(3);
   const [opponentHp, setOpponentHp] = useState(7);
-  const [rage, setRage] = useState(0);
+  const [bonus, setBonus] = useState(0);
 
-  // Build a synthetic snapshot from these dice so evaluateLadder can read it.
-  const snapshot: HeroSnapshot = useMemo(() => ({
-    player: "p1",
-    hero: "barbarian",
-    hp: 30, hpStart: 30, hpCap: 40, cp: 5,
-    dice,
-    rollAttemptsRemaining: attemptsRemaining,
-    hand: [], deck: [], discard: [], statuses: [],
-    upgrades: { 1: 0, 2: 0, 3: 0, 4: 0 },
-    signatureState: { rage },
-    ladderState: blankLadder(),
-    isLowHp: false,
-    nextAbilityBonusDamage: 0,
-  }), [dice, attemptsRemaining, rage]);
+  const snapshot: HeroSnapshot | null = useMemo(() => {
+    if (!hero) return null;
+    return {
+      player: "p1",
+      hero: hero.id,
+      hp: 30, hpStart: 30, hpCap: 40, cp: 5,
+      dice,
+      rollAttemptsRemaining: attemptsRemaining,
+      hand: [], deck: [], discard: [], statuses: [],
+      upgrades: { 1: 0, 2: 0, 3: 0, 4: 0 },
+      signatureState: {},
+      ladderState: blankLadder(),
+      isLowHp: false,
+      nextAbilityBonusDamage: 0,
+    };
+  }, [hero, dice, attemptsRemaining]);
 
-  const rows = useMemo<LadderRowState[]>(
-    () => evaluateLadder(BARBARIAN, snapshot, attemptsRemaining, {
+  const rows = useMemo<LadderRowState[]>(() => {
+    if (!hero || !snapshot) return [];
+    return evaluateLadder(hero, snapshot, attemptsRemaining, {
       opponentHp,
       pendingOpponentDamage: 0,
-      damageBonus: rage,                   // rage = +1 dmg per stack
+      damageBonus: bonus,
       reachabilitySamples: 300,
       reachabilitySeed: 13,
-    }),
-    [snapshot, attemptsRemaining, opponentHp, rage],
-  );
+    });
+  }, [hero, snapshot, attemptsRemaining, opponentHp, bonus]);
+
+  if (!hero) return <EmptyHeroDemo title="Ladder live-state demo" />;
 
   function setFace(dieIdx: number, faceIdx: number) {
     setDice(prev => prev.map((d, i) => i === dieIdx ? { ...d, current: faceIdx } : d));
@@ -326,16 +275,15 @@ function LadderDemo() {
   }
 
   return (
-    <Section title="Ladder live-state demo" hint="Set face values for each die, drag the opponent's HP slider, and watch FIRING / TRIGGERED / REACHABLE / OUT-OF-REACH and LETHAL transitions in real time.">
+    <Section title="Ladder live-state demo" hint="Set face values, drag the opponent's HP slider, watch ladder transitions in real time.">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Controls */}
         <div className="surface rounded-card p-4 flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted w-24">Attempts left</span>
-            {[0, 1, 2].map(n => (
+            {[0, 1, 2, 3].map(n => (
               <Button key={n} size="sm"
                 variant={n === attemptsRemaining ? "primary" : "secondary"}
-                onClick={() => setAttemptsRemaining(n as 0 | 1 | 2)}
+                onClick={() => setAttemptsRemaining(n)}
                 sound="ui-tap">
                 {n}
               </Button>
@@ -343,23 +291,15 @@ function LadderDemo() {
           </div>
           <label className="flex items-center gap-3 text-xs text-muted">
             <span className="w-24">Opponent HP</span>
-            <input
-              type="range" min={0} max={40}
-              value={opponentHp}
-              onChange={e => setOpponentHp(Number(e.target.value))}
-              className="flex-1 accent-dmg"
-            />
+            <input type="range" min={0} max={40} value={opponentHp}
+              onChange={e => setOpponentHp(Number(e.target.value))} className="flex-1 accent-dmg" />
             <span className="font-num text-ink w-8 text-right">{opponentHp}</span>
           </label>
           <label className="flex items-center gap-3 text-xs text-muted">
-            <span className="w-24">Rage stacks</span>
-            <input
-              type="range" min={0} max={5}
-              value={rage}
-              onChange={e => setRage(Number(e.target.value))}
-              className="flex-1 accent-rose-500"
-            />
-            <span className="font-num text-ink w-8 text-right">{rage}</span>
+            <span className="w-24">Damage bonus</span>
+            <input type="range" min={0} max={5} value={bonus}
+              onChange={e => setBonus(Number(e.target.value))} className="flex-1 accent-rose-500" />
+            <span className="font-num text-ink w-8 text-right">{bonus}</span>
           </label>
 
           <div>
@@ -372,7 +312,7 @@ function LadderDemo() {
                     {d.locked ? "🔒" : "🔓"}
                   </Button>
                   <div className="flex flex-wrap gap-1 flex-1">
-                    {SYM_FACES.map((f, j) => (
+                    {hero.diceIdentity.faces.map((f, j) => (
                       <Button
                         key={`${i}-${j}-${f.symbol}`}
                         size="sm"
@@ -391,35 +331,23 @@ function LadderDemo() {
           </div>
         </div>
 
-        {/* Ladder + a small dice preview */}
         <div className="flex flex-col gap-3">
           <div className="surface rounded-card p-3">
             <div className="text-xs text-muted mb-2">Current dice</div>
-            <DiceTray
-              dice={dice}
-              accent={BARBARIAN.accentColor}
-              rollKey={0}
-              onToggleLock={toggleLock}
-              dieSize={56}
-            />
+            <DiceTray dice={dice} accent={hero.accentColor} rollKey={0} onToggleLock={toggleLock} dieSize={56} />
           </div>
-          <AbilityLadder hero={BARBARIAN} rows={rows} />
+          <AbilityLadder hero={hero} rows={rows} />
         </div>
       </div>
     </Section>
   );
 }
 function blankLadder(): LadderRowState[] {
-  return [
-    { kind: "out-of-reach", tier: 1 },
-    { kind: "out-of-reach", tier: 2 },
-    { kind: "out-of-reach", tier: 3 },
-    { kind: "out-of-reach", tier: 4 },
-  ];
+  return [];
 }
 
 /* ────────────────────────────────────────────────────────────────────────
-   3. STATUS TRACK DEMO — apply / tick / strip each of the 8 tokens.
+   3. STATUS TRACK DEMO — generic, hero-agnostic.
    ──────────────────────────────────────────────────────────────────────── */
 function StatusDemo() {
   const [statuses, setStatuses] = useState<StatusInstance[]>([]);
@@ -446,7 +374,8 @@ function StatusDemo() {
   }
   function reset() { sfx("ui-back"); setStatuses([]); }
 
-  const ALL_TOKENS = ["burn", "stun", "protect", "shield", "regen", "bleeding", "smolder", "judgment"];
+  // Universal status tokens registered in src/game/status.ts.
+  const TOKENS = ["burn", "stun", "protect", "shield", "regen"];
 
   return (
     <Section title="Status track demo" hint="Apply, tick, and strip each token — confirm slam-in animation, pulse on debuffs, dissolve on remove.">
@@ -454,8 +383,8 @@ function StatusDemo() {
         <div className="text-xs text-muted mb-1">Live track:</div>
         <StatusTrack statuses={statuses} freshIds={freshIds} emptyHint="(no statuses)" />
 
-        <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {ALL_TOKENS.map(id => (
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {TOKENS.map(id => (
             <div key={id} className="flex flex-col gap-1 items-stretch">
               <div className="flex items-center gap-2 px-2">
                 <StatusBadge statusId={id} stacks={(statuses.find(s => s.id === id)?.stacks) ?? 0} />
@@ -479,9 +408,11 @@ function StatusDemo() {
 }
 
 /* ────────────────────────────────────────────────────────────────────────
-   4. PRIMITIVES — Button sizes/variants, HealthBar, CPMeter.
+   4. PRIMITIVES — generic, hero-agnostic.
    ──────────────────────────────────────────────────────────────────────── */
 function PrimitivesShowcase() {
+  const hero = firstHero();
+  const accent = hero?.accentColor ?? "var(--c-brand)";
   const [hp, setHp] = useState(30);
   const [cp, setCp] = useState(2);
   return (
@@ -499,18 +430,13 @@ function PrimitivesShowcase() {
             <Button variant="secondary">secondary</Button>
             <Button variant="ghost">ghost</Button>
             <Button variant="danger">danger</Button>
-          </div>
-          <div className="flex flex-wrap gap-2 items-end">
-            <Button heroAccent="#DC2626">barbarian</Button>
-            <Button heroAccent="#F97316">pyromancer</Button>
-            <Button heroAccent="#FBBF24">paladin</Button>
             <Button disabled>disabled</Button>
           </div>
         </div>
 
         <div className="surface rounded-card p-4 flex flex-col gap-3">
           <div className="text-xs text-muted">Health & CP</div>
-          <HealthBar hp={hp} hpMax={40} accent={BARBARIAN.accentColor} />
+          <HealthBar hp={hp} hpMax={40} accent={accent} />
           <div className="flex gap-2">
             <Button size="sm" onClick={() => setHp(h => Math.max(0, h - 5))} variant="danger">-5 HP</Button>
             <Button size="sm" onClick={() => setHp(h => Math.min(40, h + 5))} variant="secondary">+5 HP</Button>
@@ -530,17 +456,37 @@ function PrimitivesShowcase() {
 }
 
 /* ────────────────────────────────────────────────────────────────────────
-   5. CARD SHOWCASE.
+   5. CARD SHOWCASE — generic universal cards + first hero's cards.
    ──────────────────────────────────────────────────────────────────────── */
 function CardShowcase() {
+  const hero = firstHero();
+  const accent = hero?.accentColor ?? "var(--c-brand)";
+  const heroCards = hero?.cards.slice(0, 6) ?? [];
+  const cards = [...heroCards, ...GENERIC_CARDS];
   return (
     <Section title="Cards">
       <div className="surface rounded-card p-4 overflow-x-auto">
-        <div className="flex gap-3 min-w-max">
-          {[...BARBARIAN_CARDS.slice(0, 6), ...GENERIC_CARDS].map(card => (
-            <CardView key={card.id} card={card} accent={BARBARIAN.accentColor} />
-          ))}
-        </div>
+        {cards.length === 0 ? (
+          <p className="text-xs text-muted italic">No cards available — register a hero or add generic cards.</p>
+        ) : (
+          <div className="flex gap-3 min-w-max">
+            {cards.map(card => (
+              <CardView key={card.id} card={card} accent={accent} />
+            ))}
+          </div>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+/* ── Empty-state helper ─────────────────────────────────────────────────── */
+function EmptyHeroDemo({ title }: { title: string }) {
+  return (
+    <Section title={title}>
+      <div className="surface rounded-card p-4 text-xs text-muted italic">
+        No hero registered yet. This demo activates once at least one hero is added to
+        <code className="ml-1 not-italic">src/content/index.ts</code>.
       </div>
     </Section>
   );
@@ -560,4 +506,3 @@ function Section({
     </section>
   );
 }
-

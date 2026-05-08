@@ -1,8 +1,9 @@
 /**
  * HeroPortrait — placeholder hero illustration as an SVG sigil.
- * Real art lands in Step 9. The sigil composition encodes the hero's
- * identity (hair-trigger barbarian helm + axe; pyromancer flame; paladin
- * shield).
+ *
+ * Heroes register their own SVG sigil via registerSigil(heroId, render).
+ * When no sigil is registered, a generic concentric-circle placeholder
+ * in the hero's accent color is rendered.
  *
  * Reactive states per §9: idle / hit / defended / low-hp / victorious /
  * defeated. Driven by the parent reading `hero-state` GameEvents.
@@ -79,39 +80,21 @@ export function HeroPortrait({
   );
 }
 
+/** Generic placeholder sigil — circle in hero accent. Heroes register
+ *  their own SVG sigils via the SIGIL_REGISTRY map. */
+const SIGIL_REGISTRY: Record<string, (p: { accent: string; size: number }) => React.JSX.Element> = {};
+
+export function registerSigil(heroId: string, render: (p: { accent: string; size: number }) => React.JSX.Element): void {
+  SIGIL_REGISTRY[heroId] = render;
+}
+
 function SigilFor({ hero, accent, size }: { hero: HeroId; accent: string; size: number }) {
-  switch (hero) {
-    case "barbarian":
-      return (
-        <svg viewBox="0 0 64 64" width={size} height={size} aria-hidden>
-          {/* Crossed axes */}
-          <g stroke={accent} strokeWidth="3" strokeLinecap="round" fill="none">
-            <line x1="14" y1="14" x2="50" y2="50" />
-            <line x1="50" y1="14" x2="14" y2="50" />
-          </g>
-          <circle cx="32" cy="32" r="6" fill={accent} />
-        </svg>
-      );
-    case "pyromancer":
-      return (
-        <svg viewBox="0 0 64 64" width={size} height={size} aria-hidden>
-          {/* Flame */}
-          <path
-            d="M32 8 q10 16 14 22 q-2 16 -14 18 q-12 -2 -14 -18 q4 -6 14 -22 z"
-            fill={accent} stroke="rgba(0,0,0,0.4)" strokeWidth="1.5" strokeLinejoin="round"
-          />
-        </svg>
-      );
-    case "paladin":
-      return (
-        <svg viewBox="0 0 64 64" width={size} height={size} aria-hidden>
-          {/* Shield + cross */}
-          <path
-            d="M32 8 L52 14 V34 q0 14 -20 22 q-20 -8 -20 -22 V14 z"
-            fill={accent} stroke="rgba(0,0,0,0.4)" strokeWidth="1.5" strokeLinejoin="round"
-          />
-          <path d="M32 18 V44 M22 28 H42" stroke="white" strokeOpacity="0.8" strokeWidth="2.5" strokeLinecap="round" />
-        </svg>
-      );
-  }
+  const custom = SIGIL_REGISTRY[hero];
+  if (custom) return custom({ accent, size });
+  return (
+    <svg viewBox="0 0 64 64" width={size} height={size} aria-hidden>
+      <circle cx="32" cy="32" r="20" fill="none" stroke={accent} strokeWidth="3" strokeOpacity="0.7" />
+      <circle cx="32" cy="32" r="6"  fill={accent} />
+    </svg>
+  );
 }

@@ -26,14 +26,8 @@ const config: Config = {
         ink:     "var(--c-ink)",
         muted:   "var(--c-muted)",
         // Hero accents
-        "hero-barbarian":  "var(--c-hero-barbarian)",
-        "hero-pyromancer": "var(--c-hero-pyromancer)",
-        "hero-paladin":    "var(--c-hero-paladin)",
-        "hero-moonelf":    "var(--c-hero-moonelf)",
-        "hero-monk":       "var(--c-hero-monk)",
-        "hero-ninja":      "var(--c-hero-ninja)",
-        "hero-shadow":     "var(--c-hero-shadow)",
-        "hero-treant":     "var(--c-hero-treant)",
+        // Hero accent classes — heroes register their own. Components read
+        // the runtime --hero-accent custom property set per active player.
       },
       fontFamily: {
         display: ["Cinzel", "Georgia", "serif"],

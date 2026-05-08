@@ -37,22 +37,15 @@ export default function DevTokens() {
         </Section>
 
         <Section title="Hero accents">
-          <Swatches items={[
-            ["barbarian",  "var(--c-hero-barbarian)"],
-            ["pyromancer", "var(--c-hero-pyromancer)"],
-            ["paladin",    "var(--c-hero-paladin)"],
-            ["moon-elf",   "var(--c-hero-moonelf)"],
-            ["monk",       "var(--c-hero-monk)"],
-            ["ninja",      "var(--c-hero-ninja)"],
-            ["shadow",     "var(--c-hero-shadow)"],
-            ["treant",     "var(--c-hero-treant)"],
-          ]} />
+          <p className="text-xs text-muted italic">
+            (None registered yet — heroes add their accent color via HeroDefinition.)
+          </p>
         </Section>
 
         <Section title="Type — display (Cinzel)">
           <p className="font-display text-d-1 tracking-widest">DICEBORN</p>
-          <p className="font-display text-d-2 tracking-wider">PYROBLAST</p>
-          <p className="font-display text-d-3 tracking-wider">WHIRLWIND</p>
+          <p className="font-display text-d-2 tracking-wider">DISPLAY 02</p>
+          <p className="font-display text-d-3 tracking-wider">DISPLAY 03</p>
           <p className="font-num text-num-xl">42</p>
           <p className="font-num text-num-l">12</p>
           <p className="font-num text-num-m">3</p>
@@ -71,9 +64,9 @@ export default function DevTokens() {
             <h3 className="font-display tracking-wider mb-2">Panel</h3>
             <p className="text-sm text-muted">Layered top highlight + bottom shadow + warm-purple drop shadow.</p>
           </div>
-          <div className="surface p-4 hero-bg" style={{ ["--hero-accent" as never]: "var(--c-hero-pyromancer)" }}>
+          <div className="surface p-4 hero-bg" style={{ ["--hero-accent" as never]: "var(--c-brand)" }}>
             <h3 className="font-display tracking-wider mb-2">Hero-themed surface</h3>
-            <p className="text-sm">Pyromancer atmospherics — driven by --hero-accent.</p>
+            <p className="text-sm">Driven by --hero-accent — heroes set this at runtime.</p>
           </div>
         </Section>
 

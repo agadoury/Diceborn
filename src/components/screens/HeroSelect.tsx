@@ -19,20 +19,22 @@ import { HeroBackground } from "@/components/effects/HeroBackground";
 import { sfx } from "@/audio/sfx";
 import { vibrate } from "@/hooks/useHaptics";
 
-const ALL_HEROES: HeroId[] = ["barbarian", "pyromancer", "paladin"];
-
 export default function HeroSelect() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const mode = (params.get("mode") as "hot-seat" | "vs-ai") ?? "vs-ai";
 
+  // Read the live registry — heroes are added by content modules.
+  const ALL_HEROES = Object.keys(HEROES) as HeroId[];
+  const noHeroes = ALL_HEROES.length === 0;
+
   // Hot-seat: pick p1 then p2. Vs AI: pick p1 only.
   const [step, setStep] = useState<"p1" | "p2">("p1");
-  const [p1Hero, setP1Hero] = useState<HeroId>("barbarian");
-  const [p2Hero, setP2Hero] = useState<HeroId>("pyromancer");
+  const [p1Hero, setP1Hero] = useState<HeroId>(ALL_HEROES[0] ?? "");
+  const [p2Hero, setP2Hero] = useState<HeroId>(ALL_HEROES[1] ?? ALL_HEROES[0] ?? "");
 
   const currentSel = step === "p1" ? p1Hero : p2Hero;
-  const selDef: HeroDefinition = HEROES[currentSel];
+  const selDef: HeroDefinition | undefined = HEROES[currentSel];
 
   function selectHero(id: HeroId) {
     sfx("ui-tap"); vibrate("die-lock");
@@ -41,21 +43,42 @@ export default function HeroSelect() {
   }
 
   function commit() {
+    if (noHeroes) return;
     if (mode === "hot-seat" && step === "p1") {
-      // Transition to player 2's pick with a small curtain.
       sfx("ui-tap");
       setStep("p2");
       return;
     }
-    // Vs AI: auto-pick p2 (different hero from p1 if available).
     let finalP2 = p2Hero;
     if (mode === "vs-ai") {
-      finalP2 = ALL_HEROES.find(h => h !== p1Hero) ?? "barbarian";
+      finalP2 = ALL_HEROES.find(h => h !== p1Hero) ?? ALL_HEROES[0] ?? "";
       setP2Hero(finalP2);
     }
     sfx("victory-fanfare");
     navigate(`/play?mode=${mode}&p1=${p1Hero}&p2=${finalP2}`);
   }
+
+  if (noHeroes) {
+    return (
+      <main className="relative safe-pad min-h-svh bg-arena-0 text-ink grid place-items-center">
+        <div className="surface rounded-card p-6 max-w-md text-center space-y-3">
+          <h1 className="font-display text-d-2 tracking-widest text-ember">NO HEROES REGISTERED</h1>
+          <p className="text-muted text-sm">
+            Hero content hasn't been added to <code>src/content/heroes/</code> yet. Once a hero file
+            registers itself in <code>src/content/index.ts</code>, it'll appear here.
+          </p>
+          <button
+            onClick={() => navigate("/")}
+            className="mt-3 px-4 py-2 rounded-card surface text-ink hover:text-brand"
+          >
+            ← Back to menu
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (!selDef) return null;   // defensive — past the noHeroes guard, this should never trip
 
   return (
     <main className="relative safe-pad min-h-svh bg-arena-0 text-ink overflow-hidden">
@@ -78,10 +101,10 @@ export default function HeroSelect() {
         {/* Left rail: hero grid */}
         <div className="lg:col-start-1">
           <div className="flex lg:grid lg:grid-cols-2 gap-2 sm:gap-3 overflow-x-auto pb-2 lg:pb-0 -mx-2 px-2 lg:mx-0 lg:px-0">
-            {ALL_HEROES.map(id => (
+            {ALL_HEROES.map(id => HEROES[id] && (
               <HeroCard
                 key={id}
-                hero={HEROES[id]}
+                hero={HEROES[id]!}
                 selected={currentSel === id}
                 onSelect={() => selectHero(id)}
               />

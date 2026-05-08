@@ -1,10 +1,10 @@
 /**
  * HeroBackground — full-bleed atmospheric layer for a hero.
  *
- * Per §3:
- *   Barbarian   → crimson radial + smoke wisps + ash + heat shimmer
- *   Pyromancer  → ember-orange radial + upward embers + heat haze
- *   Paladin     → gold-white radial + light beams + dust motes
+ * Reads the hero's accentColor + optional atmosphere config from the
+ * content registry. Heroes register their atmosphere by extending the
+ * ATMOSPHERE_REGISTRY map with a `direction` ("up" | "down" | "drift")
+ * and an optional `particleColor` override.
  *
  * Particle counts are device-aware: 40 on coarse pointers (mobile), 120
  * on fine pointers (desktop). DOM-only — no Pixi.
@@ -17,6 +17,7 @@ import { useMemo } from "react";
 import { cn } from "@/lib/cn";
 import type { HeroId } from "@/game/types";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { HEROES } from "@/content";
 
 interface Props {
   hero: HeroId;
@@ -24,14 +25,23 @@ interface Props {
   className?: string;
 }
 
-const ACCENTS: Record<HeroId, string> = {
-  barbarian:  "#DC2626",
-  pyromancer: "#F97316",
-  paladin:    "#FBBF24",
-};
+interface AtmosphereConfig {
+  direction: "up" | "down" | "drift";
+  particleColor?: string;
+}
+
+const ATMOSPHERE_REGISTRY: Record<string, AtmosphereConfig> = {};
+
+export function registerAtmosphere(heroId: string, config: AtmosphereConfig): void {
+  ATMOSPHERE_REGISTRY[heroId] = config;
+}
+
+const DEFAULT_ACCENT = "#A855F7";
+const DEFAULT_ATMOSPHERE: AtmosphereConfig = { direction: "drift" };
 
 export function HeroBackground({ hero, intensity = "ambient", className }: Props) {
-  const accent = ACCENTS[hero];
+  const accent = HEROES[hero]?.accentColor ?? DEFAULT_ACCENT;
+  const atmosphere = ATMOSPHERE_REGISTRY[hero] ?? DEFAULT_ATMOSPHERE;
   const reduced = useReducedMotion();
 
   const particleCount = useMemo(() => {
@@ -75,7 +85,6 @@ export function HeroBackground({ hero, intensity = "ambient", className }: Props
           background: "radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(15,8,20,0.4) 100%)",
         }}
       />
-      {/* Particles — direction varies per hero */}
       {particles.map(p => (
         <Particle
           key={p.id}
@@ -85,7 +94,7 @@ export function HeroBackground({ hero, intensity = "ambient", className }: Props
           delay={p.delay}
           duration={p.duration}
           accent={accent}
-          hero={hero}
+          atmosphere={atmosphere}
         />
       ))}
       <style>{`
@@ -110,13 +119,12 @@ export function HeroBackground({ hero, intensity = "ambient", className }: Props
 }
 
 function Particle({
-  left, top, size, delay, duration, accent, hero,
-}: { left: number; top: number; size: number; delay: number; duration: number; accent: string; hero: HeroId }) {
-  // Direction & shape per hero atmospheric.
+  left, top, size, delay, duration, accent, atmosphere,
+}: { left: number; top: number; size: number; delay: number; duration: number; accent: string; atmosphere: AtmosphereConfig }) {
   const animation =
-    hero === "pyromancer" ? `p-up ${duration}s ease-in ${delay}s infinite` :
-    hero === "paladin"    ? `p-down ${duration}s linear ${delay}s infinite` :
-                            `p-drift ${duration * 0.7}s ease-out ${delay}s infinite`;
+    atmosphere.direction === "up"   ? `p-up ${duration}s ease-in ${delay}s infinite` :
+    atmosphere.direction === "down" ? `p-down ${duration}s linear ${delay}s infinite` :
+                                      `p-drift ${duration * 0.7}s ease-out ${delay}s infinite`;
   return (
     <span
       className="absolute rounded-full blur-[1px]"
@@ -125,7 +133,7 @@ function Particle({
         top:   `${top}%`,
         width: size,
         height: size,
-        background: hero === "paladin" ? "#fef3c7" : accent,
+        background: atmosphere.particleColor ?? accent,
         boxShadow: `0 0 ${size * 2}px ${accent}77`,
         animation,
         willChange: "transform, opacity",

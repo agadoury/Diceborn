@@ -46,52 +46,27 @@ export function nextAiAction(state: GameState, ai: PlayerId): Action {
 function decideMainPre(state: GameState, ai: PlayerId): Action {
   const me = state.players[ai];
   const opponent = state.players[other(ai)];
+  void opponent;
 
-  // 1) Removal: opponent's heavy DoT on me?
-  const myBleed = stacksOf(me, "bleeding");
-  const myBurn  = stacksOf(me, "burn");
+  // 1) Removal: clear heavy generic DoTs (Burn) when affordable.
+  const myBurn = stacksOf(me, "burn");
   if (myBurn >= 3 && me.hand.find(c => c.id === "generic/cleanse" && c.cost <= me.cp)) {
     return { kind: "play-card", card: "generic/cleanse" };
   }
-  void myBleed;  // signature counter cards land later (Step 7).
 
-  // 2) Heal if low HP and healing affordable.
-  if (me.hp / me.hpStart <= 0.4) {
-    const heal = me.hand.find(c => c.id === "barbarian/second-wind" && c.cost <= me.cp);
-    if (heal) return { kind: "play-card", card: heal.id };
-  }
+  // 2) Quick Draw / Focus when CP and hand allow — generic resource cards.
+  const draw = me.hand.find(c => c.id === "generic/quick-draw" && c.cost <= me.cp);
+  if (draw && me.hand.length <= 3) return { kind: "play-card", card: draw.id };
+  const focus = me.hand.find(c => c.id === "generic/focus" && c.cost <= me.cp);
+  if (focus && me.cp <= 4) return { kind: "play-card", card: focus.id };
 
-  // 3) Last Stand if eligible.
-  const lastStand = me.hand.find(c => c.id === "barbarian/last-stand" && me.hp <= 10);
-  if (lastStand) return { kind: "play-card", card: lastStand.id };
-
-  // 4) Buy upgrades when CP is comfortable.
-  if (me.cp >= 4) {
-    const upg = me.hand.find(c => (c.id === "barbarian/upgrade-cleave" || c.id === "barbarian/upgrade-frenzy") && c.cost <= me.cp);
-    if (upg) return { kind: "play-card", card: upg.id };
-  }
-
-  // 5) Berserk Rush when at high HP and damage will land — we use it as a setup
-  // for a known reachable Tier 2+.
-  const wantsBigDmg = me.cp >= 2 && me.hp >= me.hpStart - 4;
-  if (wantsBigDmg && me.hand.find(c => c.id === "barbarian/berserk-rush")) {
-    return { kind: "play-card", card: "barbarian/berserk-rush" };
-  }
-
-  // 6) Blood Debt — if opponent has Bleeding stacks, cheap Rage gain.
-  if (stacksOf(opponent, "bleeding") >= 2 && me.hand.find(c => c.id === "barbarian/blood-debt" && c.cost <= me.cp)) {
-    return { kind: "play-card", card: "barbarian/blood-debt" };
-  }
-
-  // 7) Intimidate — apply Stun if opponent isn't stunned, and we have CP to spare.
-  if (me.cp >= 3 && stacksOf(opponent, "stun") === 0 && me.hand.find(c => c.id === "barbarian/intimidate")) {
-    return { kind: "play-card", card: "barbarian/intimidate" };
-  }
-
-  // 8) Sell the oldest card to fund next turn if hand is overflowing.
+  // 3) Sell the oldest card to fund next turn if hand is overflowing.
   if (me.hand.length >= 5 && me.cp < 6) {
     return { kind: "sell-card", card: me.hand[0].id };
   }
+
+  // Hero-specific cards plug in via additional rules added by content
+  // modules. For now: only generic logic above.
 
   // Otherwise: roll.
   return { kind: "roll-dice" };

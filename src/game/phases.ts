@@ -75,31 +75,20 @@ export function runUpkeep(state: GameState): GameEvent[] {
   const active = state.players[state.activePlayer];
   const opponent = state.players[other(state.activePlayer)];
 
-  // RAGE passive: at upkeep, if HP <= threshold, gain perTurnStack (cap).
-  const heroDef = getHero(active.hero);
-  if (heroDef.signatureMechanic.implementation.kind === "rage") {
-    const r = heroDef.signatureMechanic.implementation;
-    const frac = active.hp / active.hpStart;
-    if (frac <= r.threshold) {
-      const before = active.signatureState["rage"] ?? 0;
-      const after = Math.min(r.cap, before + r.perTurnStack);
-      if (after > before) {
-        active.signatureState["rage"] = after;
-        events.push({ t: "rage-changed", player: active.player, stacks: after });
-      }
-    }
-  }
+  // Hero-specific signature passives at Upkeep land here when new content
+  // is registered. Engine dispatches on hero.signatureMechanic.implementation.kind.
 
-  // Tick own-upkeep statuses on the active player (Burn, Regen, Smolder).
+  // Tick own-upkeep statuses on the active player.
   const ownTick = tickStatusesAt(state, active, "ownUpkeep");
   events.push(...ownTick.events);
-  // Pyromancer "+1 CP whenever Smolder ticks on opponent" — the Smolder-bearer
-  // is the active player; the *opponent* (who applied Smolder) gains CP.
+
+  // Generic hero CP-gain triggers tied to status ticks on opponent are
+  // dispatched per the hero's resourceIdentity.cpGainTriggers when registered.
   for (const ev of ownTick.events) {
-    if (ev.t === "status-ticked" && ev.status === "smolder" && ev.holder === active.player) {
+    if (ev.t === "status-ticked" && ev.holder === active.player) {
       const oppHero = getHero(opponent.hero);
       for (const trig of oppHero.resourceIdentity.cpGainTriggers) {
-        if (trig.on === "statusTicked" && trig.status === "smolder" && trig.on_target === "opponent") {
+        if (trig.on === "statusTicked" && trig.status === ev.status && trig.on_target === "opponent") {
           events.push(...gainCp(opponent, trig.gain));
         }
       }
@@ -237,19 +226,14 @@ export function resolveOffensiveAbility(state: GameState): GameEvent[] {
   const ability = hero.abilityLadder[firingIndex];
   const isCritical = classifyCrit(ability, active.dice);
 
-  // Damage bonus aggregator.
-  const ragePerStack = (() => {
-    if (hero.signatureMechanic.implementation.kind !== "rage") return 0;
-    return hero.signatureMechanic.implementation.perStackBonus;
-  })();
-  const rageStacks = active.signatureState["rage"] ?? 0;
-  const upgradeBonus = (() => {
-    // Honed Edge upgrades Tier 1 with +1 dmg; Bloodlust upgrades Tier 3 with +2 dmg.
-    if (ability.tier === 1) return (active.upgrades[1] ?? 0) * 1;
-    if (ability.tier === 3) return (active.upgrades[3] ?? 0) * 2;
-    return 0;
-  })();
-  let damageBonus = rageStacks * ragePerStack + upgradeBonus + active.nextAbilityBonusDamage;
+  // Damage bonus aggregator. Hero signature passives (e.g. on-low-HP stack
+  // bonuses) plug in here once new content is registered. For now: only
+  // ability-tier upgrades + transient nextAbilityBonusDamage from cards.
+  const upgradeBonus =
+    ability.tier === 1 ? (active.upgrades[1] ?? 0) * 1 :
+    ability.tier === 3 ? (active.upgrades[3] ?? 0) * 2 :
+    0;
+  let damageBonus = upgradeBonus + active.nextAbilityBonusDamage;
   // Crit: minor +1, major +50% (rounded up).
   // Note: major (Tier 4) crit's damage scaling happens after we know base damage.
   active.nextAbilityBonusDamage = 0;       // consumed.
@@ -264,21 +248,7 @@ export function resolveOffensiveAbility(state: GameState): GameEvent[] {
   if (ability.tier === 4) {
     events.push({ t: "ultimate-fired", player: active.player, abilityName: ability.name, isCritical: !!isCritical });
   }
-
-  // Judgment consumption — if the attacker has Judgment, this ability deals
-  // -2 damage per stack and the *applier* (defender, who is the Paladin)
-  // gains +1 CP per stack. All Judgment stacks are consumed on a single hit.
-  let judgmentReduction = 0;
-  const judgmentInst = active.statuses.find(s => s.id === "judgment");
-  if (judgmentInst && judgmentInst.stacks > 0) {
-    judgmentReduction = judgmentInst.stacks * 2;
-    const paladin = state.players[judgmentInst.appliedBy];
-    events.push(...gainCp(paladin, judgmentInst.stacks));
-    active.statuses = active.statuses.filter(s => s.id !== "judgment");
-    events.push({ t: "status-removed", status: "judgment", holder: active.player, reason: "expired" });
-    events.push({ t: "status-triggered", status: "judgment", holder: active.player, cause: "ability-fired" });
-  }
-  damageBonus -= judgmentReduction;
+  void damageBonus;  // damageBonus is consumed by resolveAbilityEffect below.
 
   // Defensive roll for normal/ultimate/collateral damage.
   let defensiveReduction = 0;
@@ -388,17 +358,16 @@ function autoResolveDefense(
   });
   if (reduction >= 2) events.push({ t: "hero-state", player: defender.player, state: "defended" });
 
-  // Hero passives — Paladin's Divine Favor on successful defense.
-  const sig = defHero.signatureMechanic.implementation;
-  if (sig.kind === "divine-favor" && reduction >= 1) {
-    events.push(...applyStatus(defender, defender.player, "protect", sig.protectPerDefense));
-    events.push(...applyStatus(attacker, defender.player, "judgment", sig.judgmentPerDefense));
-  }
+  // Hero-specific defense-time passives plug in here when content is
+  // registered. Engine dispatches on the hero's signatureMechanic.implementation.kind.
+
+  // Generic CP-gain triggers tied to successful defense.
   if (reduction >= 1) {
     for (const trig of defHero.resourceIdentity.cpGainTriggers) {
       if (trig.on === "successfulDefense") events.push(...gainCp(defender, trig.gain));
     }
   }
+  void attacker;
   return { reduction, events };
 }
 
@@ -522,15 +491,13 @@ function resolveAbilityEffect(state: GameState, effect: import("./types").Abilit
 // ── Ladder emission ─────────────────────────────────────────────────────────
 export function emitLadderState(state: GameState, hero: HeroDefinition, active: HeroSnapshot): GameEvent[] {
   const opponent = state.players[other(active.player)];
-  const rage = active.signatureState["rage"] ?? 0;
-  const ragePerStack =
-    hero.signatureMechanic.implementation.kind === "rage"
-      ? hero.signatureMechanic.implementation.perStackBonus
-      : 0;
-  const damageBonus = rage * ragePerStack + active.nextAbilityBonusDamage;
+  // Hero-specific damageBonus contributions (signature passives) plug in here
+  // once new heroes register their behaviors. For now: only transient
+  // nextAbilityBonusDamage (set by cards like "next ability +N dmg").
+  const damageBonus = active.nextAbilityBonusDamage;
   const rows = evaluateLadder(hero, active, active.rollAttemptsRemaining, {
     opponentHp: opponent.hp,
-    pendingOpponentDamage: stacksOf(opponent, "bleeding"),  // ticks at applier upkeep next turn
+    pendingOpponentDamage: 0,
     damageBonus,
     reachabilitySamples: 200,
     reachabilitySeed: state.rngSeed,

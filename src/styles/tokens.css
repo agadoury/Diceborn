@@ -19,15 +19,9 @@
   --c-ink:     #F5F1FA;     /* primary text on dark */
   --c-muted:   #9C8FB0;     /* secondary text */
 
-  /* ── Hero accents (signature colors per §3) ──────────────────────────────── */
-  --c-hero-barbarian:  #DC2626;
-  --c-hero-pyromancer: #F97316;
-  --c-hero-paladin:    #FBBF24;
-  --c-hero-moonelf:    #60A5FA;
-  --c-hero-monk:       #84CC16;
-  --c-hero-ninja:      #475569;
-  --c-hero-shadow:     #7C3AED;
-  --c-hero-treant:     #16A34A;
+  /* ── Hero accents — defined per-hero in their content modules. The
+     surface helper below reads from the runtime --hero-accent custom
+     property which the hero panel sets per active player. ──────────── */
 
   /* ── Type scale (used by raw CSS; Tailwind has its own) ──────────────────── */
   --t-display: "Cinzel", Georgia, serif;

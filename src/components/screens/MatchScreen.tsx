@@ -32,8 +32,7 @@ import { ResultScreen } from "@/components/screens/ResultScreen";
 import { buildMatchSummary } from "@/game/match-summary";
 import { STARTING_HP } from "@/game/types";
 import { useMemo } from "react";
-
-const VALID_HEROES: HeroId[] = ["barbarian", "pyromancer", "paladin"];
+import { HEROES } from "@/content";
 
 export default function MatchScreen() {
   const [params] = useSearchParams();
@@ -54,13 +53,18 @@ export default function MatchScreen() {
   const curtainOpen  = useUIStore(s => s.curtainOpen);
   const setCurtain   = useUIStore(s => s.setCurtain);
 
-  // Boot the match on first mount based on URL params.
+  // Boot the match on first mount based on URL params. Hero IDs are
+  // validated against the live registry; if none are registered, the
+  // match-end overlay below renders with a "no heroes" message.
   const startedRef = useRef(false);
   useEffect(() => {
     if (startedRef.current) return;
+    const validHeroes = Object.keys(HEROES) as HeroId[];
+    const fallback = validHeroes[0] ?? "";
+    if (!fallback) return;   // nothing to start; UI shows empty-state below
     startedRef.current = true;
-    const p1   = readHero(params.get("p1"))   ?? "barbarian";
-    const p2   = readHero(params.get("p2"))   ?? "barbarian";
+    const p1   = readHero(params.get("p1"), validHeroes) ?? fallback;
+    const p2   = readHero(params.get("p2"), validHeroes) ?? fallback;
     const m    = (params.get("mode") as "hot-seat" | "vs-ai" | null) ?? "hot-seat";
     const seed = params.get("seed") ? Number(params.get("seed")) : undefined;
     startMatch({ p1, p2, mode: m, seed });
@@ -304,8 +308,8 @@ function DesktopSideLadder({
   return <AbilityLadder hero={hero} rows={rows} isOpponentView={isOpponentView} />;
 }
 
-function readHero(s: string | null): HeroId | null {
-  return VALID_HEROES.includes(s as HeroId) ? (s as HeroId) : null;
+function readHero(s: string | null, valid: HeroId[]): HeroId | null {
+  return s && valid.includes(s as HeroId) ? (s as HeroId) : null;
 }
 
 /**
