@@ -84,12 +84,12 @@ instantly; the presentation layer takes 2-6 seconds to *show* it.
 | Pyromancer | burn      | 3          | IGNITE — every hit applies Smolder | Smolder |
 | Paladin    | survival  | 2          | DIVINE FAVOR — defense → Protect + Judgment | Judgment |
 
-Landing-rate audit (10,000 trials per tier, 2 attempts):
+Landing-rate audit (10,000 trials per tier, **3 attempts** = 1 initial roll + 2 rerolls):
 
 ```
-BARBARIAN     T1 70.9%   T2 42.9%   T3 27.7%   T4 10.3%   ✓ all in band
-PYROMANCER    T1 70.9%   T2 42.9%   T3 23.8%   T4 11.2%   ✓ all in band
-PALADIN       T1 70.9%   T2 43.2%   T3 27.7%   T4 11.2%   ✓ all in band
+BARBARIAN     T1 87.3%   T2 61.8%   T3 48.6%   T4 20.5%   ✓ all in band
+PYROMANCER    T1 87.3%   T2 61.8%   T3 36.8%   T4 24.8%   ✓ all in band
+PALADIN       T1 87.3%   T2 61.8%   T3 48.6%   T4 24.8%   ✓ all in band
 ```
 
 ## Mobile-first acceptance

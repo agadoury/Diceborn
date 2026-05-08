@@ -139,7 +139,7 @@ export interface HeroSnapshot {
   hpCap: number;             // start + 10
   cp: number;
   dice: Die[];               // length 5
-  rollAttemptsRemaining: 0 | 1 | 2;
+  rollAttemptsRemaining: number;
   hand: Card[];
   deck: Card[];
   discard: Card[];
@@ -195,7 +195,7 @@ export type GameEvent =
   | { t: "card-discarded"; player: PlayerId; cardId: CardId }
   | { t: "cp-changed"; player: PlayerId; delta: number; total: number }
   | { t: "hp-changed"; player: PlayerId; delta: number; total: number }
-  | { t: "dice-rolled"; player: PlayerId; dice: ReadonlyArray<{ index: number; current: number; symbol: SymbolId; locked: boolean }>; attemptNumber: 1 | 2 }
+  | { t: "dice-rolled"; player: PlayerId; dice: ReadonlyArray<{ index: number; current: number; symbol: SymbolId; locked: boolean }>; attemptNumber: number }
   | { t: "die-locked"; player: PlayerId; die: number; locked: boolean }
   | { t: "die-face-changed"; player: PlayerId; die: number; from: number; to: number; cause: "card" | "ability" }
   | { t: "ladder-state-changed"; player: PlayerId;
@@ -223,4 +223,4 @@ export const HAND_CAP     = 6;
 export const STARTING_HAND= 4;
 export const STARTING_HP  = 30;
 export const STARTING_CP  = 2;
-export const ROLL_ATTEMPTS= 2;
+export const ROLL_ATTEMPTS= 3;        // 1 initial roll + 2 rerolls

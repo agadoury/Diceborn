@@ -154,7 +154,7 @@ describe("isCriticalRoll", () => {
 
 describe("Barbarian landing-rate validation", () => {
   it("all four tiers fall within their target landing bands (10k samples)", () => {
-    const results = simulateLandingRate(BARBARIAN, 2, 10_000, 7);
+    const results = simulateLandingRate(BARBARIAN, 3, 10_000, 7);
     for (const r of results) {
       expect(
         r.rate,

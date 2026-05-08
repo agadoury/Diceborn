@@ -23,6 +23,7 @@ import type {
   HeroDefinition,
   Die,
 } from "./types";
+import { ROLL_ATTEMPTS } from "./types";
 import { getHero } from "../content";
 import { tickStatusesAt, applyStatus, stacksOf } from "./status";
 import { drawCards, gainCp, autoDiscardOverHandCap, resolveEffect } from "./cards";
@@ -156,7 +157,7 @@ export function runDiscard(state: GameState): GameEvent[] {
 // ── Offensive roll resolution (called by engine.ts on roll-dice action) ─────
 export interface OffensiveResolveResult {
   events: GameEvent[];
-  rolledAttempt: 1 | 2;
+  rolledAttempt: number;
   /** True if the player has more attempts left and may roll again. */
   canRollAgain: boolean;
 }
@@ -183,9 +184,10 @@ export function performRoll(state: GameState): OffensiveResolveResult {
   }
 
   // Determine attempt number (used by the choreographer for staggered visuals).
-  const attemptNumber = (active.rollAttemptsRemaining === 2 ? 1 : 2) as 1 | 2;
+  // E.g. with ROLL_ATTEMPTS=3: 3→attempt 1, 2→attempt 2, 1→attempt 3.
+  const attemptNumber = ROLL_ATTEMPTS - active.rollAttemptsRemaining + 1;
   rollUnlocked(state, active.dice);
-  active.rollAttemptsRemaining = (active.rollAttemptsRemaining - 1) as 0 | 1 | 2;
+  active.rollAttemptsRemaining = active.rollAttemptsRemaining - 1;
 
   events.push({
     t: "dice-rolled",

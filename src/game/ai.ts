@@ -15,6 +15,7 @@
  */
 
 import type { Action, GameState, PlayerId } from "./types";
+import { ROLL_ATTEMPTS } from "./types";
 import { getHero } from "../content";
 import { evaluateLadder, pickKeepMask, symbolsOnDice, comboMatches } from "./dice";
 import { stacksOf } from "./status";
@@ -104,8 +105,9 @@ function decideOffensiveRoll(state: GameState, ai: PlayerId): Action {
 
   // If we have rolls left, lock optimally then return roll-dice.
   if (me.rollAttemptsRemaining > 0) {
-    // First, we must have rolled at least once already (rollAttemptsRemaining < 2).
-    if (me.rollAttemptsRemaining < 2) {
+    // First, we must have rolled at least once already
+    // (rollAttemptsRemaining < ROLL_ATTEMPTS means at least one attempt used).
+    if (me.rollAttemptsRemaining < ROLL_ATTEMPTS) {
       const targetTier = pickTargetTier(state, ai);
       if (targetTier >= 0) {
         const ability = hero.abilityLadder[targetTier];
@@ -134,7 +136,7 @@ function decideOffensiveRoll(state: GameState, ai: PlayerId): Action {
       if (firingTier >= 2) return { kind: "advance-phase" };
       return { kind: "roll-dice" };
     }
-    // First attempt (rollAttemptsRemaining === 2): just roll.
+    // First attempt (rollAttemptsRemaining === ROLL_ATTEMPTS): just roll.
     return { kind: "roll-dice" };
   }
 

@@ -77,7 +77,7 @@ export const PALADIN: HeroDefinition = {
       shortText: "3 dmg",
       longText: "Roll three of a kind.",
       damageType: "normal",
-      targetLandingRate: [0.65, 0.85],
+      targetLandingRate: [0.80, 0.92],
     },
     {
       tier: 2, name: "RIGHTEOUS BLOW",
@@ -92,7 +92,7 @@ export const PALADIN: HeroDefinition = {
       shortText: "6 dmg + Judgment 1",
       longText: "Roll three of a kind including at least one Cross.",
       damageType: "normal",
-      targetLandingRate: [0.30, 0.55],
+      targetLandingRate: [0.55, 0.70],
     },
     {
       tier: 3, name: "DIVINE DECREE",
@@ -104,7 +104,7 @@ export const PALADIN: HeroDefinition = {
       shortText: "9 undef dmg + heal 3",
       longText: "Roll four of a kind.",
       damageType: "undefendable",
-      targetLandingRate: [0.20, 0.40],
+      targetLandingRate: [0.40, 0.55],
     },
     {
       tier: 4, name: "RADIANCE",
@@ -120,7 +120,7 @@ export const PALADIN: HeroDefinition = {
       shortText: "13 dmg + heal 6 + Judg 2",
       longText: "Roll two Lights AND two Crosses.",
       damageType: "ultimate",
-      targetLandingRate: [0.03, 0.15],
+      targetLandingRate: [0.18, 0.32],
     },
   ],
 

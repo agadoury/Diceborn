@@ -85,10 +85,10 @@ function logEvent(ev: GameEvent): void {
 }
 
 function landingRateAudit(): void {
-  console.log("\n— Landing-rate audit (10,000 trials per tier, 2 attempts) —");
+  console.log("\n— Landing-rate audit (10,000 trials per tier, 3 attempts) —");
   for (const hero of [BARBARIAN, PYROMANCER, PALADIN]) {
     console.log(`\n  ${hero.name}`);
-    const results = simulateLandingRate(hero, 2, 10_000, 7);
+    const results = simulateLandingRate(hero, 3, 10_000, 7);
     for (const r of results) {
       const inBand = r.rate >= r.target[0] && r.rate <= r.target[1];
       const flag = inBand ? " ✓" : " ✗";

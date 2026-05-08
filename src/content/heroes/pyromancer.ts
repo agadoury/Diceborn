@@ -71,7 +71,7 @@ export const PYROMANCER: HeroDefinition = {
       shortText: "3 dmg + Smolder 1",
       longText: "Roll three of a kind.",
       damageType: "normal",
-      targetLandingRate: [0.65, 0.85],
+      targetLandingRate: [0.80, 0.92],
     },
     {
       tier: 2, name: "FIRE LANCE",
@@ -86,7 +86,7 @@ export const PYROMANCER: HeroDefinition = {
       shortText: "6 dmg + Smolder 2",
       longText: "Roll three of a kind including at least one Inferno.",
       damageType: "normal",
-      targetLandingRate: [0.35, 0.55],
+      targetLandingRate: [0.55, 0.70],
     },
     {
       tier: 3, name: "FIREBALL",
@@ -101,7 +101,7 @@ export const PYROMANCER: HeroDefinition = {
       shortText: "9 dmg + Smolder 3",
       longText: "Roll two Flames AND two Sparks.",
       damageType: "normal",
-      targetLandingRate: [0.15, 0.35],
+      targetLandingRate: [0.30, 0.45],
     },
     {
       tier: 4, name: "INFERNO",
@@ -116,7 +116,7 @@ export const PYROMANCER: HeroDefinition = {
       shortText: "14 dmg + Smolder 5",
       longText: "Roll two Infernos AND two Sparks.",
       damageType: "ultimate",
-      targetLandingRate: [0.05, 0.18],
+      targetLandingRate: [0.18, 0.32],
     },
   ],
 

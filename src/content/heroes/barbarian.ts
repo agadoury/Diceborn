@@ -76,10 +76,8 @@ export const BARBARIAN: HeroDefinition = {
       shortText: "3 dmg + Bleed 1",
       longText: "Roll three dice showing the same symbol.",
       damageType: "normal",
-      // Doc ideal is 0.75–0.85, merge-floor is 0.70–0.90. With AXE×2/FIST/FURY/SHIELD/ULT
-      // dice and 2 attempts, "any 3 matching" lands ~71% — comfortably above the 70% merge
-      // floor but slightly under the 75% ideal. V2 dice rebalance can push toward 80%.
-      targetLandingRate: [0.70, 0.85],
+      // With 3 attempts, "any 3 matching" lands ~87%. Tier 1 = "almost always".
+      targetLandingRate: [0.80, 0.92],
     },
     {
       tier: 2, name: "AXE SWING",
@@ -94,7 +92,7 @@ export const BARBARIAN: HeroDefinition = {
       shortText: "7 dmg + Bleed 1",
       longText: "Roll three of a kind and at least one Roar.",
       damageType: "normal",
-      targetLandingRate: [0.40, 0.55],
+      targetLandingRate: [0.55, 0.70],
     },
     {
       tier: 3, name: "BERSERKER FRENZY",
@@ -107,7 +105,7 @@ export const BARBARIAN: HeroDefinition = {
       shortText: "11 dmg + Bleed 2",
       longText: "Roll four of a kind.",
       damageType: "normal",
-      targetLandingRate: [0.20, 0.40],
+      targetLandingRate: [0.40, 0.55],
     },
     {
       tier: 4, name: "BLOOD HARVEST",
@@ -125,7 +123,7 @@ export const BARBARIAN: HeroDefinition = {
       shortText: "16 dmg + Bleed 3 + Stun",
       longText: "Roll four of a kind and at least one Roar.",
       damageType: "ultimate",
-      targetLandingRate: [0.05, 0.15],
+      targetLandingRate: [0.15, 0.25],
     },
   ],
 
