@@ -1,0 +1,20 @@
+node_modules
+dist
+dist-ssr
+coverage
+*.local
+
+# editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+
+# logs
+*.log
+npm-debug.log*
+
+# build artefacts
+.tsbuildinfo
+*.tsbuildinfo
+.vite

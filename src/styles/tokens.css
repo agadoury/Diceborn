@@ -1,0 +1,77 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   Diceborn — design tokens.
+   Single source of truth for colors, motion, spacing, type. Tailwind reads
+   these via tailwind.config.ts; raw CSS reads them via var(--c-*).
+   ────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Arena (warm-purple dark, never pure black) ─────────────────────────── */
+  --c-arena-0: #0E0814;     /* deepest */
+  --c-arena-1: #1B1228;
+  --c-arena-2: #2A1740;     /* highlight */
+
+  /* ── Brand & semantic ────────────────────────────────────────────────────── */
+  --c-brand:   #A855F7;     /* magenta-purple */
+  --c-ember:   #F59E0B;     /* CP, crit, gold */
+  --c-cyan:    #06B6D4;     /* magic, CP gain */
+  --c-dmg:     #EF4444;     /* normal damage */
+  --c-heal:    #10B981;     /* healing */
+  --c-ink:     #F5F1FA;     /* primary text on dark */
+  --c-muted:   #9C8FB0;     /* secondary text */
+
+  /* ── Hero accents — defined per-hero in their content modules. The
+     surface helper below reads from the runtime --hero-accent custom
+     property which the hero panel sets per active player. ──────────── */
+
+  /* ── Type scale (used by raw CSS; Tailwind has its own) ──────────────────── */
+  --t-display: "Cinzel", Georgia, serif;
+  --t-body:    "Inter", system-ui, sans-serif;
+  --t-num:     "Rubik", ui-monospace, monospace;
+
+  /* ── Spacing primitives ──────────────────────────────────────────────────── */
+  --s-1:  4px;
+  --s-2:  8px;
+  --s-3:  12px;
+  --s-4:  16px;
+  --s-5:  24px;
+  --s-6:  32px;
+  --s-7:  48px;
+
+  /* ── Motion primitives — referenced by GSAP/Framer choreography ──────────── */
+  --d-hitstop:    100ms;
+  --d-ladder:     200ms;     /* row state transitions */
+  --d-tumble:     900ms;     /* mobile dice tumble */
+  --d-tumble-d: 1200ms;      /* desktop dice tumble */
+  --d-cinematic: 1800ms;     /* mobile ult cinematic */
+  --d-cinematic-d:2500ms;    /* desktop ult cinematic */
+  --d-overshoot:  220ms;     /* die land bounce */
+
+  --e-snap:      cubic-bezier(.34,1.56,.64,1);   /* overshoot bounce */
+  --e-snap-soft: cubic-bezier(.22,1,.36,1);
+  --e-in-quart:  cubic-bezier(.5,0,.75,0);
+  --e-out-quart: cubic-bezier(.25,1,.5,1);
+
+  /* ── Shake magnitudes (used by transform-only screen-shake) ──────────────── */
+  --shake-tiny:   2px;       /* normal hit */
+  --shake-med:    6px;       /* big hit (>=15 dmg) */
+  --shake-large: 10px;       /* ultimate */
+
+  /* ── Surface treatment ───────────────────────────────────────────────────── */
+  --panel-stroke-top:    rgba(255,255,255,0.08);
+  --panel-stroke-bot:    rgba(0,0,0,0.5);
+  --panel-shadow:        0 12px 24px rgba(20,8,32,0.45);
+  --rune-pattern-opacity: 0.04;
+}
+
+/* Reduced-motion override: keep timing functions but cut durations.
+   The choreographer still plays cinematics so the player sees the moment,
+   just at 0.3x duration with no idle ambient motion. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --d-tumble:    260ms;
+    --d-tumble-d:  260ms;
+    --d-cinematic: 540ms;
+    --d-cinematic-d:540ms;
+    --d-overshoot:  60ms;
+  }
+}
