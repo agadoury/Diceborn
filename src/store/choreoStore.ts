@@ -35,6 +35,17 @@ export interface AbilityCinematicState {
   durationMs: number;
 }
 
+export interface AttackEffectState {
+  hero: HeroId;
+  abilityId: string;            // e.g. "cleave", "firebolt", "smite"
+  abilityName: string;          // display label
+  tier: 1 | 2 | 3;
+  accent: string;
+  isCritical: boolean;
+  startedAt: number;
+  durationMs: number;
+}
+
 export interface ShakeState {
   magnitude: number;     // px
   duration: number;      // ms
@@ -49,6 +60,7 @@ export interface ChoreoState {
   hitStopUntil: number;          // monotonic ms timestamp
   damageNumbers: DamageNumber[];
   cinematic: AbilityCinematicState | null;
+  attackEffect: AttackEffectState | null;
   bannerText: string | null;     // turn-started, match-won, etc.
   // Counters
   totalEventsHandled: number;
@@ -64,6 +76,8 @@ export interface ChoreoState {
   startCinematic: (c: Omit<AbilityCinematicState, "startedAt" | "skipping">) => void;
   skipCinematic: () => void;
   endCinematic: () => void;
+  startAttackEffect: (e: Omit<AttackEffectState, "startedAt">) => void;
+  endAttackEffect: () => void;
   setBanner: (text: string | null) => void;
   reset: () => void;
 }
@@ -77,6 +91,7 @@ export const useChoreoStore = create<ChoreoState>((set) => ({
   hitStopUntil: 0,
   damageNumbers: [],
   cinematic: null,
+  attackEffect: null,
   bannerText: null,
   totalEventsHandled: 0,
 
@@ -121,11 +136,17 @@ export const useChoreoStore = create<ChoreoState>((set) => ({
 
   endCinematic: () => set({ cinematic: null }),
 
+  startAttackEffect: (e) => set({
+    attackEffect: { ...e, startedAt: performance.now() },
+  }),
+
+  endAttackEffect: () => set({ attackEffect: null }),
+
   setBanner: (bannerText) => set({ bannerText }),
 
   reset: () => set({
     queue: [], playing: null, shake: null, hitStopUntil: 0,
-    damageNumbers: [], cinematic: null, bannerText: null,
+    damageNumbers: [], cinematic: null, attackEffect: null, bannerText: null,
   }),
 }));
 

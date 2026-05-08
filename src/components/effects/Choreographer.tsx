@@ -26,8 +26,12 @@ import { ScreenShake } from "./ScreenShake";
 import { HitStop } from "./HitStop";
 import { DamageNumberLayer } from "./DamageNumber";
 import { AbilityCinematicLayer } from "./AbilityCinematic";
+import { AttackEffectLayer } from "./AttackEffect";
 import { Banner } from "./Banner";
 import { ActionLog } from "./ActionLog";
+import { useGameStore } from "@/store/gameStore";
+import { getHero } from "@/content";
+import type { HeroId, PlayerId } from "@/game/types";
 
 interface Props { children: ReactNode }
 
@@ -37,6 +41,7 @@ export function Choreographer({ children }: Props) {
       {children}
       <HitStop />
       <DamageNumberLayer />
+      <AttackEffectLayer />
       <AbilityCinematicLayer />
       <Banner />
       <ActionLog />
@@ -81,6 +86,8 @@ function pump(): void {
     spawnDmg:       s.spawnDamageNumber,
     startCinematic: s.startCinematic,
     endCinematic:   s.endCinematic,
+    startAttackEffect: s.startAttackEffect,
+    endAttackEffect:   s.endAttackEffect,
     setBanner:      s.setBanner,
   });
   const duration = reduced ? Math.min(baseDuration, 220) : baseDuration;
@@ -106,8 +113,10 @@ interface PlayCtx {
   setShake:       (s: { magnitude: number; duration: number; startedAt: number } | null) => void;
   triggerHitStop: (ms: number) => void;
   spawnDmg:       (n: { amount: number; variant: "dmg"|"heal"|"pure"|"crit"|"white"; x: number; y: number; size: "sm"|"md"|"lg" }) => void;
-  startCinematic: (c: { hero: import("@/game/types").HeroId; abilityName: string; isUlt: boolean; isCritical: boolean; durationMs: number }) => void;
+  startCinematic: (c: { hero: HeroId; abilityName: string; isUlt: boolean; isCritical: boolean; durationMs: number }) => void;
   endCinematic:   () => void;
+  startAttackEffect: (e: { hero: HeroId; abilityId: string; abilityName: string; tier: 1 | 2 | 3; accent: string; isCritical: boolean; durationMs: number }) => void;
+  endAttackEffect:   () => void;
   setBanner:      (text: string | null) => void;
 }
 
@@ -156,7 +165,21 @@ function playEvent(ev: GameEvent, ctx: PlayCtx): number {
 
     case "ability-triggered": {
       if (ev.tier === 4) return 500;             // ult cinematic handles its own hold
-      return ev.isCritical ? 1100 : 800;         // let the player read the ability name
+      const hero = heroIdFromPlayer(ev.player);
+      const accent = accentFor(hero);
+      const dur = ctx.reduced ? 220 : (ev.isCritical ? 1200 : 1000);
+      ctx.startAttackEffect({
+        hero,
+        abilityId: abilityIdOf(ev.abilityName),
+        abilityName: ev.abilityName,
+        tier: ev.tier as 1 | 2 | 3,
+        accent,
+        isCritical: !!ev.isCritical,
+        durationMs: dur,
+      });
+      setTimeout(() => ctx.endAttackEffect(), dur);
+      vibrate("ability");
+      return dur;
     }
 
     case "ultimate-fired": {
@@ -215,6 +238,21 @@ function playEvent(ev: GameEvent, ctx: PlayCtx): number {
   }
 }
 
-function heroIdFromPlayer(_p: string): import("@/game/types").HeroId {
+/** Reads the live game state to map a player slot to its hero. Falls back
+ *  to barbarian if game state isn't ready (test bench events). */
+function heroIdFromPlayer(p: string): HeroId {
+  try {
+    const live = useGameStore.getState().state;
+    if (live && (p === "p1" || p === "p2")) return live.players[p as PlayerId].hero;
+  } catch { /* */ }
   return "barbarian";
+}
+
+function accentFor(hero: HeroId): string {
+  return getHero(hero).accentColor;
+}
+
+/** Map a display ability name to the AttackEffect registry key. */
+function abilityIdOf(name: string): string {
+  return name.toLowerCase().replace(/\s+/g, "-");
 }

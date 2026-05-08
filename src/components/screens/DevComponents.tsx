@@ -124,6 +124,27 @@ function ChoreoTestBench() {
           <Button sound={null} onClick={() => fire({ t: "ability-triggered", player: "p1", tier: 2, abilityName: "AXE SWING", isCritical: "minor" })}>
             T2 AXE SWING (minor crit)
           </Button>
+          <Button sound={null} onClick={() => fire({ t: "ability-triggered", player: "p1", tier: 3, abilityName: "BERSERKER FRENZY", isCritical: false })}>
+            T3 BERSERKER FRENZY
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "ability-triggered", player: "p1", tier: 1, abilityName: "FIREBOLT", isCritical: false })}>
+            FIREBOLT
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "ability-triggered", player: "p1", tier: 2, abilityName: "FIRE LANCE", isCritical: false })}>
+            FIRE LANCE
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "ability-triggered", player: "p1", tier: 3, abilityName: "FIREBALL", isCritical: false })}>
+            FIREBALL
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "ability-triggered", player: "p1", tier: 1, abilityName: "SMITE", isCritical: false })}>
+            SMITE
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "ability-triggered", player: "p1", tier: 2, abilityName: "RIGHTEOUS BLOW", isCritical: false })}>
+            RIGHTEOUS BLOW
+          </Button>
+          <Button sound={null} onClick={() => fire({ t: "ability-triggered", player: "p1", tier: 3, abilityName: "DIVINE DECREE", isCritical: false })}>
+            DIVINE DECREE
+          </Button>
           <Button sound={null} onClick={() => fire({ t: "ultimate-fired", player: "p1", abilityName: "BLOOD HARVEST", isCritical: false })} variant="primary">
             ULTIMATE
           </Button>
