@@ -15,6 +15,7 @@ import type {
   ActiveSymbolBend,
   Card,
   CardId,
+  ConditionalBonus,
   DieFace,
   GameEvent,
   GameState,
@@ -90,7 +91,14 @@ export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent
     }
     case "apply-status": {
       const target = effect.target === "self" ? ctx.caster : ctx.opponent;
-      return applyStatus(target, ctx.caster.player, effect.status, effect.stacks);
+      let stacks = effect.stacks;
+      if (
+        effect.conditional_bonus &&
+        checkState(ctx.state, ctx.caster, ctx.opponent, effect.conditional_bonus.condition)
+      ) {
+        stacks += computeConditionalBonus(ctx.caster, ctx.opponent, effect.conditional_bonus);
+      }
+      return applyStatus(target, ctx.caster.player, effect.status, stacks);
     }
     case "remove-status": {
       const target = effect.target === "self" ? ctx.caster : ctx.opponent;
@@ -99,7 +107,14 @@ export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent
     }
     case "heal": {
       const target = effect.target === "self" ? ctx.caster : ctx.opponent;
-      return heal(target, effect.amount);
+      let amount = effect.amount;
+      if (
+        effect.conditional_bonus &&
+        checkState(ctx.state, ctx.caster, ctx.opponent, effect.conditional_bonus.condition)
+      ) {
+        amount += computeConditionalBonus(ctx.caster, ctx.opponent, effect.conditional_bonus);
+      }
+      return heal(target, amount);
     }
     case "gain-cp": {
       return gainCp(ctx.caster, effect.amount);
@@ -334,6 +349,43 @@ export function evaluateModifierDiscards(state: GameState, ev: GameEvent): GameE
 
 /** Evaluate a state-check predicate against the engine state. Used by
  *  conditional damage bonuses and critical evaluations. */
+/** Compute the bonus contribution from a `ConditionalBonus`. The caller is
+ *  expected to have already verified the bonus's `condition` via `checkState`
+ *  — this function only multiplies the `bonusPerUnit` by the source's unit
+ *  count. */
+export function computeConditionalBonus(
+  caster: HeroSnapshot,
+  opponent: HeroSnapshot,
+  cb: ConditionalBonus,
+): number {
+  let units = 0;
+  switch (cb.source) {
+    case "opponent-status-stacks": {
+      const fallbackStatus = cb.condition.kind.endsWith("status-min")
+        ? (cb.condition as { status: string }).status
+        : "";
+      units = opponent.statuses.find(s => s.id === (cb.sourceStatus ?? fallbackStatus))?.stacks ?? 0;
+      break;
+    }
+    case "self-status-stacks":
+      units = caster.statuses.find(s => s.id === (cb.sourceStatus ?? ""))?.stacks ?? 0;
+      break;
+    case "stripped-stack-count":
+      units = caster.lastStripped[cb.sourceStatus ?? ""] ?? 0;
+      break;
+    case "self-passive-counter":
+      units = caster.signatureState[cb.sourcePassiveKey ?? ""] ?? 0;
+      break;
+    case "opponent-passive-counter":
+      units = opponent.signatureState[cb.sourcePassiveKey ?? ""] ?? 0;
+      break;
+    case "fixed-one":
+      units = 1;
+      break;
+  }
+  return units * cb.bonusPerUnit;
+}
+
 export function checkState(
   state: GameState,
   caster: HeroSnapshot,

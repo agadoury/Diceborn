@@ -26,7 +26,7 @@ import type {
 import { ROLL_ATTEMPTS } from "./types";
 import { getHero } from "../content";
 import { tickStatusesAt, applyStatus, stacksOf } from "./status";
-import { drawCards, gainCp, autoDiscardOverHandCap, resolveEffect, checkState } from "./cards";
+import { drawCards, gainCp, autoDiscardOverHandCap, resolveEffect, checkState, computeConditionalBonus } from "./cards";
 import { listRegisteredStatuses, getStatusDef } from "./status";
 import { dealDamage } from "./damage";
 import {
@@ -469,6 +469,7 @@ export function resolveDefenseChoice(state: GameState, abilityIndex: number | nu
       matchedTier = chosen.tier;
       matchedName = chosen.name;
       const r = resolveDefensiveEffect(chosen.effect, {
+        state,
         defender,
         attacker: state.players[pa.attacker],
         firingCombo: chosen.combo,
@@ -593,6 +594,7 @@ function applyAttackEffects(
 }
 
 interface DefenseCtx {
+  state: GameState;
   defender: HeroSnapshot;
   attacker: HeroSnapshot;
   firingCombo: import("./types").DiceCombo;
@@ -607,12 +609,27 @@ function resolveDefensiveEffect(
   ctx: DefenseCtx,
 ): { reduction: number; events: GameEvent[] } {
   switch (effect.kind) {
-    case "reduce-damage":
-      return { reduction: effect.amount, events: [] };
+    case "reduce-damage": {
+      let amount = effect.amount;
+      if (
+        effect.conditional_bonus &&
+        checkState(ctx.state, ctx.defender, ctx.attacker, effect.conditional_bonus.condition, ctx.firingFaces)
+      ) {
+        amount += computeConditionalBonus(ctx.defender, ctx.attacker, effect.conditional_bonus);
+      }
+      return { reduction: amount, events: [] };
+    }
     case "heal": {
       const target = effect.target === "self" ? ctx.defender : ctx.attacker;
+      let amount = effect.amount;
+      if (
+        effect.conditional_bonus &&
+        checkState(ctx.state, ctx.defender, ctx.attacker, effect.conditional_bonus.condition, ctx.firingFaces)
+      ) {
+        amount += computeConditionalBonus(ctx.defender, ctx.attacker, effect.conditional_bonus);
+      }
       const before = target.hp;
-      target.hp = Math.min(target.hpCap, before + effect.amount);
+      target.hp = Math.min(target.hpCap, before + amount);
       const delta = target.hp - before;
       if (delta <= 0) return { reduction: 0, events: [] };
       return { reduction: 0, events: [
@@ -622,7 +639,14 @@ function resolveDefensiveEffect(
     }
     case "apply-status": {
       const target = effect.target === "self" ? ctx.defender : ctx.attacker;
-      return { reduction: 0, events: applyStatus(target, ctx.defender.player, effect.status, effect.stacks) };
+      let stacks = effect.stacks;
+      if (
+        effect.conditional_bonus &&
+        checkState(ctx.state, ctx.defender, ctx.attacker, effect.conditional_bonus.condition, ctx.firingFaces)
+      ) {
+        stacks += computeConditionalBonus(ctx.defender, ctx.attacker, effect.conditional_bonus);
+      }
+      return { reduction: 0, events: applyStatus(target, ctx.defender.player, effect.status, stacks) };
     }
     case "compound": {
       let reduction = 0;
@@ -739,9 +763,22 @@ function resolveAbilityEffect(state: GameState, effect: import("./types").Abilit
     for (const e of effect.effects) out.push(...resolveAbilityEffect(state, e, ctx));
     return out;
   }
-  // For non-damage effects: apply crit flat to status stacks.
+  // For non-damage effects: apply crit flat to status stacks. Conditional
+  // bonus is folded in *before* the crit doubling and the bonus is stripped
+  // from the forwarded effect so resolveEffect doesn't apply it twice.
   if (effect.kind === "apply-status" && ctx.critMul > 1) {
-    const stacked: import("./types").AbilityEffect = { ...effect, stacks: effect.stacks * 2 };
+    let bonus = 0;
+    if (
+      effect.conditional_bonus &&
+      checkState(state, ctx.caster, ctx.opponent, effect.conditional_bonus.condition, ctx.firingFaces)
+    ) {
+      bonus = computeConditionalBonus(ctx.caster, ctx.opponent, effect.conditional_bonus);
+    }
+    const stacked: import("./types").AbilityEffect = {
+      ...effect,
+      stacks: (effect.stacks + bonus) * 2,
+      conditional_bonus: undefined,
+    };
     return resolveEffect(stacked, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
   }
   return resolveEffect(effect, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
@@ -877,33 +914,6 @@ function aggregatePassiveModifiers(
     total += contrib;
   }
   return total;
-}
-
-/** Compute the bonus contribution from a `ConditionalBonus`. */
-function computeConditionalBonus(
-  caster: HeroSnapshot,
-  opponent: HeroSnapshot,
-  cb: import("./types").ConditionalBonus,
-): number {
-  let units = 0;
-  switch (cb.source) {
-    case "opponent-status-stacks":
-      units = opponent.statuses.find(s => s.id === (cb.sourceStatus ?? (cb.condition.kind.endsWith("status-min") ? (cb.condition as { status: string }).status : "")))?.stacks ?? 0;
-      break;
-    case "self-status-stacks":
-      units = caster.statuses.find(s => s.id === (cb.sourceStatus ?? ""))?.stacks ?? 0;
-      break;
-    case "stripped-stack-count":
-      units = caster.lastStripped[cb.sourceStatus ?? ""] ?? 0;
-      break;
-    case "self-passive-counter":
-      units = caster.signatureState[cb.sourcePassiveKey ?? ""] ?? 0;
-      break;
-    case "fixed-one":
-      units = 1;
-      break;
-  }
-  return units * cb.bonusPerUnit;
 }
 
 void listRegisteredStatuses;

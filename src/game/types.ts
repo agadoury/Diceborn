@@ -68,15 +68,18 @@ export type StateCheck =
   | { kind: "combo-symbol-count";      symbol: SymbolId; count: number }   // counts on firingFaces
   | { kind: "combo-n-of-a-kind";       count: number };
 
-/** How to count a "source" of bonus damage when a conditional fires. */
+/** How to count a "source" of bonus when a conditional fires. */
 export type ConditionalSource =
   | "opponent-status-stacks"        // count of the named status on opponent
   | "self-status-stacks"
   | "stripped-stack-count"          // stacks removed in the most-recent strip-event
   | "self-passive-counter"          // signatureState[passiveKey]
+  | "opponent-passive-counter"      // opponent's signatureState[passiveKey]
   | "fixed-one";
 
-/** Conditional bonus stamped onto `damage` / `scaling-damage` effects. */
+/** Conditional bonus stamped onto effects that scale with game state.
+ *  Applies to: damage / scaling-damage (added to amount), heal (added to
+ *  amount), reduce-damage (added to amount), apply-status (added to stacks). */
 export interface ConditionalBonus {
   condition: StateCheck;
   bonusPerUnit: number;
@@ -132,11 +135,19 @@ export type AbilityEffect =
       conditional_bonus?: ConditionalBonus;
       conditional_type_override?: ConditionalTypeOverride }
   /** Defensive: reduce incoming damage by this amount during the current
-   *  defensive roll. Used by defensive-ladder abilities. */
-  | { kind: "reduce-damage"; amount: number }
-  | { kind: "apply-status"; status: StatusId; stacks: number; target: "self" | "opponent" }
+   *  defensive roll. Used by defensive-ladder abilities. Optional
+   *  conditional_bonus: per-unit bonus reduction when a state check holds. */
+  | { kind: "reduce-damage"; amount: number;
+      conditional_bonus?: ConditionalBonus }
+  /** Apply N stacks of a status. Optional conditional_bonus: per-unit bonus
+   *  stacks when a state check holds (added to base `stacks`). */
+  | { kind: "apply-status"; status: StatusId; stacks: number; target: "self" | "opponent";
+      conditional_bonus?: ConditionalBonus }
   | { kind: "remove-status"; status: StatusId; stacks: number; target: "self" | "opponent" }
-  | { kind: "heal"; amount: number; target: "self" | "opponent" }
+  /** Heal N HP on self/opponent. Optional conditional_bonus: per-unit bonus
+   *  heal when a state check holds (added to base `amount`). */
+  | { kind: "heal"; amount: number; target: "self" | "opponent";
+      conditional_bonus?: ConditionalBonus }
   | { kind: "gain-cp"; amount: number }
   | { kind: "draw"; amount: number }
   | { kind: "compound"; effects: AbilityEffect[] }
