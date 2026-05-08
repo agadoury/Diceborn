@@ -26,7 +26,7 @@ import {
 } from "./types";
 import { getHero, getDeckCards } from "../content";
 import { getCustomHandler, canPlay, drawCards, sellCard, gainCp, resolveEffect, discardCard } from "./cards";
-import { stacksOf } from "./status";
+import { stacksOf, stripStatus } from "./status";
 import { buildDeck } from "./cards";
 import {
   enterPhase, performRoll, beginOffensivePick, commitOffensiveAbility,
@@ -48,6 +48,7 @@ export function applyAction(state: GameState, action: Action): ApplyResult {
     case "sell-card":       events.push(...sellCardAction(next, action.card)); break;
     case "end-turn":        events.push(...endTurn(next)); break;
     case "respond-to-counter": events.push(...respondToCounter(next, action.accept)); break;
+    case "respond-to-status-removal": events.push(...respondToStatusRemoval(next, action.cardId)); break;
     case "select-offensive-ability": events.push(...selectOffensiveAbility(next, action.abilityIndex)); break;
     case "select-defense":  events.push(...selectDefense(next, action.abilityIndex)); break;
     case "spend-bank":      events.push(...resolveBankSpend(next, action.amount)); break;
@@ -128,6 +129,7 @@ function makeHeroSnapshot(player: PlayerId, heroId: HeroId, state: GameState): H
     isLowHp: false,
     nextAbilityBonusDamage: 0,
     abilityModifiers: [],
+    tokenOverrides: [],
     symbolBends: [],
     lastStripped: {},
     masterySlots: {},
@@ -386,6 +388,56 @@ function resolveBankSpend(state: GameState, amount: number): GameEvent[] {
   return events;
 }
 
+/** Resolve a `pendingStatusRemoval` prompt. When `cardId` names an Instant
+ *  with a matching `opponent-attempts-remove-status` trigger, the engine
+ *  pays its cost, resolves it, and finalises the queued removal — dropping
+ *  the strip if the resolved effect set `prevented`, or completing it
+ *  otherwise. `cardId === null` declines: removal completes normally. */
+function respondToStatusRemoval(state: GameState, cardId: import("./types").CardId | null): GameEvent[] {
+  const psr = state.pendingStatusRemoval;
+  if (!psr) return [];
+  const events: GameEvent[] = [];
+  const holder = state.players[psr.holder];
+
+  if (cardId != null) {
+    const card = holder.hand.find(c => c.id === cardId);
+    const trigger = card?.trigger;
+    const valid =
+      !!card
+      && card.kind === "instant"
+      && trigger?.kind === "opponent-attempts-remove-status"
+      && trigger.status === psr.status
+      && holder.cp >= card.cost;
+    if (valid && card) {
+      events.push(...gainCp(holder, -card.cost));
+      holder.hand = holder.hand.filter(c => c.id !== cardId);
+      holder.discard.push(card);
+      events.push({ t: "card-played", player: holder.player, cardId });
+      const opponent = state.players[other(holder.player)];
+      if (card.effect.kind === "custom") {
+        const handler = getCustomHandler(card.effect.id);
+        if (handler) events.push(...handler({ state, caster: holder, opponent }));
+      } else {
+        events.push(...resolveEffect(card.effect, { state, caster: holder, opponent }));
+      }
+    }
+  }
+
+  // Finalise.
+  const prevented = psr.prevented === true;
+  if (!prevented) {
+    const r = stripStatus(state.players[psr.holder], psr.status);
+    events.push(...r.events);
+  }
+  events.push({
+    t: "status-remove-attempted",
+    holder: psr.holder, applier: psr.applier, status: psr.status,
+    stacks: psr.stacks, prevented,
+  });
+  state.pendingStatusRemoval = undefined;
+  return events;
+}
+
 function respondToCounter(state: GameState, accept: boolean): GameEvent[] {
   const pending = state.pendingCounter;
   if (!pending) return [];
@@ -420,6 +472,7 @@ function cloneState(state: GameState): GameState {
     pendingOffensiveChoice: state.pendingOffensiveChoice ? { ...state.pendingOffensiveChoice, matches: state.pendingOffensiveChoice.matches.slice() } : undefined,
     pendingAttack: state.pendingAttack ? { ...state.pendingAttack } : undefined,
     pendingBankSpend: state.pendingBankSpend ? { ...state.pendingBankSpend } : undefined,
+    pendingStatusRemoval: state.pendingStatusRemoval ? { ...state.pendingStatusRemoval } : undefined,
   };
 }
 function clonePlayer(p: HeroSnapshot | undefined): HeroSnapshot {
@@ -436,6 +489,7 @@ function clonePlayer(p: HeroSnapshot | undefined): HeroSnapshot {
     signatureState: { ...p.signatureState },
     ladderState: [...p.ladderState] as HeroSnapshot["ladderState"],
     abilityModifiers: p.abilityModifiers.map(m => ({ ...m, modifications: m.modifications.map(x => ({ ...x })) })),
+    tokenOverrides: p.tokenOverrides.map(o => ({ ...o, modifications: o.modifications.map(x => ({ ...x })) })),
     symbolBends: p.symbolBends.map(b => ({ ...b })),
     lastStripped: { ...p.lastStripped },
     masterySlots: { ...p.masterySlots },

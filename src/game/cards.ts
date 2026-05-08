@@ -88,9 +88,43 @@ export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent
       return r.events;
     }
     case "reduce-damage": {
-      // Cards-context shouldn't normally use reduce-damage (defensive abilities
-      // resolve in phases.ts). No-op here so the switch stays exhaustive.
-      return [];
+      // Cards / Instants — used by Phoenix-Veil-style cards that fire
+      // mid-attack to reduce or negate the incoming damage. We compute the
+      // prevented amount based on the live `pendingAttack.incomingAmount`
+      // (if any), stash it on the caster's `__damagePrevented` so a sibling
+      // apply-status with `source: "damage-prevented-amount"` reads it, and
+      // queue the reduction on `pendingAttack.injectedReduction` so the
+      // defense-resolution path adds it to the final reduction.
+      const pa = ctx.state.pendingAttack;
+      const incoming = pa?.incomingAmount ?? 0;
+      let amount = effect.amount;
+      if (
+        effect.conditional_bonus &&
+        checkState(ctx.state, ctx.caster, ctx.opponent, effect.conditional_bonus.condition)
+      ) {
+        amount += computeConditionalBonus(ctx.caster, ctx.opponent, effect.conditional_bonus);
+      }
+      const reduction = effect.negate_attack ? incoming : amount;
+      const prevented = Math.max(0, Math.min(reduction, incoming));
+      ctx.caster.signatureState["__damagePrevented"] = prevented;
+      if (pa) {
+        pa.injectedReduction = (pa.injectedReduction ?? 0) + reduction;
+      }
+      const events: GameEvent[] = [];
+      if (effect.apply_to_attacker) {
+        const ata = effect.apply_to_attacker;
+        let stacks = ata.stacks;
+        if (
+          ata.conditional_bonus &&
+          checkState(ctx.state, ctx.caster, ctx.opponent, ata.conditional_bonus.condition)
+        ) {
+          stacks += computeConditionalBonus(ctx.caster, ctx.opponent, ata.conditional_bonus);
+        }
+        if (stacks > 0) {
+          events.push(...applyStatus(ctx.opponent, ctx.caster.player, ata.status, stacks, ctx.caster));
+        }
+      }
+      return events;
     }
     case "apply-status": {
       const target = effect.target === "self" ? ctx.caster : ctx.opponent;
@@ -101,10 +135,18 @@ export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent
       ) {
         stacks += computeConditionalBonus(ctx.caster, ctx.opponent, effect.conditional_bonus);
       }
-      return applyStatus(target, ctx.caster.player, effect.status, stacks);
+      return applyStatus(target, ctx.caster.player, effect.status, stacks, ctx.caster);
     }
     case "remove-status": {
       const target = effect.target === "self" ? ctx.caster : ctx.opponent;
+      // Opponent-initiated removal — give the holder a chance to intercept
+      // via an Instant with a matching trigger. Pauses the resolver and
+      // returns no events; the engine resumes via `respond-to-status-removal`
+      // and finalises the strip (or drops it if `prevented`).
+      if (target !== ctx.caster) {
+        const intercept = maybeQueueStatusRemovalIntercept(ctx.state, target, ctx.caster.player, effect.status);
+        if (intercept) return intercept;
+      }
       const r = stripStatus(target, effect.status);
       return r.events;
     }
@@ -154,6 +196,13 @@ export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent
     case "passive-counter-modifier":
       return modifyPassiveCounter(ctx.caster, effect);
     case "persistent-buff":
+      // Token-targeted form (Crater Wind etc.) — patches the named status's
+      // mechanical fields per-snapshot. Otherwise behaves as an ability-scoped
+      // persistent modifier.
+      if (effect.target) {
+        return addTokenOverride(ctx.caster, effect.target, [effect.modifier]);
+      }
+      if (!effect.scope) return [];
       return addAbilityModifier(ctx.caster, {
         source: "card",
         scope: effect.scope,
@@ -169,6 +218,14 @@ export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent
       ctx.caster.forcedFaceValue = fv;
       // Duration "this-turn" — cleared by the engine at passTurn. No event
       // type for it yet; UIs can read the snapshot field if needed.
+      return [];
+    }
+    case "prevent-pending-status-removal": {
+      // Only meaningful when the engine is paused on a `pendingStatusRemoval`
+      // — outside that context the flag has no effect.
+      if (ctx.state.pendingStatusRemoval) {
+        ctx.state.pendingStatusRemoval.prevented = true;
+      }
       return [];
     }
   }
@@ -296,6 +353,55 @@ function addAbilityModifier(
   return [{ t: "ability-modifier-added", player: caster.player, modifierId: id, source: spec.source }];
 }
 
+/** When an opponent's effect is about to strip a status from `holder`,
+ *  inspect `holder.hand` for any Instant with a matching
+ *  `opponent-attempts-remove-status` trigger (and affordable CP). If one
+ *  is found, queue `state.pendingStatusRemoval` and emit `status-remove-prompt`.
+ *  Returns the events to short-circuit the caller's resolver. Returns null
+ *  when no intercept fires, in which case the caller proceeds with the strip. */
+function maybeQueueStatusRemovalIntercept(
+  state: GameState,
+  holder: HeroSnapshot,
+  applier: import("./types").PlayerId,
+  status: import("./types").StatusId,
+): GameEvent[] | null {
+  // Engine guards: only pause once per attempt, ignore self-strips, and
+  // only when the holder actually has stacks to lose.
+  if (state.pendingStatusRemoval) return null;
+  const inst = holder.statuses.find(s => s.id === status);
+  if (!inst || inst.stacks <= 0) return null;
+  const matching = holder.hand.find(c =>
+    c.kind === "instant"
+    && c.trigger.kind === "opponent-attempts-remove-status"
+    && c.trigger.status === status
+    && holder.cp >= c.cost,
+  );
+  if (!matching) return null;
+  state.pendingStatusRemoval = { holder: holder.player, applier, status, stacks: inst.stacks };
+  // Pre-stamp `lastStripped` with the *attempted* count so any
+  // `stripped-stack-count` conditional_bonus inside the responding instant
+  // reads the correct number even though the stacks may end up untouched.
+  holder.lastStripped[status] = inst.stacks;
+  return [{ t: "status-remove-prompt", holder: holder.player, applier, status, stacks: inst.stacks }];
+}
+
+/** Append per-snapshot token modifications. Coalesces with any existing
+ *  override for the same status so multiple `persistent-buff` plays on
+ *  the same token accumulate cleanly. */
+function addTokenOverride(
+  caster: HeroSnapshot,
+  status: import("./types").StatusId,
+  modifications: import("./types").AbilityUpgradeMod[],
+): GameEvent[] {
+  const existing = caster.tokenOverrides.find(o => o.status === status);
+  if (existing) {
+    existing.modifications.push(...modifications);
+  } else {
+    caster.tokenOverrides.push({ status, modifications: modifications.slice() });
+  }
+  return [];
+}
+
 function modifyPassiveCounter(
   caster: HeroSnapshot,
   effect: Extract<AbilityEffect, { kind: "passive-counter-modifier" }>,
@@ -407,6 +513,13 @@ export function computeConditionalBonus(
       break;
     case "opponent-passive-counter":
       units = opponent.signatureState[cb.sourcePassiveKey ?? ""] ?? 0;
+      break;
+    case "damage-prevented-amount":
+      // Set by the most-recent reduce-damage resolution on the caster (the
+      // defender for defensive contexts, the instant-card holder for card
+      // contexts). Naturally 0 outside a defensive resolution — the bonus
+      // contributes nothing, which is the correct behavior.
+      units = caster.signatureState["__damagePrevented"] ?? 0;
       break;
     case "fixed-one":
       units = 1;

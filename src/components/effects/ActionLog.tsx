@@ -147,6 +147,8 @@ function formatEvent(ev: GameEvent): string | null {
     case "symbol-bend-expired":  return null;
     case "bank-spend-prompt":    return `${p(ev.holder)} ${ev.passiveKey}? (${ev.available})`;
     case "bank-spent":           return ev.amount > 0 ? `${p(ev.holder)} spends ${ev.amount} ${ev.passiveKey}` : null;
+    case "status-remove-prompt": return `${p(ev.holder)} intercept ${ev.status}?`;
+    case "status-remove-attempted": return ev.prevented ? `${p(ev.holder)} prevents ${ev.status} removal` : null;
   }
 }
 

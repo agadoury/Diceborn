@@ -128,7 +128,8 @@ conditional_bonus: {
   bonusPerUnit:     <number>,
   source:           "opponent-status-stacks" | "self-status-stacks" |
                     "stripped-stack-count" | "self-passive-counter" |
-                    "opponent-passive-counter" | "fixed-one",
+                    "opponent-passive-counter" | "damage-prevented-amount" |
+                    "fixed-one",
   sourceStatus?:    StatusId,        // required when source counts a status
   sourcePassiveKey?: string          // required when source counts a passive counter
 }

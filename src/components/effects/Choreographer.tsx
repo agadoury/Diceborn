@@ -338,6 +338,8 @@ function playEvent(ev: GameEvent, ctx: PlayCtx): number {
     case "symbol-bend-expired":      return 250;
     case "bank-spend-prompt":        return 0;          // overlay holds its own pacing
     case "bank-spent":               return ev.amount > 0 ? 600 : 200;
+    case "status-remove-prompt":     return 0;          // pause for player response
+    case "status-remove-attempted":  return ev.prevented ? 600 : 200;
   }
 }
 

@@ -179,16 +179,19 @@ export function applyStatus(
   applier: PlayerId,
   status: StatusId,
   stacks: number,
+  applierSnapshot?: HeroSnapshot,
 ): GameEvent[] {
   const def = REGISTRY.get(status);
   if (!def || stacks <= 0) return [];
   const events: GameEvent[] = [];
 
+  const stackLimit = applyTokenOverrideNumeric(applierSnapshot, status, "stack-limit", def.stackLimit);
+
   const existing = holder.statuses.find(s => s.id === status);
   let postCount = 0;
   if (existing) {
     const before = existing.stacks;
-    existing.stacks = Math.min(def.stackLimit, before + stacks);
+    existing.stacks = Math.min(stackLimit, before + stacks);
     if (existing.stacks === before) {
       // Already capped — but detonation may still trigger when at threshold.
       postCount = existing.stacks;
@@ -198,13 +201,16 @@ export function applyStatus(
       postCount = existing.stacks;
     }
   } else {
-    const inst: StatusInstance = { id: status, stacks: Math.min(def.stackLimit, stacks), appliedBy: applier };
+    const inst: StatusInstance = { id: status, stacks: Math.min(stackLimit, stacks), appliedBy: applier };
     holder.statuses.push(inst);
     events.push({ t: "status-applied", status, holder: holder.player, applier, stacks: inst.stacks, total: inst.stacks });
     postCount = inst.stacks;
   }
 
-  if (def.detonation && def.detonation.triggerTiming === "on-application-overflow" && postCount >= def.detonation.threshold) {
+  const detThreshold = def.detonation
+    ? applyTokenOverrideNumeric(applierSnapshot, status, "detonation-threshold", def.detonation.threshold)
+    : 0;
+  if (def.detonation && def.detonation.triggerTiming === "on-application-overflow" && postCount >= detThreshold) {
     events.push({ t: "status-detonated", status, holder: holder.player, threshold: def.detonation.threshold });
     // Reset stacks (default 0). The detonation effect is a normal AbilityEffect
     // and is resolved by the caller / engine via the registry helper below.
@@ -310,4 +316,30 @@ export function tickStatusesAt(
 /** Stack count for a given status (0 if absent). */
 export function stacksOf(holder: HeroSnapshot, status: StatusId): number {
   return holder.statuses.find(s => s.id === status)?.stacks ?? 0;
+}
+
+// ── Per-player token overrides (Crater Wind etc.) ───────────────────────────
+
+/** Apply a numeric token-override modification (set/add/multiply) to a base
+ *  value, scanning the applier's `tokenOverrides` for the named field on the
+ *  named status. Used for `detonation-amount`, `detonation-threshold`,
+ *  `passive-modifier-value-per-stack`, `stack-limit`. */
+export function applyTokenOverrideNumeric(
+  applier: HeroSnapshot | undefined,
+  status: StatusId,
+  field: string,
+  base: number,
+): number {
+  if (!applier) return base;
+  const ov = applier.tokenOverrides.find(o => o.status === status);
+  if (!ov) return base;
+  let amount = base;
+  for (const mod of ov.modifications) {
+    if (mod.field !== field) continue;
+    const val = typeof mod.value === "number" ? mod.value : 0;
+    if (mod.operation === "set") amount = val;
+    else if (mod.operation === "add") amount += val;
+    else if (mod.operation === "multiply") amount = Math.ceil(amount * val);
+  }
+  return amount;
 }

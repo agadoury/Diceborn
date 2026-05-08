@@ -257,6 +257,7 @@ function LadderDemo() {
       masterySlots: {},
       consumedOncePerMatchCards: [],
       consumedOncePerTurnCards: [],
+      tokenOverrides: [],
     };
   }, [hero, dice, attemptsRemaining]);
 

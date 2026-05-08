@@ -276,7 +276,9 @@ incoming amount
 
 `gain-cp`, `draw`, and `remove-status` deliberately do **not** accept `conditional_bonus` — `gain-cp` would create resource-scaling exploits (express CP scaling at the resource-trigger layer instead), `draw` is rarely a healthy design pattern, and `remove-status` already takes an explicit stack count.
 
-Resolution is uniform: when the `condition` (a `StateCheck`) holds, the engine adds `bonusPerUnit × source-units` to the relevant numeric field. Sources: `opponent-status-stacks` / `self-status-stacks` / `stripped-stack-count` / `self-passive-counter` / `opponent-passive-counter` / `fixed-one`. Implemented by `computeConditionalBonus` in `cards.ts`, called from both card-context (`resolveEffect`) and ability-context (`resolveAbilityEffect`, `resolveDefensiveEffect`).
+Resolution is uniform: when the `condition` (a `StateCheck`) holds, the engine adds `bonusPerUnit × source-units` to the relevant numeric field. Sources: `opponent-status-stacks` / `self-status-stacks` / `stripped-stack-count` / `self-passive-counter` / `opponent-passive-counter` / `damage-prevented-amount` / `fixed-one`. Implemented by `computeConditionalBonus` in `cards.ts`, called from both card-context (`resolveEffect`) and ability-context (`resolveAbilityEffect`, `resolveDefensiveEffect`).
+
+`damage-prevented-amount` is set by `reduce-damage` at resolve time on the caster's `signatureState["__damagePrevented"]`. Reflective effects (Phoenix-Veil-style "1 stack of status per damage prevented") read from this source on a sibling `apply-status` in the same compound effect.
 
 ### Low-HP threshold
 

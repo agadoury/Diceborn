@@ -76,6 +76,7 @@ export type ConditionalSource =
   | "stripped-stack-count"          // stacks removed in the most-recent strip-event
   | "self-passive-counter"          // signatureState[passiveKey]
   | "opponent-passive-counter"      // opponent's signatureState[passiveKey]
+  | "damage-prevented-amount"       // damage reduced in the just-resolved reduce-damage effect
   | "fixed-one";
 
 /** Conditional bonus stamped onto effects that scale with game state.
@@ -99,13 +100,57 @@ export interface ConditionalTypeOverride {
 }
 
 /** Modifications applied to abilities by the `ability-upgrade` effect. */
+/** Canonical Mastery / persistent-buff field-name whitelist. Each value
+ *  maps to a specific named path in the effect tree (or signature-token
+ *  def for `target: <token-id>` persistent-buffs).
+ *
+ *  Damage / scaling-damage:
+ *    "base-damage" / "scaling-damage-base" / "scaling-damage-per-extra"
+ *    "scaling-damage-max-extra" / "damage-type" / "damage-self-cost"
+ *    "damage-conditional-bonus-bonus-per-unit"
+ *
+ *  Heal:
+ *    "heal-amount" / "self-heal-amount" / "heal-conditional-bonus"
+ *
+ *  Reduce-damage:
+ *    "reduce-damage-amount" / "reduce-damage-negate-attack"
+ *    "reduce-damage-apply-to-attacker-stacks"
+ *    "reduce-damage-apply-to-attacker-status"
+ *
+ *  Apply-status / remove-status:
+ *    "applied-status-stacks"             — for opponent-target apply-status
+ *    "applied-status-stacks-self"        — for self-target apply-status
+ *    "applied-status-stacks-on-success"  — defense-success-gated apply-status
+ *    "applied-status-conditional-bonus"  — apply-status.conditional_bonus.bonusPerUnit
+ *    "removed-status-stacks"             — remove-status.stacks
+ *
+ *  Bonus dice:
+ *    "bonus-dice-count" / "bonus-dice-threshold"
+ *
+ *  Defense-only:
+ *    "defenseDiceCount"
+ *
+ *  Signature-token (via `persistent-buff` with `target: <StatusId>`):
+ *    "detonation-amount" / "detonation-threshold"
+ *    "passive-modifier-value-per-stack" / "stack-limit"
+ */
+export type AbilityUpgradeField =
+  | "base-damage" | "scaling-damage-base" | "scaling-damage-per-extra" | "scaling-damage-max-extra"
+  | "damage-type" | "self-cost" | "damage-self-cost"
+  | "damage-conditional-bonus-bonus-per-unit"
+  | "heal-amount" | "self-heal-amount" | "heal-conditional-bonus"
+  | "applied-status-stacks" | "applied-status-stacks-self" | "applied-status-stacks-on-success"
+  | "applied-status-conditional-bonus"
+  | "removed-status-stacks"
+  | "reduce-damage-amount" | "reduce-damage-negate-attack"
+  | "reduce-damage-apply-to-attacker-stacks" | "reduce-damage-apply-to-attacker-status"
+  | "bonus-dice-count" | "bonus-dice-threshold"
+  | "defenseDiceCount"
+  | "detonation-amount" | "detonation-threshold"
+  | "passive-modifier-value-per-stack" | "stack-limit";
+
 export interface AbilityUpgradeMod {
-  field:
-    | "base-damage" | "scaling-damage-base" | "scaling-damage-per-extra" | "scaling-damage-max-extra"
-    | "damage-type" | "self-cost" | "heal-amount" | "self-heal-amount"
-    | "applied-status-stacks" | "reduce-damage-amount" | "defenseDiceCount"
-    | "bonus-dice-threshold"        // sets effect.thresholdBonus.threshold on bonus-dice-damage
-    | "heal-conditional-bonus";     // sets effect.conditional_bonus.bonusPerUnit on heal
+  field: AbilityUpgradeField;
   operation: "set" | "add" | "multiply";
   value: number | string;
   /** If present, the modification only applies when this state-check holds at
@@ -138,10 +183,18 @@ export type AbilityEffect =
       conditional_bonus?: ConditionalBonus;
       conditional_type_override?: ConditionalTypeOverride }
   /** Defensive: reduce incoming damage by this amount during the current
-   *  defensive roll. Used by defensive-ladder abilities. Optional
-   *  conditional_bonus: per-unit bonus reduction when a state check holds. */
+   *  defensive roll, OR (when `negate_attack: true`) reduce to 0 regardless
+   *  of incoming. Optional `apply_to_attacker` reflects a status onto the
+   *  attacker after the reduction lands. Optional `conditional_bonus` adds
+   *  per-unit bonus reduction. */
   | { kind: "reduce-damage"; amount: number;
-      conditional_bonus?: ConditionalBonus }
+      conditional_bonus?: ConditionalBonus;
+      negate_attack?: true;
+      apply_to_attacker?: {
+        status: StatusId;
+        stacks: number;
+        conditional_bonus?: ConditionalBonus;
+      } }
   /** Apply N stacks of a status. Optional conditional_bonus: per-unit bonus
    *  stacks when a state check holds (added to base `stacks`). */
   | { kind: "apply-status"; status: StatusId; stacks: number; target: "self" | "opponent";
@@ -192,11 +245,22 @@ export type AbilityEffect =
    *  omitted, the player's `targetFaceValue` from the play-card action is
    *  used. Survives rerolls. */
   | { kind: "force-face-value"; faceValue?: 1|2|3|4|5|6; duration: "this-turn" }
+  /** When an Instant card with trigger `opponent-attempts-remove-status`
+   *  fires, this effect cancels the queued removal so the stacks stay
+   *  intact. No-op outside that context. */
+  | { kind: "prevent-pending-status-removal" }
   /** Match-long buff applied immediately. The buff itself is any standard
    *  effect-shaped modifier (e.g. +1 dmg on offensive abilities). Discarded
    *  on the named trigger, if any. */
+  /** Match-long buff applied immediately. When `target` is set, the modifier
+   *  patches the named signature token's definition (per-player override
+   *  stored in `tokenOverrides`) rather than scoping to abilities — used by
+   *  Crater Wind to bump Cinder's detonation amount mid-match. When `scope`
+   *  is set instead, the buff applies to abilities matching it. The two
+   *  forms are mutually exclusive at runtime. */
   | { kind: "persistent-buff"; id: string; modifier: AbilityUpgradeMod;
-      scope: AbilityScope;
+      scope?: AbilityScope;
+      target?: StatusId;
       discardOn?:
         | { kind: "damage-taken-from-tier"; tier: AbilityTier }
         | { kind: "status-removed"; status: StatusId }
@@ -291,6 +355,11 @@ export type CardTrigger =
   | { kind: "opponent-applies-status"; status: StatusId }
   | { kind: "self-ability-resolved"; tier?: AbilityTier | "any" }
   | { kind: "match-state-threshold"; metric: "self-hp" | "opponent-hp"; op: "<=" | ">="; value: number }
+  /** Pre-removal interception. Fires BEFORE the queued removal resolves so an
+   *  Instant can `prevent-pending-status-removal` to keep the stacks intact
+   *  while still punishing the attempt. Distinct from
+   *  `opponent-removes-status` which fires AFTER removal completes. */
+  | { kind: "opponent-attempts-remove-status"; status: StatusId }
   // ── Legacy triggers (still accepted) ────────────────────────────────────
   | { kind: "on-symbol-rolled"; symbol: SymbolId | "*:ult"; by: "self" | "opponent" }
   | { kind: "on-tier-fired";    tier: AbilityTier; by: "self" | "opponent" };
@@ -437,6 +506,16 @@ export interface ActiveAbilityModifier {
     | { kind: "match-ends" };
 }
 
+/** Per-snapshot override of a registered status definition's mechanical
+ *  fields. Created by `persistent-buff` effects whose `target` is a
+ *  StatusId — e.g. Crater Wind boosts Cinder's `detonation.effect.amount`
+ *  by patching `detonation-amount` here. Read by the status engine when
+ *  it dispatches token logic for the player who owns the override. */
+export interface TokenOverride {
+  status: StatusId;
+  modifications: AbilityUpgradeMod[];
+}
+
 /** A symbol bend currently in effect (face-symbol-bend). */
 export interface ActiveSymbolBend {
   id: string;
@@ -480,6 +559,8 @@ export interface HeroSnapshot {
   nextAbilityBonusDamage: number;
   /** Active ability modifiers (from masteries, persistent buffs, etc.). */
   abilityModifiers: ActiveAbilityModifier[];
+  /** Active per-status token overrides (Crater Wind etc.). */
+  tokenOverrides: TokenOverride[];
   /** Active face-symbol bends. */
   symbolBends: ActiveSymbolBend[];
   /** When set, the combo evaluator treats all of this hero's dice as the
@@ -525,6 +606,11 @@ export interface PendingAttack {
   /** Snapshot of attacker's firing dice so scaling-damage can be computed
    *  after the defense resolves. */
   firingFaces: readonly DieFace[];
+  /** Defensive reduction queued by card-context `reduce-damage` effects
+   *  resolved between `attack-intended` and the defender's pick — most
+   *  notably Phoenix-Veil-style Instants. Added to the final defensive
+   *  reduction in `resolveDefenseChoice`. */
+  injectedReduction?: number;
 }
 
 export interface GameState {
@@ -537,6 +623,21 @@ export interface GameState {
   phase: Phase;
   players: Record<PlayerId, HeroSnapshot>;
   pendingCounter?: { card: Card; holder: PlayerId; expiresAt: number };
+  /** A queued status removal awaiting the holder's interception response.
+   *  Set when an opponent's `remove-status` effect targets the holder AND
+   *  the holder has an Instant with a matching
+   *  `opponent-attempts-remove-status` trigger in hand. The engine pauses
+   *  for `respond-to-status-removal`; on accept the Instant resolves and
+   *  may set `prevented`. The removal then either finalises or is dropped. */
+  pendingStatusRemoval?: {
+    holder: PlayerId;
+    applier: PlayerId;
+    status: StatusId;
+    stacks: number;
+    /** Set to true by `prevent-pending-status-removal` resolved from the
+     *  matched Instant. */
+    prevented?: boolean;
+  };
   /** Offensive picker halt — set when the active player ends their offensive
    *  roll with one or more matching abilities. Cleared once the player
    *  dispatches `select-offensive-ability`. */
@@ -588,6 +689,10 @@ export type Action =
   | { kind: "sell-card"; card: CardId }
   | { kind: "end-turn" }
   | { kind: "respond-to-counter"; accept: boolean }
+  /** Holder's response to a queued status-removal interception prompt.
+   *  `cardId` (when set) names the Instant from the holder's hand to play.
+   *  `null` declines: the queued removal proceeds normally. */
+  | { kind: "respond-to-status-removal"; cardId: CardId | null }
   /** Active player's response to a `pendingOffensiveChoice`. `abilityIndex`
    *  is into the attacker's `abilityLadder`. `null` means "decline to fire"
    *  — the offensive turn fizzles (then `offensiveFallback` is checked). */
@@ -644,6 +749,13 @@ export type GameEvent =
   | { t: "rage-changed"; player: PlayerId; stacks: number }
   | { t: "counter-prompt"; holder: PlayerId; cardId: CardId; expiresAt: number }
   | { t: "counter-resolved"; holder: PlayerId; cardId: CardId; accepted: boolean }
+  /** Pre-removal pause. Fires when the engine has queued a status removal
+   *  and the holder has at least one Instant whose
+   *  `opponent-attempts-remove-status` trigger matches. */
+  | { t: "status-remove-prompt"; holder: PlayerId; applier: PlayerId; status: StatusId; stacks: number }
+  /** After the prompt resolves: tells the choreographer whether stacks were
+   *  actually removed or the attempt was prevented. */
+  | { t: "status-remove-attempted"; holder: PlayerId; applier: PlayerId; status: StatusId; stacks: number; prevented: boolean }
   // ── Correction 6 — additional engine events ─────────────────────────────
   /** A signature passive counter changed (Frenzy, Radiance, etc.). */
   | { t: "passive-counter-changed"; player: PlayerId; passiveKey: string; delta: number; total: number }
