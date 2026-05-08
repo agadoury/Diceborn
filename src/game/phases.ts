@@ -80,6 +80,7 @@ export function runUpkeep(state: GameState): GameEvent[] {
 
   // Hero-specific signature passives at Upkeep land here when new content
   // is registered. Engine dispatches on hero.signatureMechanic.implementation.kind.
+  events.push(...resolveUpkeepSignaturePassive(active));
 
   // Tick own-upkeep statuses on the active player.
   const ownTick = tickStatusesAt(state, active, "ownUpkeep");
@@ -474,6 +475,8 @@ export function resolveDefenseChoice(state: GameState, abilityIndex: number | nu
         attacker: state.players[pa.attacker],
         firingCombo: chosen.combo,
         firingFaces: rolledFaces,
+        abilityName: chosen.name,
+        abilityTier: chosen.tier,
       });
       reduction += r.reduction;
       events.push(...r.events);
@@ -589,6 +592,17 @@ function applyAttackEffects(
     if (trig.on === "abilityLanded") events.push(...gainCp(active, trig.gain));
   }
 
+  // Defender-side signature passive trigger — Frenzy registers any HP loss
+  // dealt to `opponent` (the defender of this attack) so it grants +1 stack
+  // at the defender's next Upkeep.
+  let damageToOpponent = 0;
+  for (const ev of events) {
+    if (ev.t === "damage-dealt" && ev.from === active.player && ev.to === opponent.player) {
+      damageToOpponent += ev.amount;
+    }
+  }
+  noteOffensiveDamageTaken(opponent, damageToOpponent);
+
   if (opponent.hp <= 0) events.push(...endMatch(state, active.player));
   return events;
 }
@@ -599,6 +613,10 @@ interface DefenseCtx {
   attacker: HeroSnapshot;
   firingCombo: import("./types").DiceCombo;
   firingFaces: ReadonlyArray<import("./types").DieFace>;
+  /** The chosen defense ability — used to dispatch ability-modifiers
+   *  (`all-defenses` masteries like Wolfborn). */
+  abilityName?: string;
+  abilityTier?: import("./types").AbilityTier;
 }
 
 /** Resolve the matched defensive ability's effect tree. Returns the
@@ -610,7 +628,7 @@ function resolveDefensiveEffect(
 ): { reduction: number; events: GameEvent[] } {
   switch (effect.kind) {
     case "reduce-damage": {
-      let amount = effect.amount;
+      let amount = applyDefensiveNumericModifier(ctx.defender, ctx.abilityName ?? "", "reduce-damage-amount", effect.amount, ctx.firingFaces);
       if (
         effect.conditional_bonus &&
         checkState(ctx.state, ctx.defender, ctx.attacker, effect.conditional_bonus.condition, ctx.firingFaces)
@@ -621,7 +639,7 @@ function resolveDefensiveEffect(
     }
     case "heal": {
       const target = effect.target === "self" ? ctx.defender : ctx.attacker;
-      let amount = effect.amount;
+      let amount = applyDefensiveNumericModifier(ctx.defender, ctx.abilityName ?? "", "heal-amount", effect.amount, ctx.firingFaces);
       if (
         effect.conditional_bonus &&
         checkState(ctx.state, ctx.defender, ctx.attacker, effect.conditional_bonus.condition, ctx.firingFaces)
@@ -639,7 +657,7 @@ function resolveDefensiveEffect(
     }
     case "apply-status": {
       const target = effect.target === "self" ? ctx.defender : ctx.attacker;
-      let stacks = effect.stacks;
+      let stacks = applyDefensiveNumericModifier(ctx.defender, ctx.abilityName ?? "", "applied-status-stacks", effect.stacks, ctx.firingFaces);
       if (
         effect.conditional_bonus &&
         checkState(ctx.state, ctx.defender, ctx.attacker, effect.conditional_bonus.condition, ctx.firingFaces)
@@ -763,23 +781,42 @@ function resolveAbilityEffect(state: GameState, effect: import("./types").Abilit
     for (const e of effect.effects) out.push(...resolveAbilityEffect(state, e, ctx));
     return out;
   }
+  // Patch bonus-dice-damage with `bonus-dice-threshold` ability modifiers
+  // before forwarding to the shared resolver.
+  if (effect.kind === "bonus-dice-damage") {
+    const patched = applyModifiersToBonusDiceDamage(ctx.caster, ctx.abilityName ?? "", ctx.abilityTier ?? 0, effect, ctx.firingFaces);
+    return resolveEffect(patched, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
+  }
+  // Patch heal with `heal-amount` and `heal-conditional-bonus` modifiers.
+  if (effect.kind === "heal") {
+    const patched = applyModifiersToHeal(ctx.caster, ctx.abilityName ?? "", ctx.abilityTier ?? 0, effect, ctx.firingFaces);
+    return resolveEffect(patched, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
+  }
   // For non-damage effects: apply crit flat to status stacks. Conditional
   // bonus is folded in *before* the crit doubling and the bonus is stripped
   // from the forwarded effect so resolveEffect doesn't apply it twice.
-  if (effect.kind === "apply-status" && ctx.critMul > 1) {
-    let bonus = 0;
-    if (
-      effect.conditional_bonus &&
-      checkState(state, ctx.caster, ctx.opponent, effect.conditional_bonus.condition, ctx.firingFaces)
-    ) {
-      bonus = computeConditionalBonus(ctx.caster, ctx.opponent, effect.conditional_bonus);
+  if (effect.kind === "apply-status") {
+    const patchedStacks = applyModifiersToAppliedStatusStacks(
+      ctx.caster, ctx.abilityName ?? "", ctx.abilityTier ?? 0, effect.stacks, ctx.firingFaces,
+    );
+    if (ctx.critMul > 1) {
+      let bonus = 0;
+      if (
+        effect.conditional_bonus &&
+        checkState(state, ctx.caster, ctx.opponent, effect.conditional_bonus.condition, ctx.firingFaces)
+      ) {
+        bonus = computeConditionalBonus(ctx.caster, ctx.opponent, effect.conditional_bonus);
+      }
+      const stacked: import("./types").AbilityEffect = {
+        ...effect,
+        stacks: (patchedStacks + bonus) * 2,
+        conditional_bonus: undefined,
+      };
+      return resolveEffect(stacked, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
     }
-    const stacked: import("./types").AbilityEffect = {
-      ...effect,
-      stacks: (effect.stacks + bonus) * 2,
-      conditional_bonus: undefined,
-    };
-    return resolveEffect(stacked, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
+    if (patchedStacks !== effect.stacks) {
+      return resolveEffect({ ...effect, stacks: patchedStacks }, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
+    }
   }
   return resolveEffect(effect, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
 }
@@ -892,6 +929,109 @@ function conditionalMatches(
   }
 }
 
+/** Defensive-side numeric modifier reducer. Active modifiers whose scope is
+ *  `all-defenses` (Wolfborn) or `ability-ids` matching the chosen defense
+ *  apply here. */
+function applyDefensiveNumericModifier(
+  defender: HeroSnapshot,
+  abilityName: string,
+  field: import("./types").AbilityUpgradeMod["field"],
+  base: number,
+  firingFaces?: ReadonlyArray<import("./types").DieFace>,
+): number {
+  let amount = base;
+  for (const m of defender.abilityModifiers) {
+    let matches = false;
+    if (m.scope.kind === "all-defenses") matches = true;
+    else if (m.scope.kind === "ability-ids") matches = m.scope.ids.some(id => id.toLowerCase() === abilityName.toLowerCase());
+    if (!matches) continue;
+    for (const mod of m.modifications) {
+      if (mod.field !== field) continue;
+      if (mod.conditional && !conditionalMatches(mod.conditional, defender, firingFaces)) continue;
+      const val = typeof mod.value === "number" ? mod.value : 0;
+      if (mod.operation === "set") amount = val;
+      else if (mod.operation === "add") amount += val;
+      else if (mod.operation === "multiply") amount = Math.ceil(amount * val);
+    }
+  }
+  return amount;
+}
+
+/** Generic numeric modifier reducer — walks active ability modifiers and
+ *  applies set/add/multiply ops on the matching field, respecting any
+ *  conditional StateCheck. Used by heal-amount / applied-status-stacks /
+ *  bonus-dice-threshold / heal-conditional-bonus etc. */
+function applyNumericModifier(
+  caster: HeroSnapshot,
+  abilityName: string,
+  tier: number,
+  field: import("./types").AbilityUpgradeMod["field"],
+  base: number,
+  firingFaces?: ReadonlyArray<import("./types").DieFace>,
+): number {
+  let amount = base;
+  for (const m of caster.abilityModifiers) {
+    if (!modifierMatches(m, abilityName, tier)) continue;
+    for (const mod of m.modifications) {
+      if (mod.field !== field) continue;
+      if (mod.conditional && !conditionalMatches(mod.conditional, caster, firingFaces)) continue;
+      const val = typeof mod.value === "number" ? mod.value : 0;
+      if (mod.operation === "set") amount = val;
+      else if (mod.operation === "add") amount += val;
+      else if (mod.operation === "multiply") amount = Math.ceil(amount * val);
+    }
+  }
+  return amount;
+}
+
+/** Patch a `bonus-dice-damage` effect with active ability modifiers. Currently
+ *  rewrites `thresholdBonus.threshold` from `bonus-dice-threshold` mods. */
+function applyModifiersToBonusDiceDamage(
+  caster: HeroSnapshot,
+  abilityName: string,
+  tier: number,
+  effect: Extract<import("./types").AbilityEffect, { kind: "bonus-dice-damage" }>,
+  firingFaces?: ReadonlyArray<import("./types").DieFace>,
+): import("./types").AbilityEffect {
+  if (!effect.thresholdBonus) return effect;
+  const patched = applyNumericModifier(caster, abilityName, tier, "bonus-dice-threshold", effect.thresholdBonus.threshold, firingFaces);
+  if (patched === effect.thresholdBonus.threshold) return effect;
+  return { ...effect, thresholdBonus: { ...effect.thresholdBonus, threshold: patched } };
+}
+
+/** Patch a `heal` effect with active ability modifiers — `heal-amount` on
+ *  the base amount and `heal-conditional-bonus` on `conditional_bonus.bonusPerUnit`. */
+function applyModifiersToHeal(
+  caster: HeroSnapshot,
+  abilityName: string,
+  tier: number,
+  effect: Extract<import("./types").AbilityEffect, { kind: "heal" }>,
+  firingFaces?: ReadonlyArray<import("./types").DieFace>,
+): import("./types").AbilityEffect {
+  const amount = applyNumericModifier(caster, abilityName, tier, "heal-amount", effect.amount, firingFaces);
+  let conditional_bonus = effect.conditional_bonus;
+  if (conditional_bonus) {
+    const perUnit = applyNumericModifier(caster, abilityName, tier, "heal-conditional-bonus", conditional_bonus.bonusPerUnit, firingFaces);
+    if (perUnit !== conditional_bonus.bonusPerUnit) {
+      conditional_bonus = { ...conditional_bonus, bonusPerUnit: perUnit };
+    }
+  }
+  if (amount === effect.amount && conditional_bonus === effect.conditional_bonus) return effect;
+  return { ...effect, amount, conditional_bonus };
+}
+
+/** Patch the `stacks` of an `apply-status` effect with active ability
+ *  modifiers tagged `applied-status-stacks`. */
+function applyModifiersToAppliedStatusStacks(
+  caster: HeroSnapshot,
+  abilityName: string,
+  tier: number,
+  base: number,
+  firingFaces?: ReadonlyArray<import("./types").DieFace>,
+): number {
+  return applyNumericModifier(caster, abilityName, tier, "applied-status-stacks", base, firingFaces);
+}
+
 /** Sum per-stack passive modifiers from active statuses on the caster matching
  *  the trigger / field. Frost-bite contributes -1 dmg per stack on
  *  on-offensive-ability + damage. */
@@ -917,6 +1057,42 @@ function aggregatePassiveModifiers(
 }
 
 void listRegisteredStatuses;
+
+// ── Hero-specific signature passives ───────────────────────────────────────
+const FRENZY_TICK_PENDING = "__frenzyTickPending";
+
+/** Set on a defender when they take ≥1 damage from an opponent's offensive
+ *  ability. Read at the defender's next Upkeep by `resolveUpkeepSignaturePassive`
+ *  to grant +1 to the hero's bankable counter (capped per-turn). */
+export function noteOffensiveDamageTaken(defender: HeroSnapshot, amount: number): void {
+  if (amount <= 0) return;
+  const heroDef = getHero(defender.hero);
+  if (heroDef.signatureMechanic.implementation.kind !== "frenzy") return;
+  defender.signatureState[FRENZY_TICK_PENDING] = 1;
+}
+
+/** Dispatch the active player's signature passive at Upkeep. Currently
+ *  implements `kind: "frenzy"` — +1 to the bankable counter (respecting cap)
+ *  if the hero took offensive damage on the previous turn. The flag is
+ *  cleared regardless of whether the bonus actually landed. */
+function resolveUpkeepSignaturePassive(active: HeroSnapshot): GameEvent[] {
+  const events: GameEvent[] = [];
+  const heroDef = getHero(active.hero);
+  const impl = heroDef.signatureMechanic.implementation;
+  if (impl.kind !== "frenzy") return events;
+  const flagged = (active.signatureState[FRENZY_TICK_PENDING] ?? 0) > 0;
+  if (!flagged) return events;
+  delete active.signatureState[FRENZY_TICK_PENDING];
+  const key = impl.passiveKey ?? "frenzy";
+  const cap = impl.bankCap ?? Infinity;
+  const before = active.signatureState[key] ?? 0;
+  const after = Math.min(cap, before + 1);
+  const delta = after - before;
+  if (delta === 0) return events;
+  active.signatureState[key] = after;
+  events.push({ t: "passive-counter-changed", player: active.player, passiveKey: key, delta, total: after });
+  return events;
+}
 
 // ── Ladder emission ─────────────────────────────────────────────────────────
 export function emitLadderState(state: GameState, hero: HeroDefinition, active: HeroSnapshot): GameEvent[] {

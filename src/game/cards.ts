@@ -58,6 +58,9 @@ export interface ResolveCtx {
   /** External defensive reduction supplied by phases.ts. */
   defensiveReduction?: number;
   targetDie?: number;
+  /** Player-chosen face value for `set-die-face` effects whose target leaves
+   *  faceValue unspecified (Iron Focus, Last Stand). */
+  targetFaceValue?: 1 | 2 | 3 | 4 | 5 | 6;
 }
 
 export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent[] {
@@ -136,7 +139,7 @@ export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent
     }
     // ── Correction 6 — first-class primitives ────────────────────────────
     case "set-die-face":
-      return setDieFace(ctx.state, ctx.caster, effect, ctx.targetDie);
+      return setDieFace(ctx.state, ctx.caster, effect, ctx.targetDie, ctx.targetFaceValue);
     case "reroll-dice":
       return rerollDice(ctx.state, ctx.caster, effect);
     case "face-symbol-bend":
@@ -170,6 +173,7 @@ function setDieFace(
   caster: HeroSnapshot,
   effect: Extract<AbilityEffect, { kind: "set-die-face" }>,
   targetDie?: number,
+  targetFaceValue?: 1|2|3|4|5|6,
 ): GameEvent[] {
   const events: GameEvent[] = [];
   const dice = caster.dice;
@@ -189,16 +193,33 @@ function setDieFace(
     ? [targetDie, ...eligibleIdx.filter(i => i !== targetDie)]
     : eligibleIdx;
 
+  // Resolve the target face — when the effect leaves faceValue unspecified,
+  // fall back to the action's `targetFaceValue`. If neither is set, the
+  // effect is a no-op (no face to point at).
+  let resolvedTarget: { kind: "symbol"; symbol: SymbolId } | { kind: "face"; faceValue: 1|2|3|4|5|6 } | null;
+  if (effect.target.kind === "symbol") {
+    resolvedTarget = effect.target;
+  } else if (effect.target.faceValue != null) {
+    resolvedTarget = { kind: "face", faceValue: effect.target.faceValue };
+  } else if (targetFaceValue != null) {
+    resolvedTarget = { kind: "face", faceValue: targetFaceValue };
+  } else {
+    resolvedTarget = null;
+  }
+  if (!resolvedTarget) return events;
+
   let setCount = 0;
   for (const idx of ordered) {
     if (setCount >= effect.count) break;
     const die = dice[idx];
-    const targetFaceIdx = findFaceIndex(die.faces, effect.target);
+    const targetFaceIdx = findFaceIndex(die.faces, resolvedTarget);
     if (targetFaceIdx < 0) continue;
     const from = die.current;
-    if (from === targetFaceIdx) { setCount++; continue; }
-    die.current = targetFaceIdx;
-    events.push({ t: "die-face-changed", player: caster.player, die: idx, from, to: targetFaceIdx, cause: "card" });
+    if (from !== targetFaceIdx) {
+      die.current = targetFaceIdx;
+      events.push({ t: "die-face-changed", player: caster.player, die: idx, from, to: targetFaceIdx, cause: "card" });
+    }
+    if (effect.lockAfter) die.locked = true;
     setCount++;
   }
   return events;
@@ -520,6 +541,17 @@ export function canPlay(state: GameState, hero: HeroSnapshot, opponent: HeroSnap
     if (card.playable.minHpFraction != null && frac < card.playable.minHpFraction) return false;
     if (card.playable.maxHpFraction != null && frac > card.playable.maxHpFraction) return false;
   }
+  // Once-per-match consumption check.
+  if (card.oncePerMatch && hero.consumedOncePerMatchCards.includes(card.id)) return false;
+  // Richer play-time gate.
+  if (card.playCondition) {
+    const pc = card.playCondition;
+    if (pc.kind === "match-state-threshold") {
+      const value = pc.metric === "self-hp" ? hero.hp : opponent.hp;
+      if (pc.op === "<=" && !(value <= pc.value)) return false;
+      if (pc.op === ">=" && !(value >= pc.value)) return false;
+    }
+  }
   // Phase gating per Correction 5: roll-phase / roll-action cards are
   // playable during BOTH the offensive-roll AND the defensive-roll phase
   // (defender's roll counts as a roll window for dice-manipulation cards).
@@ -561,7 +593,6 @@ export function canPlay(state: GameState, hero: HeroSnapshot, opponent: HeroSnap
       if (ste.effect.kind === "block-card-kind" && ste.effect.cardKind === card.kind) return false;
     }
   }
-  void opponent;
   return true;
 }
 

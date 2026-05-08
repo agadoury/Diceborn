@@ -44,7 +44,7 @@ export function applyAction(state: GameState, action: Action): ApplyResult {
     case "advance-phase":   events.push(...advancePhase(next)); break;
     case "toggle-die-lock": events.push(...toggleDieLock(next, action.die)); break;
     case "roll-dice":       events.push(...rollAction(next)); break;
-    case "play-card":       events.push(...playCard(next, action.card, action.targetDie, action.targetPlayer)); break;
+    case "play-card":       events.push(...playCard(next, action.card, action.targetDie, action.targetPlayer, action.targetFaceValue)); break;
     case "sell-card":       events.push(...sellCardAction(next, action.card)); break;
     case "end-turn":        events.push(...endTurn(next)); break;
     case "respond-to-counter": events.push(...respondToCounter(next, action.accept)); break;
@@ -131,6 +131,7 @@ function makeHeroSnapshot(player: PlayerId, heroId: HeroId, state: GameState): H
     symbolBends: [],
     lastStripped: {},
     masterySlots: {},
+    consumedOncePerMatchCards: [],
   };
 }
 
@@ -265,7 +266,7 @@ function passTurn(state: GameState): GameEvent[] {
 }
 
 // ── Card play / sell / counter ──────────────────────────────────────────────
-function playCard(state: GameState, cardId: string, targetDie?: number, _targetPlayer?: PlayerId): GameEvent[] {
+function playCard(state: GameState, cardId: string, targetDie?: number, _targetPlayer?: PlayerId, targetFaceValue?: 1|2|3|4|5|6): GameEvent[] {
   const active = state.players[state.activePlayer];
   const opponent = state.players[other(state.activePlayer)];
   const card = active.hand.find(c => c.id === cardId);
@@ -282,6 +283,8 @@ function playCard(state: GameState, cardId: string, targetDie?: number, _targetP
   if (card.kind === "mastery" && card.masteryTier != null && (card.occupiesSlot ?? true)) {
     active.masterySlots[card.masteryTier as 1 | 2 | 3 | "defensive"] = card.id;
   }
+  // Once-per-match consumption.
+  if (card.oncePerMatch) active.consumedOncePerMatchCards.push(card.id);
   events.push({ t: "card-played", player: active.player, cardId, target: targetDie != null ? { die: targetDie } : undefined });
 
   // Resolve effect
@@ -289,7 +292,7 @@ function playCard(state: GameState, cardId: string, targetDie?: number, _targetP
     const handler = getCustomHandler(card.effect.id);
     if (handler) events.push(...handler({ state, caster: active, opponent, targetDie }));
   } else {
-    events.push(...resolveEffect(card.effect, { state, caster: active, opponent, targetDie }));
+    events.push(...resolveEffect(card.effect, { state, caster: active, opponent, targetDie, targetFaceValue }));
   }
 
   // Re-emit ladder state (cards may have changed dice / upgrades / damage bonus).
@@ -427,6 +430,7 @@ function clonePlayer(p: HeroSnapshot | undefined): HeroSnapshot {
     symbolBends: p.symbolBends.map(b => ({ ...b })),
     lastStripped: { ...p.lastStripped },
     masterySlots: { ...p.masterySlots },
+    consumedOncePerMatchCards: p.consumedOncePerMatchCards.slice(),
   };
 }
 

@@ -144,5 +144,6 @@ function mockSnapshot(): HeroSnapshot {
     ladderState: [] as LadderRowState[],
     isLowHp: false, nextAbilityBonusDamage: 0,
     abilityModifiers: [], symbolBends: [], lastStripped: {}, masterySlots: {},
+    consumedOncePerMatchCards: [],
   };
 }

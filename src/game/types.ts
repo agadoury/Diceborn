@@ -102,7 +102,9 @@ export interface AbilityUpgradeMod {
   field:
     | "base-damage" | "scaling-damage-base" | "scaling-damage-per-extra" | "scaling-damage-max-extra"
     | "damage-type" | "self-cost" | "heal-amount" | "self-heal-amount"
-    | "applied-status-stacks" | "reduce-damage-amount" | "defenseDiceCount";
+    | "applied-status-stacks" | "reduce-damage-amount" | "defenseDiceCount"
+    | "bonus-dice-threshold"        // sets effect.thresholdBonus.threshold on bonus-dice-damage
+    | "heal-conditional-bonus";     // sets effect.conditional_bonus.bonusPerUnit on heal
   operation: "set" | "add" | "multiply";
   value: number | string;
   /** If present, the modification only applies when this state-check holds at
@@ -158,7 +160,14 @@ export type AbilityEffect =
    *  named face value. The chosen face may be specified by symbol or value. */
   | { kind: "set-die-face"; count: number;
       filter: "any" | { kind: "specific-symbol"; symbol: SymbolId } | { kind: "specific-face"; faceValue: 1|2|3|4|5|6 };
-      target: { kind: "symbol"; symbol: SymbolId } | { kind: "face"; faceValue: 1|2|3|4|5|6 } }
+      /** When `target.kind === "face"` and `faceValue` is omitted, the player
+       *  picks the face value at play time via the action's `targetFaceValue`
+       *  field. This is how cards like Iron Focus / Last Stand surface a face
+       *  picker. */
+      target: { kind: "symbol"; symbol: SymbolId } | { kind: "face"; faceValue?: 1|2|3|4|5|6 };
+      /** When true, dice set by this effect are also locked. Used by Last
+       *  Stand so the chosen face survives any remaining roll attempts. */
+      lockAfter?: boolean }
   /** Reroll a filtered subset of the caster's dice once. Optionally ignores
    *  per-die locks. `on_attempt: "not-final"` means "only useable while
    *  rollAttemptsRemaining > 0" — informational; canPlay enforces. */
@@ -291,6 +300,13 @@ export interface Card {
   effect: AbilityEffect;
   /** Optional gating, evaluated against game state at play-time. */
   playable?: { minHpFraction?: number; maxHpFraction?: number };
+  /** Richer play-time gate. Currently only `match-state-threshold` is wired
+   *  into `canPlay`; extend the union as new requirements appear. */
+  playCondition?:
+    | { kind: "match-state-threshold"; metric: "self-hp" | "opponent-hp"; op: "<=" | ">="; value: number };
+  /** When true, the card may only be played a single time per match. The
+   *  engine records the cardId in `consumedOncePerMatchCards` on play. */
+  oncePerMatch?: boolean;
   // ── Mastery-only fields ──────────────────────────────────────────────────
   /** Required for `kind: "mastery"`. Which tier the mastery upgrades.
    *  T4 ultimates intentionally have no mastery — power lives at the curve
@@ -461,6 +477,9 @@ export interface HeroSnapshot {
   lastStripped: Record<StatusId, number>;
   /** True while a Mastery card is occupying the corresponding Hero Upgrade slot. */
   masterySlots: { 1?: CardId; 2?: CardId; 3?: CardId; defensive?: CardId };
+  /** Card ids that have already been played this match for `oncePerMatch` cards.
+   *  `canPlay` rejects further plays of any cardId in this list. */
+  consumedOncePerMatchCards: CardId[];
 }
 
 // ── GameState (immutable; mutate only via applyAction) ──────────────────────
@@ -544,7 +563,11 @@ export type Action =
   | { kind: "advance-phase" }
   | { kind: "toggle-die-lock"; die: 0 | 1 | 2 | 3 | 4 }
   | { kind: "roll-dice" }
-  | { kind: "play-card"; card: CardId; targetDie?: 0 | 1 | 2 | 3 | 4; targetPlayer?: PlayerId }
+  | { kind: "play-card"; card: CardId; targetDie?: 0 | 1 | 2 | 3 | 4; targetPlayer?: PlayerId;
+      /** Used by `set-die-face` effects whose target declares
+       *  `{ kind: "face" }` without a faceValue — the UI surfaces a 1–6
+       *  picker and forwards the choice here. */
+      targetFaceValue?: 1 | 2 | 3 | 4 | 5 | 6 }
   | { kind: "sell-card"; card: CardId }
   | { kind: "end-turn" }
   | { kind: "respond-to-counter"; accept: boolean }
