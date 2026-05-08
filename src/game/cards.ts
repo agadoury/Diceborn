@@ -190,17 +190,26 @@ export function canPlay(state: GameState, hero: HeroSnapshot, opponent: HeroSnap
     if (card.playable.minHpFraction != null && frac < card.playable.minHpFraction) return false;
     if (card.playable.maxHpFraction != null && frac > card.playable.maxHpFraction) return false;
   }
-  // Phase gating: roll-action cards play during offensive-roll; main-action during main-pre/main-post.
+  // Phase gating per Correction 5: roll-phase / roll-action cards are
+  // playable during BOTH the offensive-roll AND the defensive-roll phase
+  // (defender's roll counts as a roll window for dice-manipulation cards).
+  // Instants are evaluated by the choreographer's instant-prompt path and
+  // accepted in any phase.
   switch (card.kind) {
     case "main-action":
     case "upgrade":
+    case "main-phase":
       if (state.phase !== "main-pre" && state.phase !== "main-post") return false;
       break;
     case "roll-action":
-      if (state.phase !== "offensive-roll") return false;
+    case "roll-phase":
+      if (state.phase !== "offensive-roll" && state.phase !== "defensive-roll") return false;
       break;
     case "status":
       if (state.phase !== "main-pre" && state.phase !== "main-post") return false;
+      break;
+    case "instant":
+      // Instants are always playable subject to CP + their own trigger.
       break;
   }
   void opponent;

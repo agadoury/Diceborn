@@ -125,11 +125,41 @@ Each hero declares a signature mechanic — one mechanically distinctive thing t
 
 Describe yours in plain English. The engine has flexible dispatch — a custom handler can be wired for any reasonable shape.
 
-### 4.6 Defensive ladder (optional)
+### 4.6 Defensive ladder (optional, but strongly recommended)
 
-Heroes can declare a separate ladder of defensive abilities (auto-resolved when attacked). Same combo grammar, same picker rules (highest tier matched, then highest reduction). Effects are typically `reduce-damage`, `heal`, or `apply-status` (e.g. apply a token to the attacker).
+When this hero is attacked, the defender **picks one** defense from this ladder, then rolls a small handful of dice once — no rerolls, no locking. If the chosen defense's combo lands on the rolled dice, the defense fires; if not, the full attack damage goes through unmitigated. The picking decision is the strategic depth — reading the incoming damage type and value, weighing each defense's odds and payoff, then committing.
 
-If you don't declare a defensive ladder, the engine falls back to "1 damage reduced per shield-symbol face the defender rolls."
+#### Each defense declares:
+
+| Field | Meaning |
+|---|---|
+| `tier` | 1–4. Higher tiers usually have richer effects (e.g. reduce + counterattack), lower tiers are reliable mitigation. |
+| `name` | Defender-facing name shown on the picker overlay. |
+| `combo` | Same combo grammar as offensive abilities (`symbol-count`, `n-of-a-kind`, `straight`, `compound`). |
+| `effect` | Typically `reduce-damage`, `heal`, `apply-status` (apply a token to the attacker), or a `compound` of those. |
+| `defenseDiceCount` | How many dice the defender rolls when this defense is picked. **2** = quick parry, **3** = standard brace, **4** = full bracing, **5** = bet the farm. Defaults to 3 if unspecified. |
+| `shortText` / `longText` | Picker overlay copy. |
+| `targetLandingRate` | Tuning band the simulator validates against. |
+
+#### Why a single roll, no rerolls:
+
+Offense gets 3 attempts because the offensive decision tree is *what to roll for*. Defense's decision tree is *which defense to pick* — once chosen, the roll is what it is. This keeps defensive resolution fast (under 2 seconds for the dice tumble + resolution) and makes the up-front pick genuinely consequential. The dice count per ability becomes a thematic lever: a 2-dice defense rolls less but lands often on simple combos; a 4-dice defense can match richer combos but is rarer and feels like the hero "really committed."
+
+#### What can be blocked:
+
+Only `normal` and `collateral` damage runs through the defensive ladder. **Undefendable**, **pure**, and **ultimate** damage skip the defense flow entirely — the defender takes the full hit. (Shield + Protect tokens still apply to undefendable / ultimate, per [§7 in `ENGINE_AND_MECHANICS.md`](./ENGINE_AND_MECHANICS.md#6-damage-pipeline).) This is a key offensive design lever — undefendable abilities are valuable because they bypass the defender's choice entirely.
+
+#### Cards during the defensive roll:
+
+Both players can play `roll-phase` cards during the defender's roll (dice manipulation, single-die sets, etc.) and `instant`-kind cards as always. Card-driven dice changes can flip a failed defensive roll into a success — design space for "save your defensive ace" cards.
+
+#### How many defenses:
+
+**3 is the sweet spot.** Two feels too few (the choice collapses). Four or more dilutes each defense's identity. Aim for three with clearly different shapes — e.g. one "always-on" 2-dice quick parry, one "main wall" 3-dice solid block, one "big swing" 4-dice block-with-counterattack.
+
+#### Fallback if you skip the defensive ladder:
+
+The engine falls back to "1 damage reduced per shield-symbol face the defender rolls (5 dice, no choice)." This works mechanically but is much less interesting — strongly prefer declaring a ladder.
 
 ---
 
@@ -296,21 +326,31 @@ Specify any number of abilities across tiers 1–4. Each on its own block.
 strategic flexibility. Picker fires highest-tier matched, then highest-
 damage among ties.)
 
-=== DEFENSIVE LADDER (optional) ===
+=== DEFENSIVE LADDER (recommended; ~3 defenses) ===
 
-Specify defensive abilities (auto-resolved when this hero is attacked).
-Same shape as offensive — combo + effect (typically reduce-damage / heal /
-apply-status to attacker).
+Specify defensive abilities. The defender PICKS one of these when attacked
+(it's a real strategic choice, not auto-resolved). They roll the defense's
+declared dice count once — no rerolls, no locking. If the combo lands,
+the defense fires. Aim for 3 defenses with clearly different shapes.
 
-[T1] NAME
-  Combo:    <...>
-  Effect:   reduce N dmg + ...
-  Land:     <range, e.g. 50–70%>
+[D1] NAME
+  Combo:           <...>
+  Effect:          reduce N dmg + ...
+  DiceCount:       <2 | 3 | 4 | 5>      (2=quick parry, 3=standard, 4=full brace, 5=all-in)
+  Tier:            <1 | 2 | 3 | 4>      (used by the picker for tie-breaking; mostly cosmetic)
+  ShortText:       <one-line picker copy, e.g. "Reduce 4 dmg">
+  LongText:        <plain combo + effect description>
+  Target landing: <range at the rolled dice count, e.g. 60–75%>
 
-[T2] NAME      ... (same fields, target ~25–45%)
-[T3] NAME      ... (same fields, target ~8–20%)
+[D2] NAME      ... (same fields)
+[D3] NAME      ... (same fields)
 
-(If skipped, fallback is "1 dmg reduced per shield-symbol face rolled.")
+(If skipped entirely, fallback is "1 dmg reduced per shield-symbol face
+rolled, 5 dice, no choice." Strongly prefer declaring a ladder.)
+
+Skips defense entirely (defender takes full hit, no roll): undefendable /
+pure / ultimate damage. Plan some of your offensive abilities to use these
+damage types so the offense has answers to a strong defender.
 
 === CARDS (~12) ===
 

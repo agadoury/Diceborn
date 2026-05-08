@@ -81,7 +81,7 @@ Each turn moves through 8 phases in fixed order. The transitions happen in `src/
 | `income` | Active player draws 1 card and gains 1 CP (clamped to cap of 15). The first player skips their first income. | No |
 | `main-pre` | Pre-roll window. Player can play `main-phase` cards, sell cards, or hit ROLL to advance. | **Yes — must tap ROLL** |
 | `offensive-roll` | Active player rolls dice. Up to 3 attempts total. Between rolls, can lock/unlock dice and play `roll-phase` cards. | **Yes — lock dice, optionally play cards, advance when satisfied** |
-| `defensive-roll` | Opponent's dice auto-roll; their `defensiveLadder` resolves; the matched defensive ability's `reduce-damage` is the mitigation passed into the offensive ability's damage step. Then the offensive ability fires. | No |
+| `defensive-roll` | **Interactive.** Engine emits `attack-intended` and halts via `state.pendingAttack`. The defender picks one defense from their `defensiveLadder` (or "take it"); engine rolls the chosen defense's dice count once (no rerolls), evaluates, applies any reduction, then resolves the original ability's damage. Both players may play `roll-phase` and `instant` cards during this window. | **Yes — defender picks a defense via `select-defense`** (or the AI driver does so off-turn) |
 | `main-post` | Post-resolution window. Player can play `main-phase` cards, sell cards. Ends turn manually. | **Yes — must tap END TURN** |
 | `discard` | Auto-sell every card over hand cap (6) for +1 CP each, swap active player, transition into the new active player's `upkeep`. | No |
 
@@ -183,11 +183,23 @@ When the active player ends their offensive roll:
 
 Tier 4 triggers a full-screen cinematic moment via the choreographer (`ultimate-fired` event).
 
-### Defensive ladder
+### Defensive ladder (interactive — Correction 5)
 
-Optional `defensiveLadder?: AbilityDef[]`. Same shape as offensive — same combo grammar, same picker. Auto-resolved during the `defensive-roll` phase; the defender does not interact. Effects are typically `reduce-damage`, `heal`, or `apply-status` (apply a token to the attacker).
+Optional `defensiveLadder?: AbilityDef[]`. Unlike the offensive ladder, the defender **picks** which defense to attempt — there is no auto-picker. After the active player's offensive ability is locked in, the engine emits `attack-intended` and halts on `state.pendingAttack`. The defender then dispatches `select-defense { abilityIndex }`:
 
-If a hero has no defensive ladder, the engine falls back to **"1 dmg reduced per shield-symbol face the defender rolls"** (counts faces whose symbol matches a generic shield convention).
+1. **Pick** one defense from their ladder (or `null` = take the hit undefended).
+2. The engine rolls the chosen defense's `defenseDiceCount` dice **once** — no rerolls, no locking.
+3. `evaluateDefense(combo, dice)` checks whether the combo lands on the rolled dice.
+4. If it lands, the defense's effect resolves (`reduce-damage` reduces the incoming hit; `heal` self-heals; `apply-status` applies a token to the attacker).
+5. The original offensive ability's damage applies with the computed reduction.
+
+Each `AbilityDef` in the defensive ladder may declare `defenseDiceCount: 2 | 3 | 4 | 5` (default 3) — fewer dice = quick parry, more dice = full brace.
+
+**What skips the defense flow entirely:** `undefendable`, `pure`, and `ultimate` damage. The engine emits `attack-intended` with `defendable: false` and resolves damage immediately, no `select-defense` needed. (Shield + Protect tokens still apply on undefendable / ultimate per [§6](#6-damage-pipeline).)
+
+**Cards during the defensive roll:** `roll-phase` and `instant` cards are playable during the defensive roll window — including dice-manipulation cards that can flip a failed roll into a success.
+
+**Fallback if no defensive ladder is declared:** the engine falls back to "1 dmg reduced per shield-symbol face the defender rolls (5 dice, no choice)" — mechanically valid but much less interesting than a real ladder.
 
 ---
 
@@ -365,6 +377,7 @@ type Action =
   | { kind: "sell-card"; card }
   | { kind: "end-turn" }
   | { kind: "respond-to-counter"; accept }
+  | { kind: "select-defense"; abilityIndex: number | null }   // defender picks during pendingAttack
   | { kind: "concede"; player };
 ```
 
@@ -402,7 +415,8 @@ Every `applyAction` returns a new `state` and a `GameEvent[]`. Events are declar
 - `card-drawn`, `card-played`, `card-sold`, `card-discarded`
 - `dice-rolled`, `die-locked`, `die-face-changed`
 - `ladder-state-changed`, `ability-triggered`, `ultimate-fired`
-- `damage-dealt`, `hp-changed`, `heal-applied`, `defense-resolved`
+- `attack-intended`, `defense-intended`, `defense-dice-rolled`, `defense-resolved` — the four-event defensive flow ([§5](#5-ability-ladders))
+- `damage-dealt`, `hp-changed`, `heal-applied`
 - `status-applied`, `status-ticked`, `status-removed`, `status-triggered`
 - `hero-state` (idle/hit/defended/low-hp-enter/low-hp-exit/victorious/defeated)
 - `cp-changed`, `counter-prompt`, `counter-resolved`
@@ -412,6 +426,35 @@ Every `applyAction` returns a new `state` and a `GameEvent[]`. Events are declar
 `src/components/effects/Choreographer.tsx`. Consumes the event queue from `choreoStore`, plays each event as a timed beat, and gates UI input via `useInputUnlocked()`. The store enqueues events but does not block — UI components disable themselves while the queue drains.
 
 This separation is what gives the game its juice: the engine resolves a turn instantly (a few ms), and the presentation layer takes 2–6 seconds to *show* it — dice tumble, hit-stops, screen shake, status-token slam-ins, ability cinematics.
+
+### The defensive flow as events
+
+When an attack lands, the engine emits a small sequence of events that walk both players through the decision-and-resolution loop:
+
+```
+ability-triggered                     ← attacker's ability locks in
+  ↓
+[ultimate-fired]                      ← only if Tier 4
+  ↓
+attack-intended                       ← engine sets state.pendingAttack and halts
+                                          ─┐
+                                           │ DefenseSelectLayer renders, defender
+                                           │ picks one defense (or "take it").
+                                           │ AI driver dispatches off-turn for AI defenders.
+                                           │
+                                           ▼
+                                        select-defense action
+                                        (engine resumes, emits the rest:)
+defense-intended                      ← which defense was chosen + dice count
+  ↓
+defense-dice-rolled                   ← single roll, no rerolls / no locking
+  ↓
+defense-resolved                      ← combo landed (with reduction) or fizzled
+  ↓
+damage-dealt + hp-changed             ← attack damage applied with reduction
+```
+
+For `undefendable` / `pure` / `ultimate` damage, the flow short-circuits — `attack-intended` carries `defendable: false` and `damage-dealt` follows immediately with no defense events between.
 
 ### Why a module-level subscriber, not useEffect
 
@@ -448,6 +491,10 @@ The split exists so that the engine reducer never touches presentation state, an
 - Card play timing (main-phase vs. roll-phase windows)
 
 Three difficulty bands are exposed but only Medium is currently calibrated. Easy is intentionally noisy; Hard is unfinished. The AI runs on the same engine as the player — no shortcuts, no privileged information, same `applyAction` calls.
+
+### AI on defense
+
+When a `pendingAttack` targets the AI player, the AI driver dispatches `select-defense` from off-turn. The current heuristic picks the highest-tier defense available; future iterations should weigh it on the incoming damage value, the defense's landing rate at its declared dice count, and remaining HP.
 
 ---
 
@@ -505,9 +552,12 @@ From `src/game/types.ts`:
 ## 16. Glossary
 
 - **Active player** — whose turn it currently is (`state.activePlayer`).
+- **Attack-intended** — engine event marking the start of the defensive flow; `state.pendingAttack` is set, the engine halts until `select-defense` arrives.
 - **Combo** — a dice condition that fires an ability. See [§4](#4-dice--the-combo-grammar).
 - **CP** — Combat Points. Shared spendable resource. Cap 15.
-- **Defensive ladder** — optional per-hero set of defensive abilities, auto-resolved when attacked.
+- **Defendable damage** — `normal` and `collateral` types; runs through the defensive ladder picker. `undefendable` / `pure` / `ultimate` skip the picker entirely.
+- **Defense dice count** — `AbilityDef.defenseDiceCount` (2–5, default 3); how many dice the defender rolls when this defense is picked. Single roll, no rerolls.
+- **Defensive ladder** — per-hero set of defensive abilities the defender picks from when attacked. Single-roll resolution per the chosen defense's dice count.
 - **Effect** — `AbilityEffect` — what an ability or card does (damage, heal, status, etc.).
 - **Event** — `GameEvent` — typed record of one thing that happened during action resolution.
 - **Hero snapshot** — `HeroSnapshot` — a player's full live state (HP, CP, dice, hand, deck, statuses, ladder state).

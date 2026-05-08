@@ -35,6 +35,7 @@ import {
   classifyCrit,
   rollUnlocked,
 } from "./dice";
+import { nextInt } from "./rng";
 
 // ── Phase transition table ──────────────────────────────────────────────────
 const NEXT: Record<Phase, Phase> = {
@@ -195,15 +196,27 @@ export function performRoll(state: GameState): OffensiveResolveResult {
   };
 }
 
-// ── Resolve the highest-tier matched ability (called when Offensive roll ends) ─
-export function resolveOffensiveAbility(state: GameState): GameEvent[] {
+// ── Begin attack — picker + pause for defender's choice ────────────────────
+/**
+ * Picks the highest-tier matched offensive ability and emits the lead-up
+ * events (`ability-triggered` + optional `ultimate-fired` + `attack-intended`).
+ *
+ * For undefendable / pure / ultimate damage types: there is no defense, so
+ * we resolve damage immediately within this call.
+ *
+ * For normal / collateral damage types: we stash a `pendingAttack` on
+ * `state` and return — engine.ts halts here until a `select-defense`
+ * action arrives.
+ *
+ * Returns events emitted so far. State.pendingAttack indicates the halt.
+ */
+export function beginAttack(state: GameState): GameEvent[] {
   const events: GameEvent[] = [];
   const active = state.players[state.activePlayer];
   const opponent = state.players[other(state.activePlayer)];
   const hero = getHero(active.hero);
 
-  // Picker: highest tier among matched abilities, then highest base damage
-  // among ties. Works with any ability count per tier.
+  // Picker: highest tier matched, then highest base damage among ties.
   const faces = active.dice.map(d => d.faces[d.current]);
   let firingIndex = -1;
   let firingTier = -1;
@@ -218,25 +231,18 @@ export function resolveOffensiveAbility(state: GameState): GameEvent[] {
       firingBaseDamage = dmg;
     }
   }
-  if (firingIndex < 0) {
-    // Nothing fired — the player's offensive turn produced no ability.
-    return events;
-  }
+  if (firingIndex < 0) return events;        // nothing landed — turn fizzled.
 
   const ability = hero.abilityLadder[firingIndex];
   const isCritical = classifyCrit(ability, active.dice);
-
-  // Damage bonus aggregator. Hero signature passives (e.g. on-low-HP stack
-  // bonuses) plug in here once new content is registered. For now: only
-  // ability-tier upgrades + transient nextAbilityBonusDamage from cards.
   const upgradeBonus =
     ability.tier === 1 ? (active.upgrades[1] ?? 0) * 1 :
     ability.tier === 3 ? (active.upgrades[3] ?? 0) * 2 :
     0;
-  let damageBonus = upgradeBonus + active.nextAbilityBonusDamage;
-  // Crit: minor +1, major +50% (rounded up).
-  // Note: major (Tier 4) crit's damage scaling happens after we know base damage.
-  active.nextAbilityBonusDamage = 0;       // consumed.
+  const damageBonus = upgradeBonus + active.nextAbilityBonusDamage;
+  active.nextAbilityBonusDamage = 0;
+  const critFlat = isCritical === "minor" ? 1 : 0;
+  const critMul  = isCritical === "major" ? 1.5 : 1;
 
   events.push({
     t: "ability-triggered",
@@ -248,137 +254,234 @@ export function resolveOffensiveAbility(state: GameState): GameEvent[] {
   if (ability.tier === 4) {
     events.push({ t: "ultimate-fired", player: active.player, abilityName: ability.name, isCritical: !!isCritical });
   }
-  void damageBonus;  // damageBonus is consumed by resolveAbilityEffect below.
 
-  // Defensive roll for normal/ultimate/collateral damage.
-  let defensiveReduction = 0;
-  if (ability.damageType === "normal" || ability.damageType === "ultimate" || ability.damageType === "collateral") {
-    const def = autoResolveDefense(state, opponent);
-    defensiveReduction = def.reduction;
-    events.push(...def.events);
+  const defendable = ability.damageType === "normal" || ability.damageType === "collateral";
+  const incomingAmount = computeIncomingAmount(ability.effect, ability.combo, faces, damageBonus, critFlat, critMul);
+
+  events.push({
+    t: "attack-intended",
+    attacker: active.player,
+    defender: opponent.player,
+    abilityName: ability.name,
+    tier: ability.tier,
+    damageType: ability.damageType,
+    incomingAmount,
+    defendable,
+  });
+
+  if (!defendable) {
+    // Undefendable / pure / ultimate: skip the defense flow entirely.
+    events.push(...applyAttackEffects(state, firingIndex, faces, damageBonus, critFlat, critMul, isCritical, /*defensiveReduction*/ 0));
+    return events;
   }
 
-  // Resolve the ability effect, with bonus + crit modulation.
-  // For minor crit: +1 dmg flat per damage-leaf in the effect tree.
-  // For major crit: +50% rounded up per damage-leaf in the effect tree.
-  const critFlat = isCritical === "minor" ? 1 : 0;
-  const critMul  = isCritical === "major" ? 1.5 : 1;
+  // Stash pending attack and return — engine waits for select-defense action.
+  state.pendingAttack = {
+    attacker: active.player,
+    defender: opponent.player,
+    abilityIndex: firingIndex,
+    abilityName: ability.name,
+    tier: ability.tier,
+    damageType: ability.damageType,
+    incomingAmount,
+    damageBonus,
+    critFlat,
+    critMul,
+    isCritical,
+    firingFaces: faces,
+  };
+  return events;
+}
 
-  const baseEvents = resolveAbilityEffect(state, ability.effect, {
+/** Estimate the maximum damage this attack could deal, pre-defense, used for
+ *  the defender's overlay ("incoming X damage"). Mirrors the actual resolver
+ *  for damage / scaling-damage / compound, with crit + bonus applied. */
+function computeIncomingAmount(
+  effect: import("./types").AbilityEffect,
+  firingCombo: import("./types").DiceCombo,
+  firingFaces: ReadonlyArray<import("./types").DieFace>,
+  damageBonus: number,
+  critFlat: number,
+  critMul: number,
+): number {
+  switch (effect.kind) {
+    case "damage":
+      return Math.ceil(effect.amount * critMul + critFlat) + damageBonus;
+    case "scaling-damage": {
+      const extras = computeComboExtras(firingCombo, firingFaces);
+      const clamped = Math.min(extras, effect.maxExtra);
+      const baseAmt = effect.baseAmount + clamped * effect.perExtra;
+      return Math.ceil(baseAmt * critMul + critFlat) + damageBonus;
+    }
+    case "compound":
+      return effect.effects.reduce((acc, e) => acc + computeIncomingAmount(e, firingCombo, firingFaces, damageBonus, critFlat, critMul), 0);
+    default:
+      return 0;
+  }
+}
+
+// ── Defender selects a defense — single roll, resolve, apply damage ────────
+/**
+ * Called from engine.ts when the defender dispatches `select-defense`.
+ * Resolves the chosen defense (or skip), then applies the attack effects
+ * with the computed reduction, then runs on-hit + CP triggers + lethal.
+ *
+ * Returns events emitted, and clears `state.pendingAttack`.
+ */
+export function resolveDefenseChoice(state: GameState, abilityIndex: number | null): GameEvent[] {
+  const events: GameEvent[] = [];
+  const pa = state.pendingAttack;
+  if (!pa) return events;
+
+  const defender = state.players[pa.defender];
+  const defHero = getHero(defender.hero);
+  const dl = defHero.defensiveLadder;
+
+  let reduction = 0;
+  let matchedTier: 1 | 2 | 3 | 4 | undefined;
+  let matchedName: string | undefined;
+  let landed = false;
+
+  if (abilityIndex == null || !dl || dl.length === 0 || abilityIndex < 0 || abilityIndex >= dl.length) {
+    // Defender chose to take it (or has no defenses).
+    events.push({ t: "defense-intended", defender: defender.player, abilityIndex: null });
+    events.push({
+      t: "defense-resolved",
+      player: defender.player,
+      reduction: 0,
+      landed: false,
+    });
+  } else {
+    const chosen = dl[abilityIndex];
+    const diceCount = chosen.defenseDiceCount ?? 3;
+    events.push({
+      t: "defense-intended",
+      defender: defender.player,
+      abilityIndex,
+      abilityName: chosen.name,
+      diceCount,
+    });
+
+    // Single roll of the chosen number of dice. We reuse the defender's die
+    // shape (their hero faces) but only roll `diceCount` of them. The rest
+    // of the defender's dice array is untouched (they're not "in play" for
+    // this defense). UI fades unused slots.
+    const rolledFaces: import("./types").DieFace[] = [];
+    const rolledDescriptors: { index: number; current: number; symbol: string }[] = [];
+    const dieFaceCount = defender.dice[0]?.faces.length ?? 6;
+    for (let i = 0; i < diceCount; i++) {
+      const r = nextInt(state.rngSeed, state.rngCursor, dieFaceCount);
+      state.rngCursor = r.cursor;
+      const face = defender.dice[0]!.faces[r.value];
+      rolledFaces.push(face);
+      // Mirror the roll into the defender's dice array so the UI can render
+      // the rolled values (the first `diceCount` slots are "in play").
+      defender.dice[i].current = r.value;
+      defender.dice[i].locked = false;
+      rolledDescriptors.push({ index: i, current: r.value, symbol: face.symbol });
+    }
+    // Mark unused defender dice as visually inactive (locked = true acts as
+    // the "not in play" signal for the renderer).
+    for (let i = diceCount; i < defender.dice.length; i++) defender.dice[i].locked = true;
+
+    events.push({
+      t: "defense-dice-rolled",
+      player: defender.player,
+      dice: rolledDescriptors,
+      abilityName: chosen.name,
+    });
+
+    // Did the chosen defense's combo land on the rolled dice?
+    const matched = comboMatchesFaces(chosen.combo, rolledFaces);
+    if (matched) {
+      landed = true;
+      matchedTier = chosen.tier;
+      matchedName = chosen.name;
+      const r = resolveDefensiveEffect(chosen.effect, {
+        defender,
+        attacker: state.players[pa.attacker],
+        firingCombo: chosen.combo,
+        firingFaces: rolledFaces,
+      });
+      reduction += r.reduction;
+      events.push(...r.events);
+    }
+
+    events.push({
+      t: "defense-resolved",
+      player: defender.player,
+      reduction,
+      matchedTier,
+      abilityName: matchedName,
+      landed,
+    });
+    if (reduction >= 2) {
+      events.push({ t: "hero-state", player: defender.player, state: "defended" });
+    }
+    // Generic CP-gain triggers tied to successful defense.
+    if (landed && reduction >= 1) {
+      for (const trig of defHero.resourceIdentity.cpGainTriggers) {
+        if (trig.on === "successfulDefense") events.push(...gainCp(defender, trig.gain));
+      }
+    }
+  }
+
+  // Apply the attack effects with the computed reduction.
+  events.push(...applyAttackEffects(
+    state,
+    pa.abilityIndex,
+    pa.firingFaces,
+    pa.damageBonus,
+    pa.critFlat,
+    pa.critMul,
+    pa.isCritical,
+    reduction,
+  ));
+
+  state.pendingAttack = undefined;
+  return events;
+}
+
+/** Apply the picked offensive ability's effects + on-hit + CP triggers + lethal.
+ *  Shared between the undefendable branch in `beginAttack` and the
+ *  defendable resolution in `resolveDefenseChoice`. */
+function applyAttackEffects(
+  state: GameState,
+  abilityIndex: number,
+  firingFaces: ReadonlyArray<import("./types").DieFace>,
+  damageBonus: number,
+  critFlat: number,
+  critMul: number,
+  isCritical: "minor" | "major" | false,
+  defensiveReduction: number,
+): GameEvent[] {
+  const events: GameEvent[] = [];
+  const active = state.players[state.activePlayer];
+  const opponent = state.players[other(state.activePlayer)];
+  const hero = getHero(active.hero);
+  const ability = hero.abilityLadder[abilityIndex];
+
+  events.push(...resolveAbilityEffect(state, ability.effect, {
     caster: active, opponent,
     damageBonus, defensiveReduction, critFlat, critMul,
     firingCombo: ability.combo,
-    firingFaces: faces,
-  });
-  events.push(...baseEvents);
+    firingFaces,
+  }));
 
-  // On-hit signature application (Bleeding for Barbarian).
+  // On-hit signature application.
   if (hero.onHitApplyStatus) {
     let stacks = hero.onHitApplyStatus.stacks;
     if (isCritical) stacks += 1;
     events.push(...applyStatus(opponent, active.player, hero.onHitApplyStatus.status, stacks));
   }
 
-  // Resource gain: hero's CP triggers (Barbarian: +1 CP on ability landed).
+  // Resource gain: +CP on ability landed.
   for (const trig of hero.resourceIdentity.cpGainTriggers) {
     if (trig.on === "abilityLanded") events.push(...gainCp(active, trig.gain));
   }
 
-  // Lethal check.
-  if (opponent.hp <= 0) {
-    events.push(...endMatch(state, active.player));
-  }
+  if (opponent.hp <= 0) events.push(...endMatch(state, active.player));
   return events;
-}
-
-// ── Defensive auto-resolve ─────────────────────────────────────────────────
-function autoResolveDefense(
-  state: GameState,
-  defender: HeroSnapshot,
-): { reduction: number; events: GameEvent[] } {
-  const events: GameEvent[] = [];
-  // Reset locks on the defender's dice and reroll all (defense is fresh).
-  for (const d of defender.dice) d.locked = false;
-  rollUnlocked(state, defender.dice);
-  events.push({
-    t: "dice-rolled",
-    player: defender.player,
-    dice: defender.dice.map(d => ({ index: d.index, current: d.current, symbol: d.faces[d.current].symbol, locked: d.locked })),
-    attemptNumber: 1,
-  });
-
-  const defHero = getHero(defender.hero);
-  const attacker = state.players[other(defender.player)];
-  const faces = defender.dice.map(d => d.faces[d.current]);
-  let reduction = 0;
-  let matchedTier: 1 | 2 | 3 | 4 | undefined;
-  let matchedAbilityName: string | undefined;
-
-  // Evaluate the hero's defensive ladder if declared. Picker is the same
-  // highest-tier-then-highest-reduction policy as the offensive ladder.
-  const dl = defHero.defensiveLadder;
-  if (dl && dl.length > 0) {
-    let bestIdx = -1;
-    let bestTier = -1;
-    let bestReduction = -Infinity;
-    for (let i = 0; i < dl.length; i++) {
-      if (!comboMatchesFaces(dl[i].combo, faces)) continue;
-      const a = dl[i];
-      const r = effectReductionAmount(a.effect);
-      if (a.tier > bestTier || (a.tier === bestTier && r > bestReduction)) {
-        bestIdx = i;
-        bestTier = a.tier;
-        bestReduction = r;
-      }
-    }
-    if (bestIdx >= 0) {
-      const ability = dl[bestIdx];
-      matchedTier = ability.tier;
-      matchedAbilityName = ability.name;
-      const r = resolveDefensiveEffect(ability.effect, {
-        defender, attacker, firingCombo: ability.combo, firingFaces: faces,
-      });
-      reduction += r.reduction;
-      events.push(...r.events);
-    }
-  } else {
-    // Legacy fallback — heroes without a declared defensiveLadder still get
-    // the simple shield-face reduction so existing content keeps working.
-    for (const d of defender.dice) {
-      if (d.faces[d.current].symbol.endsWith(":shield")) reduction++;
-    }
-  }
-
-  events.push({
-    t: "defense-resolved",
-    player: defender.player,
-    reduction,
-    matchedTier,
-    abilityName: matchedAbilityName,
-  });
-  if (reduction >= 2) events.push({ t: "hero-state", player: defender.player, state: "defended" });
-
-  // Hero-specific defense-time passives plug in here when content is
-  // registered. Engine dispatches on the hero's signatureMechanic.implementation.kind.
-
-  // Generic CP-gain triggers tied to successful defense.
-  if (reduction >= 1) {
-    for (const trig of defHero.resourceIdentity.cpGainTriggers) {
-      if (trig.on === "successfulDefense") events.push(...gainCp(defender, trig.gain));
-    }
-  }
-  void attacker;
-  return { reduction, events };
-}
-
-/** Sum reduce-damage amounts across an effect tree — used by the picker so
- *  defensive abilities are compared on their reduction value. */
-function effectReductionAmount(effect: import("./types").AbilityEffect): number {
-  switch (effect.kind) {
-    case "reduce-damage": return effect.amount;
-    case "compound":      return effect.effects.reduce((a, e) => a + effectReductionAmount(e), 0);
-    default:              return 0;
-  }
 }
 
 interface DefenseCtx {

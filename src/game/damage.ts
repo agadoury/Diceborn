@@ -3,9 +3,17 @@
  *
  * Order of operations on incoming damage:
  *   1. Pure damage:         skips Shield + Protect. Directly subtracts HP.
- *   2. Undefendable damage: skips defensive roll mitigation, but Shield + Protect still apply.
- *   3. Normal damage:       Shield (passive flat) → Protect (consumed) → defensive-roll reduction (engine.ts handles separately) → HP.
- *   4. Ultimate damage:     same as normal but cannot be cancelled by reactive cards.
+ *   2. Undefendable damage: skips the defender's chosen-defense reduction
+ *                            (the defensive flow is short-circuited entirely
+ *                            for this damage type — see phases.ts beginAttack),
+ *                            but Shield + Protect still apply.
+ *   3. Normal damage:       Shield (passive flat) → Protect (consumed) → defender's
+ *                            chosen-defense reduction (computed by phases.ts and
+ *                            passed in via `defensiveReduction`) → HP.
+ *   4. Ultimate damage:     same as normal but reactive cards may be locked out;
+ *                            the defender still picks one defense (or "take it").
+ *                            (Spec note: ultimate is currently classified as
+ *                            non-defendable in beginAttack — it skips the picker.)
  *
  * Healing clamps to hpCap (start + 10).
  */

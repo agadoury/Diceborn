@@ -29,7 +29,7 @@ import { getCustomHandler, canPlay, drawCards, sellCard, gainCp, resolveEffect, 
 import { stacksOf } from "./status";
 import { buildDeck } from "./cards";
 import {
-  enterPhase, performRoll, resolveOffensiveAbility, emitLadderState, other, endMatch,
+  enterPhase, performRoll, beginAttack, resolveDefenseChoice, emitLadderState, other, endMatch,
 } from "./phases";
 import { coinFlip } from "./rng";
 
@@ -47,6 +47,7 @@ export function applyAction(state: GameState, action: Action): ApplyResult {
     case "sell-card":       events.push(...sellCardAction(next, action.card)); break;
     case "end-turn":        events.push(...endTurn(next)); break;
     case "respond-to-counter": events.push(...respondToCounter(next, action.accept)); break;
+    case "select-defense":  events.push(...selectDefense(next, action.abilityIndex)); break;
     case "concede":         events.push(...endMatch(next, other(action.player))); break;
   }
 
@@ -146,14 +147,19 @@ function advancePhase(state: GameState): GameEvent[] {
         events.push(...enterPhase(state, "offensive-roll"));
       }
       return events;
-    case "offensive-roll":
-      // Resolve highest matched ability (if any) → defensive-roll → main-post.
-      events.push(...resolveOffensiveAbility(state));
-      if (state.winner) return events;
+    case "offensive-roll": {
+      // Picker → emit attack-intended. For defendable damage, halt with
+      // pendingAttack set; the defender's `select-defense` action resumes.
+      // For undefendable / pure / ultimate, beginAttack resolves damage
+      // inline and we proceed straight to main-post.
       events.push(...enterPhase(state, "defensive-roll"));
+      events.push(...beginAttack(state));
+      if (state.pendingAttack) return events;          // halted — wait for select-defense
+      if (state.winner) return events;
       events.push(...enterPhase(state, "main-post"));
       events.push(...emitLadderState(state, getHero(state.players[state.activePlayer].hero), state.players[state.activePlayer]));
       return events;
+    }
     case "main-post":
       events.push(...enterPhase(state, "discard"));
       events.push(...passTurn(state));
@@ -278,6 +284,19 @@ function sellCardAction(state: GameState, cardId: string): GameEvent[] {
   return sellCard(state.players[state.activePlayer], cardId);
 }
 
+/** Defender's response to a `pendingAttack`. Resolves the chosen defense
+ *  (or skip), applies damage with the resulting reduction, then proceeds
+ *  to main-post. */
+function selectDefense(state: GameState, abilityIndex: number | null): GameEvent[] {
+  if (!state.pendingAttack) return [];
+  const events: GameEvent[] = [];
+  events.push(...resolveDefenseChoice(state, abilityIndex));
+  if (state.winner) return events;
+  events.push(...enterPhase(state, "main-post"));
+  events.push(...emitLadderState(state, getHero(state.players[state.activePlayer].hero), state.players[state.activePlayer]));
+  return events;
+}
+
 function respondToCounter(state: GameState, accept: boolean): GameEvent[] {
   const pending = state.pendingCounter;
   if (!pending) return [];
@@ -309,6 +328,7 @@ function cloneState(state: GameState): GameState {
       p2: clonePlayer(state.players.p2),
     },
     log: state.log.slice(),
+    pendingAttack: state.pendingAttack ? { ...state.pendingAttack } : undefined,
   };
 }
 function clonePlayer(p: HeroSnapshot | undefined): HeroSnapshot {

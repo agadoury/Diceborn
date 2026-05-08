@@ -22,8 +22,11 @@ import { stacksOf } from "./status";
 
 // ── Top-level driver: returns the next action the AI wants to take. ─────────
 export function nextAiAction(state: GameState, ai: PlayerId): Action {
+  // Off-turn: AI may need to respond to a pendingAttack against itself.
+  if (state.pendingAttack && state.pendingAttack.defender === ai) {
+    return { kind: "select-defense", abilityIndex: pickBestDefense(state, ai) };
+  }
   if (state.activePlayer !== ai) {
-    // Defensive moves: in MVP defense is auto-resolved, so the AI never acts off-turn.
     if (state.pendingCounter && state.pendingCounter.holder === ai) {
       return { kind: "respond-to-counter", accept: shouldAcceptCounter(state, ai) };
     }
@@ -40,6 +43,21 @@ export function nextAiAction(state: GameState, ai: PlayerId): Action {
     case "discard":        return { kind: "advance-phase" };
     case "match-end":      return { kind: "advance-phase" };
   }
+}
+
+/** Pick the highest-tier defense available — same intuition as the old
+ *  auto-resolver's picker. Returns null if the defender has no ladder. */
+function pickBestDefense(state: GameState, ai: PlayerId): number | null {
+  const me = state.players[ai];
+  const hero = getHero(me.hero);
+  const dl = hero.defensiveLadder;
+  if (!dl || dl.length === 0) return null;
+  let bestIdx = 0;
+  let bestTier = -1;
+  for (let i = 0; i < dl.length; i++) {
+    if (dl[i].tier > bestTier) { bestTier = dl[i].tier; bestIdx = i; }
+  }
+  return bestIdx;
 }
 
 // ── Main pre-roll: play cards, then ROLL ────────────────────────────────────

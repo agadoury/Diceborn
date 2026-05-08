@@ -125,7 +125,10 @@ function formatEvent(ev: GameEvent): string | null {
     case "ultimate-fired":     return `ULTIMATE: ${ev.abilityName}${ev.isCritical ? "  CRIT!" : ""}`;
     case "damage-dealt":       return `${ev.amount} ${ev.type} dmg → ${p(ev.to)}${ev.mitigated ? `  (-${ev.mitigated} mit)` : ""}`;
     case "heal-applied":       return `${p(ev.player)} heals ${ev.amount}`;
-    case "defense-resolved":   return ev.reduction > 0 ? `${p(ev.player)} blocked ${ev.reduction}` : null;
+    case "attack-intended":    return `${p(ev.attacker)} → ${ev.abilityName} (${ev.incomingAmount} ${ev.defendable ? "def?" : "unblockable"})`;
+    case "defense-intended":   return ev.abilityIndex == null ? `${p(ev.defender)} takes the hit` : `${p(ev.defender)} braces with ${ev.abilityName} (${ev.diceCount}d)`;
+    case "defense-dice-rolled": return `${p(ev.player)} rolls ${ev.dice.length}d`;
+    case "defense-resolved":   return ev.landed ? `${p(ev.player)} blocked ${ev.reduction}` : (ev.abilityName ? `${p(ev.player)}'s ${ev.abilityName} fizzled` : null);
     case "status-applied":     return `${p(ev.holder)} +${ev.stacks} ${ev.status}`;
     case "status-ticked":      return ev.effect === "decrement" ? null : `${p(ev.holder)} ${ev.status}: ${ev.effect} ${ev.amount}`;
     case "status-removed":     return `${p(ev.holder)} loses ${ev.status}`;

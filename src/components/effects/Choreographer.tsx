@@ -30,6 +30,7 @@ import { AttackEffectLayer } from "./AttackEffect";
 import { Banner } from "./Banner";
 import { ActionLog } from "./ActionLog";
 import { InstantPromptLayer } from "./InstantPrompt";
+import { DefenseSelectLayer } from "./DefenseSelect";
 import { useGameStore } from "@/store/gameStore";
 import { getHero } from "@/content";
 import type { HeroId, PlayerId } from "@/game/types";
@@ -47,6 +48,7 @@ export function Choreographer({ children }: Props) {
       <Banner />
       <ActionLog />
       <InstantPromptLayer />
+      <DefenseSelectLayer />
     </ScreenShake>
   );
 }
@@ -72,6 +74,10 @@ function pump(): void {
   if (s.instantPrompt) return;    // paused while waiting for player to respond
   if (s.playing) return;
   if (s.queue.length === 0) return;
+  // Note: when `pendingAttack` is set on the game store, the engine has
+  // already enqueued `attack-intended` and stopped — once that beat plays
+  // the queue empties on its own and the DefenseSelectLayer (gated on
+  // input-unlocked) takes the floor.
 
   const ev = s.queue[0];
   s.startNext(ev);
@@ -285,7 +291,17 @@ function playEvent(ev: GameEvent, ctx: PlayCtx): number {
       return 800;
     }
 
-    case "defense-resolved":   return ev.reduction > 0 ? 1100 : 500;
+    case "attack-intended": {
+      // Pause/anticipation beat — choreographer holds while the defender
+      // picks (the DefenseSelectLayer renders next). Short on its own;
+      // the real wait is behind the overlay.
+      ctx.setBanner(`${ev.attacker.toUpperCase()} → ${ev.abilityName.toUpperCase()}`);
+      setTimeout(() => ctx.setBanner(null), 900);
+      return 900;
+    }
+    case "defense-intended":     return ev.abilityIndex == null ? 350 : 600;
+    case "defense-dice-rolled":  return 1100;          // tumble + settle, like dice-rolled
+    case "defense-resolved":     return ev.reduction > 0 ? 1100 : 500;
 
     case "status-applied":
       vibrate("card-play"); return 700;

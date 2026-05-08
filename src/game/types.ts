@@ -85,6 +85,10 @@ export interface AbilityDef {
   longText: string;
   damageType: DamageType;
   targetLandingRate: [number, number];  // used by simulate.ts for tuning audit
+  /** Defensive ladder only: how many dice the defender rolls when this defense
+   *  is chosen. Single roll, no rerolls, no locking. Default 3 if unspecified.
+   *  Offensive abilities ignore this field — they always roll 5 with rerolls. */
+  defenseDiceCount?: 2 | 3 | 4 | 5;
 }
 
 // ── Cards ───────────────────────────────────────────────────────────────────
@@ -190,6 +194,29 @@ export interface HeroSnapshot {
 }
 
 // ── GameState (immutable; mutate only via applyAction) ──────────────────────
+/** Held during the defensive flow: after the offensive ability is picked
+ *  but before damage lands. Cleared once the defender's `select-defense`
+ *  action resolves (or instantly, for undefendable / pure / ultimate). */
+export interface PendingAttack {
+  attacker: PlayerId;
+  defender: PlayerId;
+  /** Index into the attacker hero's `abilityLadder`. */
+  abilityIndex: number;
+  abilityName: string;
+  tier: AbilityTier;
+  damageType: DamageType;
+  /** Pre-defense damage estimate (post crit + bonuses) — for the defender's
+   *  selection overlay to show "incoming X damage". */
+  incomingAmount: number;
+  damageBonus: number;
+  critFlat: number;
+  critMul: number;
+  isCritical: "minor" | "major" | false;
+  /** Snapshot of attacker's firing dice so scaling-damage can be computed
+   *  after the defense resolves. */
+  firingFaces: readonly DieFace[];
+}
+
 export interface GameState {
   rngSeed: number;
   rngCursor: number;
@@ -200,6 +227,8 @@ export interface GameState {
   phase: Phase;
   players: Record<PlayerId, HeroSnapshot>;
   pendingCounter?: { card: Card; holder: PlayerId; expiresAt: number };
+  /** Defensive flow halt — present while waiting for defender's `select-defense`. */
+  pendingAttack?: PendingAttack;
   log: LogEntry[];
   winner?: PlayerId | "draw";
 }
@@ -216,6 +245,10 @@ export type Action =
   | { kind: "sell-card"; card: CardId }
   | { kind: "end-turn" }
   | { kind: "respond-to-counter"; accept: boolean }
+  /** Defender's response to a `pendingAttack`. `abilityIndex` is into the
+   *  defender hero's `defensiveLadder`; `null` means "take the hit
+   *  undefended" (also used when the defender has no defenses available). */
+  | { kind: "select-defense"; abilityIndex: number | null }
   | { kind: "concede"; player: PlayerId };
 
 // ── GameEvent (the choreography contract) ───────────────────────────────────
@@ -238,7 +271,13 @@ export type GameEvent =
   | { t: "ultimate-fired"; player: PlayerId; abilityName: string; isCritical: boolean }
   | { t: "damage-dealt"; from: PlayerId; to: PlayerId; amount: number; type: DamageType; mitigated: number }
   | { t: "heal-applied"; player: PlayerId; amount: number }
-  | { t: "defense-resolved"; player: PlayerId; reduction: number; matchedTier?: AbilityTier; abilityName?: string }
+  /** Attack picked, paused for defender to choose their defense. */
+  | { t: "attack-intended"; attacker: PlayerId; defender: PlayerId; abilityName: string; tier: AbilityTier; damageType: DamageType; incomingAmount: number; defendable: boolean }
+  /** Defender has chosen which defense (or null = take-it-undefended). */
+  | { t: "defense-intended"; defender: PlayerId; abilityIndex: number | null; abilityName?: string; diceCount?: number }
+  /** Single defensive roll, no rerolls, no locking. */
+  | { t: "defense-dice-rolled"; player: PlayerId; dice: ReadonlyArray<{ index: number; current: number; symbol: SymbolId }>; abilityName: string }
+  | { t: "defense-resolved"; player: PlayerId; reduction: number; matchedTier?: AbilityTier; abilityName?: string; landed: boolean }
   | { t: "status-applied"; status: StatusId; holder: PlayerId; applier: PlayerId; stacks: number; total: number }
   | { t: "status-ticked"; status: StatusId; holder: PlayerId; effect: "damage" | "heal" | "decrement"; amount: number; stacksRemaining: number }
   | { t: "status-removed"; status: StatusId; holder: PlayerId; reason: "expired" | "stripped" | "ignited" }

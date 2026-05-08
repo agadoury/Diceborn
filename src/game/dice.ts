@@ -107,6 +107,16 @@ export function comboMatchesFaces(combo: DiceCombo, faces: ReadonlyArray<DieFace
 }
 
 
+// ── Defense evaluation (single-pass; no rerolls / reachability) ─────────────
+/** Sibling of `evaluateLadder` for the defensive flow. The defender rolls
+ *  their chosen defense's `defenseDiceCount` dice once — no rerolls, no
+ *  locking — and we just need to know "did the combo land?" That's a
+ *  one-shot face match, exactly what `comboMatchesFaces` already does. */
+export function evaluateDefense(combo: DiceCombo, dice: ReadonlyArray<Die>): boolean {
+  const faces = dice.map(d => d.faces[d.current]);
+  return comboMatchesFaces(combo, faces);
+}
+
 // ── Damage extraction (for LETHAL calculation) ──────────────────────────────
 /** Walk an effect tree and sum all `damage` amounts (excluding self-damage and pure self-damage). */
 export function effectDamageOnOpponent(effect: AbilityEffect): number {
