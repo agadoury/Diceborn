@@ -26,6 +26,8 @@ export function sfxForEvent(ev: GameEvent): Sfx | null {
     case "ultimate-fired":     return "ult-sting";
     case "damage-dealt":       return ev.amount > 0 ? "damage-thud" : null;
     case "heal-applied":       return "heal-shimmer";
+    case "offensive-pick-prompt":  return "ui-tap";
+    case "offensive-choice-made":  return ev.abilityIndex == null ? "ui-back" : "ui-tap";
     case "attack-intended":    return "ability-sting";
     case "defense-intended":   return ev.abilityIndex == null ? null : "ui-tap";
     case "defense-dice-rolled": return null;          // DiceTray will play its tumble cue

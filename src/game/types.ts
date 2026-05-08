@@ -490,6 +490,23 @@ export interface GameState {
   phase: Phase;
   players: Record<PlayerId, HeroSnapshot>;
   pendingCounter?: { card: Card; holder: PlayerId; expiresAt: number };
+  /** Offensive picker halt — set when the active player ends their offensive
+   *  roll with one or more matching abilities. Cleared once the player
+   *  dispatches `select-offensive-ability`. */
+  pendingOffensiveChoice?: {
+    attacker: PlayerId;
+    defender: PlayerId;
+    /** All abilities currently matched, sorted highest-tier-first then
+     *  highest-base-damage-first. The UI lists them in this order. */
+    matches: ReadonlyArray<{
+      abilityIndex: number;
+      abilityName: string;
+      tier: AbilityTier;
+      baseDamage: number;
+      damageType: DamageType;
+      shortText: string;
+    }>;
+  };
   /** Defensive flow halt — present while waiting for defender's `select-defense`. */
   pendingAttack?: PendingAttack;
   /** Bankable-passive spend prompt — set when the engine is about to resolve
@@ -520,6 +537,10 @@ export type Action =
   | { kind: "sell-card"; card: CardId }
   | { kind: "end-turn" }
   | { kind: "respond-to-counter"; accept: boolean }
+  /** Active player's response to a `pendingOffensiveChoice`. `abilityIndex`
+   *  is into the attacker's `abilityLadder`. `null` means "decline to fire"
+   *  — the offensive turn fizzles (then `offensiveFallback` is checked). */
+  | { kind: "select-offensive-ability"; abilityIndex: number | null }
   /** Defender's response to a `pendingAttack`. `abilityIndex` is into the
    *  defender hero's `defensiveLadder`; `null` means "take the hit
    *  undefended" (also used when the defender has no defenses available). */
@@ -547,6 +568,12 @@ export type GameEvent =
   | { t: "die-locked"; player: PlayerId; die: number; locked: boolean }
   | { t: "die-face-changed"; player: PlayerId; die: number; from: number; to: number; cause: "card" | "ability" }
   | { t: "ladder-state-changed"; player: PlayerId; rows: readonly LadderRowState[] }
+  /** Player picker prompt — engine paused for active player to choose which
+   *  matched offensive ability to fire. `matches` is sorted highest-tier-first
+   *  then highest-base-damage-first; the player may also choose to pass. */
+  | { t: "offensive-pick-prompt"; attacker: PlayerId; matches: ReadonlyArray<{ abilityIndex: number; abilityName: string; tier: AbilityTier; baseDamage: number; damageType: DamageType }> }
+  /** Active player has chosen which ability to fire (or `null` = passed). */
+  | { t: "offensive-choice-made"; attacker: PlayerId; abilityIndex: number | null; abilityName?: string }
   | { t: "ability-triggered"; player: PlayerId; tier: AbilityTier; abilityName: string; isCritical: "minor" | "major" | false }
   | { t: "ultimate-fired"; player: PlayerId; abilityName: string; isCritical: boolean }
   | { t: "damage-dealt"; from: PlayerId; to: PlayerId; amount: number; type: DamageType; mitigated: number }

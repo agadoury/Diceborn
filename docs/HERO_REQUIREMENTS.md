@@ -374,7 +374,7 @@ These bands assume the defender PICKS one defense — the player has agency to c
 
 **Damage scaling rationale (30 HP):** average damage per turn should land near 5 HP so matches resolve in 6–8 turns. Single hits over 18 dmg are reserved for T4-Career-Moment; T4-Standard caps at 15.
 
-**Multi-ability per tier is fine** — heroes can have 2 abilities at the same tier with different combos. The engine fires the highest-tier match, breaking ties by highest base damage.
+**Multi-ability per tier is fine** — heroes can have 2 abilities at the same tier with different combos, or two abilities sharing a combo with different effect profiles. The player picks which matched ability to fire from an overlay (sorted highest-tier-first / highest-damage-first by default). This makes overlapping combos a feature, not a bug — design pairs that frame a real choice.
 
 ---
 
@@ -575,8 +575,12 @@ Specify any number of abilities across tiers 1–4. Each on its own block.
   CriticalCinematic: <optional — what changes from the base cinematic when crit fires>
 
 (Multiple abilities at the same tier are fine — useful for offering
-strategic flexibility. Picker fires highest-tier matched, then highest-
-damage among ties.)
+strategic flexibility. After the offensive roll, the **player picks**
+which matched ability to fire from a list sorted highest-tier-first /
+highest-damage-first. Design the ladder so the player has meaningful
+choices: e.g. a high-damage normal attack alongside a lower-damage
+undefendable variant, or a single-target T2 alongside a status-applying
+T2 that hits the same combo.)
 
 === DEFENSIVE LADDER (recommended; ~3 defenses) ===
 

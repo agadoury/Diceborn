@@ -125,6 +125,8 @@ function formatEvent(ev: GameEvent): string | null {
     case "ultimate-fired":     return `ULTIMATE: ${ev.abilityName}${ev.isCritical ? "  CRIT!" : ""}`;
     case "damage-dealt":       return `${ev.amount} ${ev.type} dmg → ${p(ev.to)}${ev.mitigated ? `  (-${ev.mitigated} mit)` : ""}`;
     case "heal-applied":       return `${p(ev.player)} heals ${ev.amount}`;
+    case "offensive-pick-prompt":  return `${p(ev.attacker)} picking attack (${ev.matches.length} option${ev.matches.length === 1 ? "" : "s"})`;
+    case "offensive-choice-made":  return ev.abilityIndex == null ? `${p(ev.attacker)} passes` : null;     // ability-triggered prints next
     case "attack-intended":    return `${p(ev.attacker)} → ${ev.abilityName} (${ev.incomingAmount} ${ev.defendable ? "def?" : "unblockable"})`;
     case "defense-intended":   return ev.abilityIndex == null ? `${p(ev.defender)} takes the hit` : `${p(ev.defender)} braces with ${ev.abilityName} (${ev.diceCount}d)`;
     case "defense-dice-rolled": return `${p(ev.player)} rolls ${ev.dice.length}d`;

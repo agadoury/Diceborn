@@ -80,7 +80,7 @@ Each turn moves through 8 phases in fixed order. The transitions happen in `src/
 | `upkeep` | Tick statuses (per the status's `tickPhase`), apply any signature passive `on-upkeep` hooks. | No |
 | `income` | Active player draws 1 card and gains 1 CP (clamped to cap of 15). The first player skips their first income. | No |
 | `main-pre` | Pre-roll window. Player can play `main-phase` cards, sell cards, or hit ROLL to advance. | **Yes — must tap ROLL** |
-| `offensive-roll` | Active player rolls dice. Up to 3 attempts total. Between rolls, can lock/unlock dice and play `roll-phase` cards. | **Yes — lock dice, optionally play cards, advance when satisfied** |
+| `offensive-roll` | Active player rolls dice (up to 3 attempts; can lock/unlock between rolls; can play `roll-phase` cards). When the player ends their roll, engine emits `offensive-pick-prompt` listing every matched ability and halts via `state.pendingOffensiveChoice`. The player **picks** which ability to fire (or passes) via `select-offensive-ability`. | **Yes — lock dice, play cards, then pick which attack to fire** |
 | `defensive-roll` | **Interactive.** Engine emits `attack-intended` and halts via `state.pendingAttack`. The defender picks one defense from their `defensiveLadder` (or "take it"); engine rolls the chosen defense's dice count once (no rerolls), evaluates, applies any reduction, then resolves the original ability's damage. Both players may play `roll-phase` and `instant` cards during this window. | **Yes — defender picks a defense via `select-defense`** (or the AI driver does so off-turn) |
 | `main-post` | Post-resolution window. Player can play `main-phase` cards, sell cards. Ends turn manually. | **Yes — must tap END TURN** |
 | `discard` | Auto-sell every card over hand cap (6) for +1 CP each, swap active player, transition into the new active player's `upkeep`. | No |
@@ -163,14 +163,17 @@ Each `AbilityDef` carries:
 }
 ```
 
-### Picker rules
+### Picker rules (Correction 7 — interactive)
 
-When the active player ends their offensive roll:
+When the active player ends their offensive roll, the engine **does not auto-pick**. Instead it:
 
-1. Evaluate every ability in the ladder against current dice
-2. Of the matched abilities, pick the highest tier
-3. Of those, pick the highest base damage
-4. Fire that one (the others marked `triggered` in the ladder UI become inert)
+1. Evaluates every ability in the ladder against the current dice (with active symbol bends applied).
+2. Emits `offensive-pick-prompt` carrying the full list of matches, sorted highest-tier-first then highest-base-damage-first.
+3. Halts via `state.pendingOffensiveChoice`. The active player sees the **AttackSelectLayer** overlay and dispatches `select-offensive-ability { abilityIndex }` (or `null` to pass).
+
+If zero abilities match, the engine skips the prompt entirely — the turn fizzles, and any `offensiveFallback` defense is consulted before transitioning to `main-post`.
+
+The prompt-list ordering matches the legacy auto-pick (highest-tier highest-damage first), so confirming the top entry reproduces the old behaviour. The picker exists so the player can deliberately choose a lower-tier or alternate damage-type ability when that's the better play (e.g. a high-damage normal attack vs. a lower-damage undefendable).
 
 ### Tier semantics
 
@@ -461,7 +464,8 @@ type Action =
   | { kind: "sell-card"; card }
   | { kind: "end-turn" }
   | { kind: "respond-to-counter"; accept }
-  | { kind: "select-defense"; abilityIndex: number | null }   // defender picks during pendingAttack
+  | { kind: "select-offensive-ability"; abilityIndex: number | null }   // attacker picks during pendingOffensiveChoice
+  | { kind: "select-defense"; abilityIndex: number | null }             // defender picks during pendingAttack
   | { kind: "spend-bank"; amount }                            // resolve pendingBankSpend (Radiance, etc.)
   | { kind: "decline-bank-spend" }
   | { kind: "concede"; player };
@@ -501,6 +505,7 @@ Every `applyAction` returns a new `state` and a `GameEvent[]`. Events are declar
 - `card-drawn`, `card-played`, `card-sold`, `card-discarded`
 - `dice-rolled`, `die-locked`, `die-face-changed`
 - `ladder-state-changed`, `ability-triggered`, `ultimate-fired`
+- `offensive-pick-prompt`, `offensive-choice-made` — the offensive picker pause + resume
 - `attack-intended`, `defense-intended`, `defense-dice-rolled`, `defense-resolved` — the four-event defensive flow ([§5](#5-ability-ladders))
 - `damage-dealt`, `hp-changed`, `heal-applied`
 - `status-applied`, `status-ticked`, `status-removed`, `status-triggered`
@@ -518,11 +523,24 @@ Every `applyAction` returns a new `state` and a `GameEvent[]`. Events are declar
 
 This separation is what gives the game its juice: the engine resolves a turn instantly (a few ms), and the presentation layer takes 2–6 seconds to *show* it — dice tumble, hit-stops, screen shake, status-token slam-ins, ability cinematics.
 
-### The defensive flow as events
+### The attack flow as events
 
-When an attack lands, the engine emits a small sequence of events that walk both players through the decision-and-resolution loop:
+A full attack walks through two interactive picks — the attacker chooses which ability to fire, then (for defendable damage) the defender chooses which defense to attempt.
 
 ```
+[player ends offensive roll]
+  ↓
+offensive-pick-prompt                 ← engine sets state.pendingOffensiveChoice and halts
+                                          ─┐
+                                           │ AttackSelectLayer renders.
+                                           │ Active player picks one match (or passes).
+                                           │ AI driver auto-picks for AI attackers.
+                                           │
+                                           ▼
+                                        select-offensive-ability action
+                                        (engine resumes:)
+offensive-choice-made                 ← which ability was chosen (or null = passed)
+  ↓
 ability-triggered                     ← attacker's ability locks in
   ↓
 [ultimate-fired]                      ← only if Tier 4
@@ -656,6 +674,7 @@ From `src/game/types.ts`:
 - **Detonation** — token-level "explode at threshold" hook. Triggered on `applyStatus` overflow.
 - **Mastery** — persistent ability upgrade card. Each hero ships exactly 4 (T1 / T2 / T3 / Defensive). Locks the corresponding slot in `HeroSnapshot.masterySlots`.
 - **Offensive fallback** — a defense's optional consolation effect that fires when the caster's offensive turn produces no ability.
+- **Offensive picker** — the player-driven choice of which matched ability to fire, gated by `state.pendingOffensiveChoice`. Replaces the legacy auto-pick (Correction 7).
 - **Passive modifier** — token-level continuous adjustment applied while stacks > 0 (e.g. Frost-bite -1 dmg / stack on holder's offensive abilities).
 - **State threshold effect** — token-level gating that blocks card kinds / ability tiers / dice count when the holder is at or above a stack threshold.
 - **Symbol bend** — temporary `from_symbol → to_symbol` aliasing applied during combo evaluation. Active for one of: this-roll, this-turn, until-status.

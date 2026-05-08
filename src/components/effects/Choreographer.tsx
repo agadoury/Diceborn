@@ -31,6 +31,7 @@ import { Banner } from "./Banner";
 import { ActionLog } from "./ActionLog";
 import { InstantPromptLayer } from "./InstantPrompt";
 import { DefenseSelectLayer } from "./DefenseSelect";
+import { AttackSelectLayer } from "./AttackSelect";
 import { useGameStore } from "@/store/gameStore";
 import { getHero } from "@/content";
 import type { HeroId, PlayerId } from "@/game/types";
@@ -48,6 +49,7 @@ export function Choreographer({ children }: Props) {
       <Banner />
       <ActionLog />
       <InstantPromptLayer />
+      <AttackSelectLayer />
       <DefenseSelectLayer />
     </ScreenShake>
   );
@@ -290,6 +292,15 @@ function playEvent(ev: GameEvent, ctx: PlayCtx): number {
       ctx.spawnDmg({ amount: ev.amount, variant: "heal", x: 0.5, y: 0.42, size: "sm" });
       return 800;
     }
+
+    case "offensive-pick-prompt": {
+      // Brief setup beat — the AttackSelectLayer renders next once the
+      // queue drains. Banner gives the player a moment to read.
+      ctx.setBanner("PICK YOUR ATTACK");
+      setTimeout(() => ctx.setBanner(null), 700);
+      return 700;
+    }
+    case "offensive-choice-made": return ev.abilityIndex == null ? 350 : 500;
 
     case "attack-intended": {
       // Pause/anticipation beat — choreographer holds while the defender

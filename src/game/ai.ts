@@ -22,6 +22,13 @@ import { stacksOf } from "./status";
 
 // ── Top-level driver: returns the next action the AI wants to take. ─────────
 export function nextAiAction(state: GameState, ai: PlayerId): Action {
+  // On-turn: respond to the offensive picker prompt before anything else.
+  if (state.pendingOffensiveChoice && state.pendingOffensiveChoice.attacker === ai) {
+    // Pick the highest-tier highest-damage match (the matches array is
+    // already sorted that way). Mirrors the legacy auto-pick behaviour.
+    const top = state.pendingOffensiveChoice.matches[0];
+    return { kind: "select-offensive-ability", abilityIndex: top?.abilityIndex ?? null };
+  }
   // Off-turn: AI may need to respond to a pendingAttack against itself.
   if (state.pendingAttack && state.pendingAttack.defender === ai) {
     return { kind: "select-defense", abilityIndex: pickBestDefense(state, ai) };

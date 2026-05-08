@@ -198,58 +198,109 @@ export function performRoll(state: GameState): OffensiveResolveResult {
   };
 }
 
-// ── Begin attack — picker + pause for defender's choice ────────────────────
+// ── Begin attack — open the offensive picker (Correction 7) ────────────────
 /**
- * Picks the highest-tier matched offensive ability and emits the lead-up
- * events (`ability-triggered` + optional `ultimate-fired` + `attack-intended`).
+ * Compute every ability whose combo currently matches the caster's dice
+ * (with active symbol bends applied) and emit `offensive-pick-prompt`.
+ * The engine halts via `state.pendingOffensiveChoice` until the active
+ * player dispatches `select-offensive-ability`.
  *
- * For undefendable / pure / ultimate damage types: there is no defense, so
- * we resolve damage immediately within this call.
+ * If zero abilities match, the offensive turn fizzles and `offensiveFallback`
+ * (if any) is consulted.
  *
- * For normal / collateral damage types: we stash a `pendingAttack` on
- * `state` and return — engine.ts halts here until a `select-defense`
- * action arrives.
- *
- * Returns events emitted so far. State.pendingAttack indicates the halt.
+ * The actual ability resolution — `ability-triggered`, `attack-intended`,
+ * applying damage or stashing `pendingAttack` — happens in
+ * `commitOffensiveAbility`, which engine.ts calls from the
+ * `select-offensive-ability` handler.
  */
-export function beginAttack(state: GameState): GameEvent[] {
+export function beginOffensivePick(state: GameState): GameEvent[] {
   const events: GameEvent[] = [];
   const active = state.players[state.activePlayer];
   const opponent = state.players[other(state.activePlayer)];
   const hero = getHero(active.hero);
 
-  // Picker: highest tier matched, then highest base damage among ties.
-  // Apply any active symbol bends so the matcher sees the bent symbols.
   const rawFaces = active.dice.map(d => d.faces[d.current]);
   const faces = bentFaces(rawFaces, active.symbolBends);
-  let firingIndex = -1;
-  let firingTier = -1;
-  let firingBaseDamage = -Infinity;
+
+  // Collect all matching abilities, sorted highest-tier-first then
+  // highest-base-damage-first (legacy auto-pick order — UX-friendly default
+  // for the picker overlay).
+  const matches: Array<{
+    abilityIndex: number; abilityName: string;
+    tier: import("./types").AbilityTier; baseDamage: number;
+    damageType: import("./types").DamageType; shortText: string;
+  }> = [];
   for (let i = 0; i < hero.abilityLadder.length; i++) {
-    if (!comboMatchesFaces(hero.abilityLadder[i].combo, faces)) continue;
     const a = hero.abilityLadder[i];
-    const dmg = abilityBaseDamage(a, faces);
-    if (a.tier > firingTier || (a.tier === firingTier && dmg > firingBaseDamage)) {
-      firingIndex = i;
-      firingTier = a.tier;
-      firingBaseDamage = dmg;
-    }
+    if (!comboMatchesFaces(a.combo, faces)) continue;
+    matches.push({
+      abilityIndex: i,
+      abilityName: a.name,
+      tier: a.tier,
+      baseDamage: abilityBaseDamage(a, faces),
+      damageType: a.damageType,
+      shortText: a.shortText,
+    });
   }
-  if (firingIndex < 0) {
+  matches.sort((x, y) => y.tier - x.tier || y.baseDamage - x.baseDamage);
+
+  if (matches.length === 0) {
     // Offense produced no ability. Per Correction 6 §7, the caster's own
-    // defensive ladder is consulted for an `offensiveFallback` block —
-    // useful for "consolation prize" mechanics like Bloodoath that heal +
-    // grant a passive stack when offense whiffs.
+    // defensive ladder is consulted for an `offensiveFallback` block.
     events.push(...tryOffensiveFallback(state));
     return events;
   }
 
-  const ability = hero.abilityLadder[firingIndex];
+  state.pendingOffensiveChoice = {
+    attacker: active.player,
+    defender: opponent.player,
+    matches,
+  };
+  events.push({
+    t: "offensive-pick-prompt",
+    attacker: active.player,
+    matches: matches.map(m => ({
+      abilityIndex: m.abilityIndex,
+      abilityName: m.abilityName,
+      tier: m.tier,
+      baseDamage: m.baseDamage,
+      damageType: m.damageType,
+    })),
+  });
+  return events;
+}
+
+/**
+ * Resolve the ability the active player picked from `pendingOffensiveChoice`.
+ * Mirrors the previous `beginAttack` body: emits `ability-triggered`,
+ * (optionally) `ultimate-fired`, `attack-intended`. Then either applies
+ * damage inline (undefendable / pure / ultimate) or stashes `pendingAttack`
+ * for the defender's pick.
+ *
+ * `abilityIndex` is the chosen index into the attacker's `abilityLadder`.
+ * Caller has already validated it against `pendingOffensiveChoice.matches`
+ * and cleared `pendingOffensiveChoice`.
+ */
+export function commitOffensiveAbility(state: GameState, abilityIndex: number): GameEvent[] {
+  const events: GameEvent[] = [];
+  const active = state.players[state.activePlayer];
+  const opponent = state.players[other(state.activePlayer)];
+  const hero = getHero(active.hero);
+
+  const rawFaces = active.dice.map(d => d.faces[d.current]);
+  const faces = bentFaces(rawFaces, active.symbolBends);
+  const ability = hero.abilityLadder[abilityIndex];
+
+  events.push({
+    t: "offensive-choice-made",
+    attacker: active.player,
+    abilityIndex,
+    abilityName: ability.name,
+  });
+
   // Critical Ultimate (Correction 6 §12): if the ability declares a more-
   // restrictive critical combo and that matches, escalate the crit class to
-  // "major" so the choreographer plays the enhanced cinematic. The
-  // criticalEffect's mechanical bonuses (damage multiplier / override /
-  // additions) are applied during applyAttackEffects below.
+  // "major" so the choreographer plays the enhanced cinematic.
   let isCritical = classifyCrit(ability, active.dice);
   let critTriggered = false;
   if (ability.criticalCondition && comboMatchesFaces(ability.criticalCondition, faces)) {
@@ -291,16 +342,14 @@ export function beginAttack(state: GameState): GameEvent[] {
   });
 
   if (!defendable) {
-    // Undefendable / pure / ultimate: skip the defense flow entirely.
-    events.push(...applyAttackEffects(state, firingIndex, faces, damageBonus, critFlat, critMul, isCritical, /*defensiveReduction*/ 0, critTriggered));
+    events.push(...applyAttackEffects(state, abilityIndex, faces, damageBonus, critFlat, critMul, isCritical, /*defensiveReduction*/ 0, critTriggered));
     return events;
   }
 
-  // Stash pending attack and return — engine waits for select-defense action.
   state.pendingAttack = {
     attacker: active.player,
     defender: opponent.player,
-    abilityIndex: firingIndex,
+    abilityIndex,
     abilityName: ability.name,
     tier: ability.tier,
     damageType: ability.damageType,

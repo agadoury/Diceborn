@@ -29,7 +29,8 @@ import { getCustomHandler, canPlay, drawCards, sellCard, gainCp, resolveEffect, 
 import { stacksOf } from "./status";
 import { buildDeck } from "./cards";
 import {
-  enterPhase, performRoll, beginAttack, resolveDefenseChoice, emitLadderState, other, endMatch,
+  enterPhase, performRoll, beginOffensivePick, commitOffensiveAbility,
+  resolveDefenseChoice, emitLadderState, other, endMatch,
 } from "./phases";
 import { coinFlip } from "./rng";
 
@@ -47,6 +48,7 @@ export function applyAction(state: GameState, action: Action): ApplyResult {
     case "sell-card":       events.push(...sellCardAction(next, action.card)); break;
     case "end-turn":        events.push(...endTurn(next)); break;
     case "respond-to-counter": events.push(...respondToCounter(next, action.accept)); break;
+    case "select-offensive-ability": events.push(...selectOffensiveAbility(next, action.abilityIndex)); break;
     case "select-defense":  events.push(...selectDefense(next, action.abilityIndex)); break;
     case "spend-bank":      events.push(...resolveBankSpend(next, action.amount)); break;
     case "decline-bank-spend": events.push(...resolveBankSpend(next, 0)); break;
@@ -159,14 +161,15 @@ function advancePhase(state: GameState): GameEvent[] {
       }
       return events;
     case "offensive-roll": {
-      // Picker → emit attack-intended. For defendable damage, halt with
-      // pendingAttack set; the defender's `select-defense` action resumes.
-      // For undefendable / pure / ultimate, beginAttack resolves damage
-      // inline and we proceed straight to main-post.
-      events.push(...enterPhase(state, "defensive-roll"));
-      events.push(...beginAttack(state));
-      if (state.pendingAttack) return events;          // halted — wait for select-defense
+      // Open the offensive picker. Emits offensive-pick-prompt and halts via
+      // pendingOffensiveChoice if any abilities matched; otherwise the turn
+      // fizzles (offensiveFallback may still fire). Engine waits for
+      // select-offensive-ability.
+      events.push(...beginOffensivePick(state));
+      if (state.pendingOffensiveChoice) return events;
+      // No matches and no fallback ⇒ skip straight to main-post.
       if (state.winner) return events;
+      events.push(...enterPhase(state, "defensive-roll"));
       events.push(...enterPhase(state, "main-post"));
       events.push(...emitLadderState(state, getHero(state.players[state.activePlayer].hero), state.players[state.activePlayer]));
       return events;
@@ -218,6 +221,9 @@ function toggleDieLock(state: GameState, idx: number): GameEvent[] {
 
 // ── Roll ────────────────────────────────────────────────────────────────────
 function rollAction(state: GameState): GameEvent[] {
+  // Cannot reroll once the offensive picker is up — the player has committed
+  // to this set of dice by ending the roll phase.
+  if (state.pendingOffensiveChoice) return [];
   if (state.phase !== "offensive-roll") {
     // Allow rolling from main-pre as the trigger that *enters* the roll phase.
     if (state.phase === "main-pre") {
@@ -299,6 +305,39 @@ function sellCardAction(state: GameState, cardId: string): GameEvent[] {
   return sellCard(state.players[state.activePlayer], cardId);
 }
 
+/** Active player's response to a `pendingOffensiveChoice`. Resolves the
+ *  chosen ability (or fizzles + tries offensive fallback). When the chosen
+ *  ability is defendable, transitions into `defensive-roll` and pauses
+ *  again on `pendingAttack`. */
+function selectOffensiveAbility(state: GameState, abilityIndex: number | null): GameEvent[] {
+  const choice = state.pendingOffensiveChoice;
+  if (!choice) return [];
+  const events: GameEvent[] = [];
+
+  // Validate index is in the matches list (or null = decline).
+  const valid = abilityIndex != null && choice.matches.some(m => m.abilityIndex === abilityIndex);
+
+  if (!valid) {
+    // Player declined OR provided an invalid index — turn fizzles.
+    state.pendingOffensiveChoice = undefined;
+    events.push({ t: "offensive-choice-made", attacker: choice.attacker, abilityIndex: null });
+    if (state.winner) return events;
+    events.push(...enterPhase(state, "defensive-roll"));
+    events.push(...enterPhase(state, "main-post"));
+    events.push(...emitLadderState(state, getHero(state.players[state.activePlayer].hero), state.players[state.activePlayer]));
+    return events;
+  }
+
+  state.pendingOffensiveChoice = undefined;
+  events.push(...enterPhase(state, "defensive-roll"));
+  events.push(...commitOffensiveAbility(state, abilityIndex!));
+  if (state.pendingAttack) return events;          // halted — wait for select-defense
+  if (state.winner) return events;
+  events.push(...enterPhase(state, "main-post"));
+  events.push(...emitLadderState(state, getHero(state.players[state.activePlayer].hero), state.players[state.activePlayer]));
+  return events;
+}
+
 /** Defender's response to a `pendingAttack`. Resolves the chosen defense
  *  (or skip), applies damage with the resulting reduction, then proceeds
  *  to main-post. */
@@ -366,6 +405,7 @@ function cloneState(state: GameState): GameState {
       p2: clonePlayer(state.players.p2),
     },
     log: state.log.slice(),
+    pendingOffensiveChoice: state.pendingOffensiveChoice ? { ...state.pendingOffensiveChoice, matches: state.pendingOffensiveChoice.matches.slice() } : undefined,
     pendingAttack: state.pendingAttack ? { ...state.pendingAttack } : undefined,
     pendingBankSpend: state.pendingBankSpend ? { ...state.pendingBankSpend } : undefined,
   };

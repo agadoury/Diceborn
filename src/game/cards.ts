@@ -459,6 +459,10 @@ export function validateDeckComposition(cards: ReadonlyArray<Card>): string[] {
  *  on the holder for one Main Phase). */
 export function canPlay(state: GameState, hero: HeroSnapshot, opponent: HeroSnapshot, card: Card): boolean {
   if (hero.cp < card.cost) return false;
+  // While the active player is being asked to pick which attack to fire,
+  // freeze card play except for instants — the engine has emitted the
+  // offensive-pick-prompt and is waiting for select-offensive-ability.
+  if (state.pendingOffensiveChoice && card.kind !== "instant") return false;
   if (card.playable) {
     const frac = hero.hp / hero.hpStart;
     if (card.playable.minHpFraction != null && frac < card.playable.minHpFraction) return false;
