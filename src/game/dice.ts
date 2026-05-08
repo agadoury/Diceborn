@@ -106,10 +106,6 @@ export function comboMatchesFaces(combo: DiceCombo, faces: ReadonlyArray<DieFace
   }
 }
 
-/** All faces from a hero's die spec — used by Monte Carlo. */
-function faceSymbols(faces: readonly DieFace[]): SymbolId[] {
-  return faces.map(f => f.symbol);
-}
 
 // ── Damage extraction (for LETHAL calculation) ──────────────────────────────
 /** Walk an effect tree and sum all `damage` amounts (excluding self-damage and pure self-damage). */
@@ -140,30 +136,30 @@ export function reachabilityProbability(
   samples = 500,
   seed = 1,
 ): number {
-  if (comboMatches(combo, symbolsOnDice(dice))) return 1;
+  const startFaces = dice.map(d => d.faces[d.current]);
+  if (comboMatchesFaces(combo, startFaces)) return 1;
   if (attemptsRemaining <= 0) return 0;
 
   let cursor = seed;
   let hits = 0;
-  const allSymbols = faceSymbols(faces);
 
   for (let s = 0; s < samples; s++) {
-    // Clone current dice into a working symbol array.
-    const working = dice.map(d => d.faces[d.current].symbol);
-    // Locked-in-rule for this sample: a die is "kept" if its symbol matches the
-    // simplest contribution to the combo (per the heuristic below).
+    // Clone current dice into a working face array (full DieFace objects so
+    // n-of-a-kind / straight evaluation works properly).
+    const working: DieFace[] = dice.map(d => d.faces[d.current]);
     for (let attempt = 0; attempt < attemptsRemaining; attempt++) {
-      if (comboMatches(combo, working)) break;
-      const keep = pickKeepMask(combo, working);
+      if (comboMatchesFaces(combo, working)) break;
+      const symbols = working.map(f => f.symbol);
+      const keep = pickKeepMask(combo, symbols);
       for (let i = 0; i < dice.length; i++) {
-        if (dice[i].locked) continue;          // the player has manually locked
-        if (keep[i]) continue;                 // heuristic chose to keep
-        const r = nextInt(seed + s * 7919, cursor, allSymbols.length);
+        if (dice[i].locked) continue;
+        if (keep[i]) continue;
+        const r = nextInt(seed + s * 7919, cursor, faces.length);
         cursor = r.cursor;
-        working[i] = allSymbols[r.value];
+        working[i] = faces[r.value];
       }
     }
-    if (comboMatches(combo, working)) hits++;
+    if (comboMatchesFaces(combo, working)) hits++;
   }
   return hits / samples;
 }
@@ -251,19 +247,33 @@ export function evaluateLadder(
   active: HeroSnapshot,
   attemptsRemaining: number,
   opts: LadderEvaluationOpts = {},
-): [LadderRowState, LadderRowState, LadderRowState, LadderRowState] {
-  const symbols = symbolsOnDice(active.dice);
+): LadderRowState[] {
+  // Use face-aware combo evaluation so n-of-a-kind and straight work.
+  const faces = active.dice.map(d => d.faces[d.current]);
   const currentlyMatched: number[] = [];
   for (let i = 0; i < hero.abilityLadder.length; i++) {
-    if (comboMatches(hero.abilityLadder[i].combo, symbols)) currentlyMatched.push(i);
+    if (comboMatchesFaces(hero.abilityLadder[i].combo, faces)) currentlyMatched.push(i);
   }
-  const highestMatched = currentlyMatched.length ? Math.max(...currentlyMatched) : -1;
+
+  // Picker: highest tier among matched, then highest base damage among ties.
+  let firingIdx = -1;
+  let firingTier = -1;
+  let firingDamage = -Infinity;
+  for (const idx of currentlyMatched) {
+    const a = hero.abilityLadder[idx];
+    const dmg = effectDamageOnOpponent(a.effect);
+    if (a.tier > firingTier || (a.tier === firingTier && dmg > firingDamage)) {
+      firingIdx = idx;
+      firingTier = a.tier;
+      firingDamage = dmg;
+    }
+  }
 
   const rows: LadderRowState[] = hero.abilityLadder.map((ability, idx) => {
     const tier = ability.tier;
     const lethal = computeLethal(ability, active, opts);
 
-    if (idx === highestMatched) {
+    if (idx === firingIdx) {
       return { kind: "firing", tier, lethal };
     }
     if (currentlyMatched.includes(idx)) {
@@ -282,7 +292,7 @@ export function evaluateLadder(
     return { kind: "reachable", tier, probability: p, lethal };
   });
 
-  return rows as [LadderRowState, LadderRowState, LadderRowState, LadderRowState];
+  return rows;
 }
 
 function computeLethal(ability: AbilityDef, active: HeroSnapshot, opts: LadderEvaluationOpts): boolean {
@@ -300,43 +310,39 @@ function computeLethal(ability: AbilityDef, active: HeroSnapshot, opts: LadderEv
 
 // ── Landing-rate validator (used by simulate.ts) ────────────────────────────
 /**
- * Run N=samples Monte Carlo trials of "best-of-2 attempts with optimal lock"
- * for every ability tier of the given hero, return per-tier landing rates.
- *
- * Used as a tuning audit: every hero's ladder must have rates within
- * targetLandingRate ranges before merge.
+ * Monte Carlo landing-rate audit per hero ability. Uses face-aware combo
+ * evaluation so n-of-a-kind / straight produce correct rates.
  */
 export function simulateLandingRate(
   hero: HeroDefinition,
-  attempts = 2,
+  attempts = 3,
   samples = 10_000,
   seed = 1,
 ): { tier: 1|2|3|4; rate: number; target: [number, number]; abilityName: string }[] {
   const out: { tier: 1|2|3|4; rate: number; target: [number, number]; abilityName: string }[] = [];
-  const allSymbols = faceSymbols(hero.diceIdentity.faces);
+  const allFaces = hero.diceIdentity.faces;
   for (const ability of hero.abilityLadder) {
     let hits = 0;
     let cursor = 0;
     for (let s = 0; s < samples; s++) {
-      // Initial roll: all 5 dice fresh.
-      const working: SymbolId[] = [];
+      // Initial roll: 5 dice fresh.
+      const working: DieFace[] = [];
       for (let i = 0; i < 5; i++) {
-        const r = nextInt(seed + ability.tier * 1009, cursor, allSymbols.length);
+        const r = nextInt(seed + ability.tier * 1009, cursor, allFaces.length);
         cursor = r.cursor;
-        working.push(allSymbols[r.value]);
+        working.push(allFaces[r.value]);
       }
-      // Up to (attempts - 1) reroll attempts with optimal lock.
       for (let a = 1; a < attempts; a++) {
-        if (comboMatches(ability.combo, working)) break;
-        const keep = pickKeepMask(ability.combo, working);
+        if (comboMatchesFaces(ability.combo, working)) break;
+        const keep = pickKeepMask(ability.combo, working.map(f => f.symbol));
         for (let i = 0; i < working.length; i++) {
           if (keep[i]) continue;
-          const r = nextInt(seed + ability.tier * 1009, cursor, allSymbols.length);
+          const r = nextInt(seed + ability.tier * 1009, cursor, allFaces.length);
           cursor = r.cursor;
-          working[i] = allSymbols[r.value];
+          working[i] = allFaces[r.value];
         }
       }
-      if (comboMatches(ability.combo, working)) hits++;
+      if (comboMatchesFaces(ability.combo, working)) hits++;
     }
     out.push({
       tier: ability.tier,

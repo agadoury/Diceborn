@@ -225,8 +225,7 @@ export type GameEvent =
   | { t: "dice-rolled"; player: PlayerId; dice: ReadonlyArray<{ index: number; current: number; symbol: SymbolId; locked: boolean }>; attemptNumber: number }
   | { t: "die-locked"; player: PlayerId; die: number; locked: boolean }
   | { t: "die-face-changed"; player: PlayerId; die: number; from: number; to: number; cause: "card" | "ability" }
-  | { t: "ladder-state-changed"; player: PlayerId;
-      rows: [LadderRowState, LadderRowState, LadderRowState, LadderRowState] }
+  | { t: "ladder-state-changed"; player: PlayerId; rows: readonly LadderRowState[] }
   | { t: "ability-triggered"; player: PlayerId; tier: AbilityTier; abilityName: string; isCritical: "minor" | "major" | false }
   | { t: "ultimate-fired"; player: PlayerId; abilityName: string; isCritical: boolean }
   | { t: "damage-dealt"; from: PlayerId; to: PlayerId; amount: number; type: DamageType; mitigated: number }

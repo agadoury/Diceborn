@@ -307,7 +307,7 @@ function LadderDemo() {
     nextAbilityBonusDamage: 0,
   }), [dice, attemptsRemaining, rage]);
 
-  const rows = useMemo<[LadderRowState, LadderRowState, LadderRowState, LadderRowState]>(
+  const rows = useMemo<LadderRowState[]>(
     () => evaluateLadder(BARBARIAN, snapshot, attemptsRemaining, {
       opponentHp,
       pendingOpponentDamage: 0,
@@ -409,7 +409,7 @@ function LadderDemo() {
     </Section>
   );
 }
-function blankLadder(): [LadderRowState, LadderRowState, LadderRowState, LadderRowState] {
+function blankLadder(): LadderRowState[] {
   return [
     { kind: "out-of-reach", tier: 1 },
     { kind: "out-of-reach", tier: 2 },
