@@ -260,7 +260,23 @@ incoming amount
 
 ### Healing
 
-`heal(target, amount)` clamps to `hpCap` (start + 10). Emits `heal-applied` + `hp-changed` + low-HP-exit if applicable.
+`heal(target, amount)` clamps to `hpCap` (start + 10). Emits `heal-applied` + `hp-changed` + low-HP-exit if applicable. The `heal` effect itself accepts an optional `conditional_bonus` (same shape as the damage-side version) so heals can scale with banked passives, opponent state, or stripped stacks.
+
+### Conditional bonus (cross-effect primitive)
+
+`conditional_bonus` is the canonical "this amount scales per unit of game state, when this state check holds" primitive. It lives on five effect kinds:
+
+| Effect | Field that scales |
+|---|---|
+| `damage` | `amount` |
+| `scaling-damage` | base amount (added on top of dice-extras scaling) |
+| `heal` | `amount` |
+| `reduce-damage` | `amount` (defensive mitigation) |
+| `apply-status` | `stacks` |
+
+`gain-cp`, `draw`, and `remove-status` deliberately do **not** accept `conditional_bonus` — `gain-cp` would create resource-scaling exploits (express CP scaling at the resource-trigger layer instead), `draw` is rarely a healthy design pattern, and `remove-status` already takes an explicit stack count.
+
+Resolution is uniform: when the `condition` (a `StateCheck`) holds, the engine adds `bonusPerUnit × source-units` to the relevant numeric field. Sources: `opponent-status-stacks` / `self-status-stacks` / `stripped-stack-count` / `self-passive-counter` / `opponent-passive-counter` / `fixed-one`. Implemented by `computeConditionalBonus` in `cards.ts`, called from both card-context (`resolveEffect`) and ability-context (`resolveAbilityEffect`, `resolveDefensiveEffect`).
 
 ### Low-HP threshold
 
@@ -365,10 +381,12 @@ Legacy kinds `upgrade`, `main-action`, `roll-action`, `status` are still in the 
 `resolveEffect(effect, ctx)` in `cards.ts` is the single dispatcher. The same function resolves both card effects and ability effects (they share the `AbilityEffect` shape). Supported kinds:
 
 **Core**
-- `damage` / `scaling-damage` / `reduce-damage` — `damage` and `scaling-damage` carry optional `self_cost`, `conditional_bonus`, `conditional_type_override` sub-fields ([§6](#6-damage-pipeline))
-- `heal` (target self or opponent)
-- `apply-status` / `remove-status`
-- `gain-cp` / `draw`
+- `damage` / `scaling-damage` — carry optional `self_cost`, `conditional_bonus`, `conditional_type_override` sub-fields ([§6](#6-damage-pipeline))
+- `reduce-damage` — defensive ladder only; carries optional `conditional_bonus` (per-unit bonus reduction)
+- `heal` (target self or opponent) — carries optional `conditional_bonus` (per-unit bonus heal)
+- `apply-status` — carries optional `conditional_bonus` (per-unit bonus stacks)
+- `remove-status`
+- `gain-cp` / `draw` (intentionally not eligible for `conditional_bonus`)
 - `compound` (sequence of sub-effects)
 
 **Dice manipulation (Correction 6 §3)**
@@ -389,12 +407,12 @@ Legacy kinds `upgrade`, `main-action`, `roll-action`, `status` are still in the 
 
 ### Modifier evaluation pipeline
 
-When an ability fires, `phases.ts resolveAbilityEffect` walks the effect tree and for each `damage` / `scaling-damage` leaf:
+When an ability fires, `phases.ts resolveAbilityEffect` walks the effect tree and for each `damage` / `scaling-damage` leaf (heal / reduce-damage / apply-status leaves run a slimmer bonus-only pass — no crit / token / type modifiers):
 
 1. Read the base amount.
 2. Apply `ability-upgrade` modifiers whose scope matches the firing ability (`base-damage`, `damage-type`, `defenseDiceCount`, etc.); evaluate any `conditional` StateCheck.
 3. Apply `passive-token-modifier` aggregation (Frost-bite -1 dmg / stack on `on-offensive-ability + damage`).
-4. Apply the leaf's `conditional_bonus` (per-unit damage, source from opponent stacks / self stacks / stripped-stack-count / passive counter / fixed-one).
+4. Apply the leaf's `conditional_bonus` (per-unit damage; `source` ∈ `opponent-status-stacks` / `self-status-stacks` / `stripped-stack-count` / `self-passive-counter` / `opponent-passive-counter` / `fixed-one`).
 5. Apply the leaf's `conditional_type_override` (e.g. normal → undefendable when 4+ axes).
 6. Apply crit modulation (`critFlat` + `critMul`) and the firing ability's Critical Ultimate `damageMultiplier` / `damageOverride` if `critTriggered`.
 7. Pass the resulting amount + type into `damage.ts dealDamage` for mitigation.

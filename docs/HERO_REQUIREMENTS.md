@@ -75,12 +75,12 @@ The complete first-class effect set — designed to express every recurring patt
 |---|---|
 | `damage` | Fixed damage. Specify `amount` + damage `type`. Optional sub-fields: `self_cost`, `conditional_bonus`, `conditional_type_override` (see below). |
 | `scaling-damage` | Damage that scales with how many extra dice contribute beyond the combo's minimum. Specify `baseAmount`, `perExtra`, `maxExtra`, `type`. Same optional sub-fields as `damage`. |
-| `reduce-damage` | Defensive — reduce incoming damage by `amount` (defensive ladder only). |
-| `heal` | Heal a target (self or opponent) by `amount`. |
-| `apply-status` | Apply `stacks` of a status token to target (self or opponent). |
+| `reduce-damage` | Defensive — reduce incoming damage by `amount` (defensive ladder only). Optional `conditional_bonus` (added to `amount`). |
+| `heal` | Heal a target (self or opponent) by `amount`. Optional `conditional_bonus` (added to `amount`). |
+| `apply-status` | Apply `stacks` of a status token to target (self or opponent). Optional `conditional_bonus` (added to `stacks`). |
 | `remove-status` | Strip up to `stacks` of a status from target. |
-| `gain-cp` | Add `amount` CP to caster (clamped to 15). |
-| `draw` | Draw `amount` cards. |
+| `gain-cp` | Add `amount` CP to caster (clamped to 15). (No `conditional_bonus` — see note below.) |
+| `draw` | Draw `amount` cards. (No `conditional_bonus` — see note below.) |
 | `compound` | Multiple effects in sequence — `effects: [...]`. |
 
 #### Dice-manipulation primitives
@@ -111,13 +111,32 @@ The complete first-class effect set — designed to express every recurring patt
 |---|---|
 | `custom` | Escape hatch — describe in plain English, will be hand-written. **Only used when no other primitive fits.** A well-designed hero submission has zero `custom` effects. |
 
-#### Damage sub-fields (apply to `damage` and `scaling-damage`)
+#### Damage sub-fields (apply to `damage` and `scaling-damage` only)
 
 | Sub-field | Meaning |
 |---|---|
 | `self_cost: N` | Unblockable HP loss to the caster on resolution. Does NOT trigger on-hit signatures or Frenzy/Radiance gains. Covers Avalanche's "13 to opponent + 3 self". |
-| `conditional_bonus: { condition, bonusPerUnit, source, sourceStatus?, sourcePassiveKey? }` | Per-unit bonus damage when a state check holds. `source` selects how to count units (`"opponent-status-stacks"`, `"self-status-stacks"`, `"stripped-stack-count"`, `"self-passive-counter"`, `"fixed-one"`). Covers Pyro Lance "+2 per Cinder when 3+", Solar Blade "+1 per Verdict stack stripped". |
 | `conditional_type_override: { condition, overrideTo }` | Promote damage type (e.g. `"normal"` → `"undefendable"`) when the condition holds. Covers Cleave Mastery's "undefendable when 4+ axes". |
+
+#### Conditional bonus (apply to `damage`, `scaling-damage`, `heal`, `reduce-damage`, `apply-status`)
+
+`conditional_bonus` is the canonical "this amount scales per unit of game state, when this state check holds" primitive. Same schema across all five effects; the bonus is added to the effect's primary numeric field (damage `amount` / scaling base / heal `amount` / reduce `amount` / apply-status `stacks`).
+
+```
+conditional_bonus: {
+  condition:        <StateCheck>,
+  bonusPerUnit:     <number>,
+  source:           "opponent-status-stacks" | "self-status-stacks" |
+                    "stripped-stack-count" | "self-passive-counter" |
+                    "opponent-passive-counter" | "fixed-one",
+  sourceStatus?:    StatusId,        // required when source counts a status
+  sourcePassiveKey?: string          // required when source counts a passive counter
+}
+```
+
+Covers Pyro Lance "+2 dmg per Cinder when 3+", Solar Blade "+1 dmg per Verdict stack stripped", Lightbearer's "heal +2 per Radiance token banked", Stoneward's "+1 mitigation per Cinder on opponent", Reaper's "apply 1 base + 2 stacks of Mark when at low HP".
+
+**Not eligible:** `gain-cp` (resource-scaling on cards creates exploit risk — express CP scaling at the resource-trigger layer instead), `draw` (drawing N cards based on game state is rarely a healthy design pattern), `remove-status` (already has an explicit `stacks` count).
 
 #### State-check predicates (used by conditionals + critical conditions)
 
@@ -543,11 +562,16 @@ Specify any number of abilities across tiers 1–4. Each on its own block.
     ConditionalTypeOverride:   { condition, overrideTo: <DamageType> }
 
   // ConditionalBonus.source examples:
-  //    "opponent-status-stacks" + sourceStatus: "myhero:cinder"
-  //    "stripped-stack-count"   + sourceStatus: "myhero:verdict"
-  //    "self-passive-counter"   + sourcePassiveKey: "radiance"
+  //    "opponent-status-stacks"   + sourceStatus: "myhero:cinder"
+  //    "self-status-stacks"       + sourceStatus: "myhero:resolve"
+  //    "stripped-stack-count"     + sourceStatus: "myhero:verdict"
+  //    "self-passive-counter"     + sourcePassiveKey: "radiance"
+  //    "opponent-passive-counter" + sourcePassiveKey: "frenzy"
   //    "fixed-one"
   // condition is one of the StateCheck shapes (see §4.2).
+  // ConditionalBonus also lives on heal / reduce-damage / apply-status —
+  // identical schema; bonus is added to amount (heal, reduce-damage) or
+  // stacks (apply-status).
 
   Cinematic:    <2–3 sentences of camera/FX brief — what plays on screen when this fires.
                  Camera move, particle/streak description, hit-stop intensity, opponent reaction.
@@ -749,7 +773,7 @@ So the writer knows what each field becomes when the hero is implemented:
 | Mastery `ability-upgrade.modifications[].field` | base-damage / damage-type / heal-amount / reduce-damage-amount / defenseDiceCount | phases.ts (`applyModifiersToBaseDamage` etc.) |
 | Mastery `modifications[].conditional` | StateCheck evaluated each time the modifier applies | phases.ts (`conditionalMatches`) |
 | Damage.SelfCost | unblockable HP loss to caster after the main damage; no on-hit triggers | phases.ts (`resolveAbilityEffect`) |
-| Damage.ConditionalBonus | per-unit bonus when the StateCheck holds | phases.ts (`computeConditionalBonus`) |
+| ConditionalBonus | per-unit bonus when the StateCheck holds; lives on `damage` / `scaling-damage` / `heal` / `reduce-damage` / `apply-status` | cards.ts (`computeConditionalBonus`) |
 | Damage.ConditionalTypeOverride | promotes damage type at resolution time | phases.ts (`resolveAbilityEffect`) |
 | Defensive.OffensiveFallback | rolls + resolves when caster's offensive turn produces no ability | phases.ts (`tryOffensiveFallback`) |
 | T4.UltimateBand | "career-moment" lets the simulator accept 1–5% landing | scripts/simulate.ts |
@@ -867,6 +891,56 @@ Effect: damage
   type:   ultimate
   self_cost: 3
 ```
+
+### Conditional heal (scales with banked passive)
+
+Lightbearer's Recovery — heal 0 base + 2 per Radiance token banked, when at least 1 token is held:
+
+```
+Effect: heal
+  amount: 0
+  target: self
+  conditional_bonus:
+    condition:    { kind: "passive-counter-min", passiveKey: "radiance", count: 1 }
+    bonusPerUnit: 2
+    source:       "self-passive-counter"
+    sourcePassiveKey: "radiance"
+```
+
+Reads as "heal 0 base + 2 per stack of Radiance, when stacks ≥ 1." Useful for sustain abilities whose value is gated on the player having committed to the passive's economy.
+
+### Conditional reduce-damage (scales with opponent debuff)
+
+Stoneward — base 2 mitigation + 1 per Cinder on opponent, when opponent has at least 1 Cinder:
+
+```
+Effect: reduce-damage
+  amount: 2
+  conditional_bonus:
+    condition:    { kind: "opponent-has-status-min", status: "pyromancer:cinder", count: 1 }
+    bonusPerUnit: 1
+    source:       "opponent-status-stacks"
+    sourceStatus: "pyromancer:cinder"
+```
+
+Reads as "reduce 2 base + 1 per stack of Cinder on opponent." Lets defenders punish opponents who have over-stacked debuffs.
+
+### Conditional apply-status (scales with self HP threshold)
+
+Reaper's Mark — apply 1 base stack of Mark + 2 extra when wounded (`self-low-hp`):
+
+```
+Effect: apply-status
+  status:  reaper:mark
+  stacks:  1
+  target:  opponent
+  conditional_bonus:
+    condition:    { kind: "self-low-hp" }
+    bonusPerUnit: 2
+    source:       "fixed-one"
+```
+
+Reads as "apply 1 stack base + 2 stacks if at low HP" — three stacks total when wounded, one when healthy. Ideal for desperation-mode escalations on weaker abilities.
 
 ### Critical Ultimate (mechanical)
 
