@@ -10,7 +10,7 @@
  * triggered when the Zustand game store applies an action and emits events.
  */
 import { create } from "zustand";
-import type { GameEvent, HeroId, PlayerId } from "@/game/types";
+import type { CardId, GameEvent, HeroId, PlayerId } from "@/game/types";
 
 export interface DamageNumber {
   id: number;
@@ -46,6 +46,19 @@ export interface AttackEffectState {
   durationMs: number;
 }
 
+/** Instant prompt — auto-opened by the pump after a qualifying event when
+ *  the holder has at least one playable Instant in hand. */
+export interface InstantPromptState {
+  /** Which player owns the Instants on offer (the chooser). */
+  holder: PlayerId;
+  /** IDs of cards in holder's hand that qualify right now. */
+  candidateCardIds: CardId[];
+  /** Auto-skip deadline — wall-clock ms timestamp. */
+  expiresAt: number;
+  /** Event that triggered the prompt — used by the UI for context display. */
+  triggeringEventName: string;
+}
+
 export interface ShakeState {
   magnitude: number;     // px
   duration: number;      // ms
@@ -62,6 +75,9 @@ export interface ChoreoState {
   cinematic: AbilityCinematicState | null;
   attackEffect: AttackEffectState | null;
   bannerText: string | null;     // turn-started, match-won, etc.
+  /** Instant card prompt — set after qualifying events when either player
+   *  has playable Instants in hand. Pump halts while non-null. */
+  instantPrompt: InstantPromptState | null;
   // Counters
   totalEventsHandled: number;
 
@@ -78,6 +94,8 @@ export interface ChoreoState {
   endCinematic: () => void;
   startAttackEffect: (e: Omit<AttackEffectState, "startedAt">) => void;
   endAttackEffect: () => void;
+  startInstantPrompt: (p: Omit<InstantPromptState, "expiresAt"> & { ttlMs: number }) => void;
+  endInstantPrompt: () => void;
   setBanner: (text: string | null) => void;
   reset: () => void;
 }
@@ -93,6 +111,7 @@ export const useChoreoStore = create<ChoreoState>((set) => ({
   cinematic: null,
   attackEffect: null,
   bannerText: null,
+  instantPrompt: null,
   totalEventsHandled: 0,
 
   enqueue: (events) => set(s => ({ queue: [...s.queue, ...events] })),
@@ -142,11 +161,21 @@ export const useChoreoStore = create<ChoreoState>((set) => ({
 
   endAttackEffect: () => set({ attackEffect: null }),
 
+  startInstantPrompt: ({ holder, candidateCardIds, triggeringEventName, ttlMs }) => set({
+    instantPrompt: {
+      holder, candidateCardIds, triggeringEventName,
+      expiresAt: performance.now() + ttlMs,
+    },
+  }),
+
+  endInstantPrompt: () => set({ instantPrompt: null }),
+
   setBanner: (bannerText) => set({ bannerText }),
 
   reset: () => set({
     queue: [], playing: null, shake: null, hitStopUntil: 0,
     damageNumbers: [], cinematic: null, attackEffect: null, bannerText: null,
+    instantPrompt: null,
   }),
 }));
 

@@ -17,7 +17,7 @@
  */
 import { type ReactNode } from "react";
 import { useChoreoStore } from "@/store/choreoStore";
-import type { GameEvent } from "@/game/types";
+import type { CardId, GameEvent } from "@/game/types";
 import { sfxForEvent } from "@/audio/library";
 import { audio } from "@/audio/manager";
 import { vibrate } from "@/hooks/useHaptics";
@@ -29,6 +29,7 @@ import { AbilityCinematicLayer } from "./AbilityCinematic";
 import { AttackEffectLayer } from "./AttackEffect";
 import { Banner } from "./Banner";
 import { ActionLog } from "./ActionLog";
+import { InstantPromptLayer } from "./InstantPrompt";
 import { useGameStore } from "@/store/gameStore";
 import { getHero } from "@/content";
 import type { HeroId, PlayerId } from "@/game/types";
@@ -45,6 +46,7 @@ export function Choreographer({ children }: Props) {
       <AbilityCinematicLayer />
       <Banner />
       <ActionLog />
+      <InstantPromptLayer />
     </ScreenShake>
   );
 }
@@ -67,6 +69,7 @@ function readReduced(): boolean {
 function pump(): void {
   const s = useChoreoStore.getState();
   if (pumpTimer) return;          // a beat is already in flight
+  if (s.instantPrompt) return;    // paused while waiting for player to respond
   if (s.playing) return;
   if (s.queue.length === 0) return;
 
@@ -95,9 +98,66 @@ function pump(): void {
   pumpTimer = setTimeout(() => {
     pumpTimer = null;
     useChoreoStore.getState().finishCurrent();
-    // Try to advance immediately to the next event in the queue.
+    // After the beat resolves, check if the just-played event qualifies for
+    // an Instant prompt — and if either player has playable Instants, open
+    // the prompt before advancing the queue.
+    if (eventQualifiesForInstantPrompt(ev)) {
+      maybeOpenInstantPrompt(ev);
+    }
+    // Try to advance — pump will bail early if a prompt was just opened.
     pump();
   }, duration);
+}
+
+/** Events that allow an Instant interrupt window per spec correction 4. */
+function eventQualifiesForInstantPrompt(ev: GameEvent): boolean {
+  switch (ev.t) {
+    case "damage-dealt":
+    case "ability-triggered":
+    case "ultimate-fired":
+    case "defense-resolved":
+    case "status-applied":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** Inspect both players' hands for cards whose kind is "instant" and open
+ *  the prompt for whichever holder has at least one. Active player gets
+ *  priority over opponent if both have candidates (UI policy). */
+function maybeOpenInstantPrompt(ev: GameEvent): void {
+  // Lazy import to avoid circular dep with gameStore at module load.
+  const gs = useGameStore.getState();
+  if (!gs.state || gs.state.winner) return;
+
+  const candidates: { holder: PlayerId; ids: CardId[] }[] = [];
+  for (const pid of ["p1", "p2"] as const) {
+    const hand = gs.state.players[pid].hand;
+    const ids = hand.filter(c => c.kind === "instant").map(c => c.id);
+    if (ids.length > 0) candidates.push({ holder: pid, ids });
+  }
+  if (candidates.length === 0) return;
+
+  // Prefer the active player; otherwise fall through to the first holder.
+  const active = gs.state.activePlayer;
+  const chosen = candidates.find(c => c.holder === active) ?? candidates[0];
+
+  useChoreoStore.getState().startInstantPrompt({
+    holder: chosen.holder,
+    candidateCardIds: chosen.ids,
+    triggeringEventName: ev.t,
+    ttlMs: 1500,
+  });
+
+  // Auto-close on TTL.
+  window.setTimeout(() => {
+    const live = useChoreoStore.getState().instantPrompt;
+    if (live && live.expiresAt <= performance.now() + 5) {
+      useChoreoStore.getState().endInstantPrompt();
+      pump();
+    }
+  }, 1500);
 }
 
 if (typeof window !== "undefined" && !subscribed) {
