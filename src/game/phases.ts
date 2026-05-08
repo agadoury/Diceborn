@@ -30,8 +30,8 @@ import { drawCards, gainCp, autoDiscardOverHandCap, resolveEffect } from "./card
 import { dealDamage } from "./damage";
 import {
   evaluateLadder,
-  comboMatches,
-  symbolsOnDice,
+  comboMatchesFaces,
+  computeComboExtras,
   classifyCrit,
   rollUnlocked,
 } from "./dice";
@@ -213,10 +213,21 @@ export function resolveOffensiveAbility(state: GameState): GameEvent[] {
   const opponent = state.players[other(state.activePlayer)];
   const hero = getHero(active.hero);
 
-  const symbols = symbolsOnDice(active.dice);
+  // Picker: highest tier among matched abilities, then highest base damage
+  // among ties. Works with any ability count per tier.
+  const faces = active.dice.map(d => d.faces[d.current]);
   let firingIndex = -1;
+  let firingTier = -1;
+  let firingBaseDamage = -Infinity;
   for (let i = 0; i < hero.abilityLadder.length; i++) {
-    if (comboMatches(hero.abilityLadder[i].combo, symbols)) firingIndex = i;
+    if (!comboMatchesFaces(hero.abilityLadder[i].combo, faces)) continue;
+    const a = hero.abilityLadder[i];
+    const dmg = abilityBaseDamage(a, faces);
+    if (a.tier > firingTier || (a.tier === firingTier && dmg > firingBaseDamage)) {
+      firingIndex = i;
+      firingTier = a.tier;
+      firingBaseDamage = dmg;
+    }
   }
   if (firingIndex < 0) {
     // Nothing fired — the player's offensive turn produced no ability.
@@ -286,6 +297,8 @@ export function resolveOffensiveAbility(state: GameState): GameEvent[] {
   const baseEvents = resolveAbilityEffect(state, ability.effect, {
     caster: active, opponent,
     damageBonus, defensiveReduction, critFlat, critMul,
+    firingCombo: ability.combo,
+    firingFaces: faces,
   });
   events.push(...baseEvents);
 
@@ -361,12 +374,42 @@ interface AbilityCtx {
   defensiveReduction: number;
   critFlat: number;
   critMul: number;
+  /** Combo + faces of the firing ability — used by scaling-damage effects
+   *  to compute "extras beyond combo minimum." */
+  firingCombo?: import("./types").DiceCombo;
+  firingFaces?: ReadonlyArray<import("./types").DieFace>;
+}
+
+/** Picker-time base damage estimate for an ability. Compound effects sum
+ *  their damage leaves; scaling-damage uses the *max* possible scaling
+ *  (baseAmount + maxExtra * perExtra). */
+function abilityBaseDamage(a: import("./types").AbilityDef, _faces: ReadonlyArray<import("./types").DieFace>): number {
+  return effectMaxDamage(a.effect);
+}
+function effectMaxDamage(effect: import("./types").AbilityEffect): number {
+  switch (effect.kind) {
+    case "damage":          return effect.amount;
+    case "scaling-damage":  return effect.baseAmount + effect.perExtra * effect.maxExtra;
+    case "compound":        return effect.effects.reduce((acc, e) => acc + effectMaxDamage(e), 0);
+    default:                return 0;
+  }
 }
 
 function resolveAbilityEffect(state: GameState, effect: import("./types").AbilityEffect, ctx: AbilityCtx): GameEvent[] {
   // Walk the effect tree; for damage leaves apply critFlat + critMul + damageBonus.
   if (effect.kind === "damage") {
     const total = Math.ceil((effect.amount * ctx.critMul) + ctx.critFlat) + ctx.damageBonus;
+    const r = dealDamage(ctx.caster.player, ctx.opponent, total, effect.type, ctx.defensiveReduction);
+    return r.events;
+  }
+  if (effect.kind === "scaling-damage") {
+    let extras = 0;
+    if (ctx.firingCombo && ctx.firingFaces) {
+      extras = computeComboExtras(ctx.firingCombo, ctx.firingFaces);
+    }
+    const clamped = Math.min(extras, effect.maxExtra);
+    const baseAmt = effect.baseAmount + clamped * effect.perExtra;
+    const total = Math.ceil(baseAmt * ctx.critMul + ctx.critFlat) + ctx.damageBonus;
     const r = dealDamage(ctx.caster.player, ctx.opponent, total, effect.type, ctx.defensiveReduction);
     return r.events;
   }

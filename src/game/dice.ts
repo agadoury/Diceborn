@@ -421,5 +421,40 @@ export function classifyCrit(ability: AbilityDef, dice: ReadonlyArray<Die>): "mi
   return ability.tier === 4 ? "major" : "minor";
 }
 
+/** How many dice contribute beyond a combo's minimum threshold. Used by
+ *  scaling-damage effects to produce 3/4/5-of-a-kind damage curves. */
+export function computeComboExtras(combo: DiceCombo, faces: ReadonlyArray<DieFace>): number {
+  switch (combo.kind) {
+    case "symbol-count":
+    case "matching":
+    case "at-least": {
+      const c = faces.filter(f => f.symbol === combo.symbol).length;
+      return Math.max(0, c - combo.count);
+    }
+    case "n-of-a-kind": {
+      const counts = new Map<number, number>();
+      for (const f of faces) counts.set(f.faceValue, (counts.get(f.faceValue) ?? 0) + 1);
+      const max = counts.size ? Math.max(...counts.values()) : 0;
+      return Math.max(0, max - combo.count);
+    }
+    case "matching-any": {
+      const counts = new Map<string, number>();
+      for (const f of faces) counts.set(f.symbol, (counts.get(f.symbol) ?? 0) + 1);
+      const max = counts.size ? Math.max(...counts.values()) : 0;
+      return Math.max(0, max - combo.count);
+    }
+    case "any-of": {
+      let max = 0;
+      for (const sym of combo.symbols) {
+        const c = faces.filter(f => f.symbol === sym).length;
+        if (c > max) max = c;
+      }
+      return Math.max(0, max - combo.count);
+    }
+    default:
+      return 0;  // compound, straight, specific-set: no natural "extras"
+  }
+}
+
 // ── Helpers exported for tests/AI ───────────────────────────────────────────
 export { stacksOf };

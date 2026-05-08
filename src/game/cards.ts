@@ -66,6 +66,18 @@ export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent
       );
       return r.events;
     }
+    case "scaling-damage": {
+      // Cards-context: no firing combo available, so apply baseAmount only.
+      // Engine ability resolution handles scaling extras itself in phases.ts.
+      const total = effect.baseAmount + (ctx.damageBonus ?? 0);
+      const r = dealDamage(
+        ctx.caster.player, ctx.opponent, total, effect.type,
+        effect.type === "normal" || effect.type === "ultimate" || effect.type === "collateral"
+          ? (ctx.defensiveReduction ?? 0)
+          : 0,
+      );
+      return r.events;
+    }
     case "apply-status": {
       const target = effect.target === "self" ? ctx.caster : ctx.opponent;
       return applyStatus(target, ctx.caster.player, effect.status, effect.stacks);

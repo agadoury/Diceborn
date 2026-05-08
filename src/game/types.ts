@@ -59,6 +59,11 @@ export type DamageType =
 
 export type AbilityEffect =
   | { kind: "damage"; amount: number; type: DamageType }
+  /** Damage that scales with how many extra dice contribute beyond the
+   *  combo's minimum. E.g. for symbol-count(sword,3): 3 swords = base,
+   *  4 swords = base + perExtra, 5 swords = base + 2*perExtra. Capped by
+   *  maxExtra (typically 2 since 5 dice − 3 minimum = 2 extras). */
+  | { kind: "scaling-damage"; baseAmount: number; perExtra: number; maxExtra: number; type: DamageType }
   | { kind: "apply-status"; status: StatusId; stacks: number; target: "self" | "opponent" }
   | { kind: "remove-status"; status: StatusId; stacks: number; target: "self" | "opponent" }
   | { kind: "heal"; amount: number; target: "self" | "opponent" }
