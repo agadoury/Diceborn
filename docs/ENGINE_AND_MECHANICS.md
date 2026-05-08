@@ -29,7 +29,7 @@ For the player-facing rules walkthrough, see the `/how-to-play` route. For the h
 
 ## 1. Game overview
 
-Diceborn is a 1v1 dice-and-card duel. Each player picks a hero, draws a starting hand, and takes alternating turns. On the active player's turn they roll five hero-specific dice (up to 3 attempts, locking dice between rolls), and the highest-tier ability the resulting dice combo unlocks fires automatically. The opponent then auto-rolls a defensive set; their hero's defensive ladder (or a fallback) reduces the incoming damage. Both players play cards from their hand throughout to bend dice, modify abilities, apply tokens, or trigger reactive effects.
+Diceborn is a 1v1 dice-and-card duel. Each player picks a hero, draws a starting hand, and takes alternating turns. On the active player's turn they roll five hero-specific dice (up to 3 attempts, locking dice between rolls). When the roll ends, every ability whose combo currently matches is offered to the player, who **picks one to fire** (or passes). For defendable damage, the defender then **picks one defense** from their ladder, rolls that defense's dice once (no rerolls, no locking), and the combo lands or fizzles. Both players play cards from their hand throughout to bend dice, modify abilities, apply tokens, or trigger reactive effects.
 
 A match ends when one hero's HP reaches 0, or when a player concedes. The target match length is **5–8 minutes / 6–8 turns**; damage tuning is calibrated to that envelope.
 
