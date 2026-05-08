@@ -66,7 +66,8 @@ export type StateCheck =
   | { kind: "self-low-hp" }
   | { kind: "passive-counter-min";     passiveKey: string; count: number }
   | { kind: "combo-symbol-count";      symbol: SymbolId; count: number }   // counts on firingFaces
-  | { kind: "combo-n-of-a-kind";       count: number };
+  | { kind: "combo-n-of-a-kind";       count: number }
+  | { kind: "combo-straight";          length: number };                   // longest contiguous run on firingFaces ≥ length
 
 /** How to count a "source" of bonus when a conditional fires. */
 export type ConditionalSource =
@@ -186,6 +187,11 @@ export type AbilityEffect =
   /** Direct manipulation of a signature passive counter (e.g. War Cry adds
    *  +3 Frenzy without the "must take damage" trigger). */
   | { kind: "passive-counter-modifier"; passiveKey: string; operation: "add" | "set"; value: number; respectsCap?: boolean }
+  /** Force the caster's dice to count as a specific face (and its associated
+   *  symbol) for combo evaluation until end of turn. When `faceValue` is
+   *  omitted, the player's `targetFaceValue` from the play-card action is
+   *  used. Survives rerolls. */
+  | { kind: "force-face-value"; faceValue?: 1|2|3|4|5|6; duration: "this-turn" }
   /** Match-long buff applied immediately. The buff itself is any standard
    *  effect-shaped modifier (e.g. +1 dmg on offensive abilities). Discarded
    *  on the named trigger, if any. */
@@ -307,6 +313,10 @@ export interface Card {
   /** When true, the card may only be played a single time per match. The
    *  engine records the cardId in `consumedOncePerMatchCards` on play. */
   oncePerMatch?: boolean;
+  /** When true, the card may only be played once per turn. The engine
+   *  records the cardId in `consumedOncePerTurnCards` and clears the list
+   *  at `passTurn`. */
+  oncePerTurn?: boolean;
   // ── Mastery-only fields ──────────────────────────────────────────────────
   /** Required for `kind: "mastery"`. Which tier the mastery upgrades.
    *  T4 ultimates intentionally have no mastery — power lives at the curve
@@ -472,6 +482,11 @@ export interface HeroSnapshot {
   abilityModifiers: ActiveAbilityModifier[];
   /** Active face-symbol bends. */
   symbolBends: ActiveSymbolBend[];
+  /** When set, the combo evaluator treats all of this hero's dice as the
+   *  hero's `diceIdentity.faces[forcedFaceValue - 1]` regardless of the
+   *  actual die state. Cleared at `passTurn`. Set by `force-face-value`
+   *  (e.g. Last Stand). */
+  forcedFaceValue?: 1 | 2 | 3 | 4 | 5 | 6;
   /** Tracks the most-recent `remove-status` event by status id → stripped count.
    *  Reset at end of each phase. Read by ConditionalSource = "stripped-stack-count". */
   lastStripped: Record<StatusId, number>;
@@ -480,6 +495,8 @@ export interface HeroSnapshot {
   /** Card ids that have already been played this match for `oncePerMatch` cards.
    *  `canPlay` rejects further plays of any cardId in this list. */
   consumedOncePerMatchCards: CardId[];
+  /** Card ids played this turn for `oncePerTurn` cards. Cleared at `passTurn`. */
+  consumedOncePerTurnCards: CardId[];
 }
 
 // ── GameState (immutable; mutate only via applyAction) ──────────────────────

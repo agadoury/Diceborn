@@ -132,6 +132,7 @@ function makeHeroSnapshot(player: PlayerId, heroId: HeroId, state: GameState): H
     lastStripped: {},
     masterySlots: {},
     consumedOncePerMatchCards: [],
+    consumedOncePerTurnCards: [],
   };
 }
 
@@ -256,6 +257,13 @@ function passTurn(state: GameState): GameEvent[] {
   const incoming = state.players[state.activePlayer];
   incoming.rollAttemptsRemaining = ROLL_ATTEMPTS;
   for (const d of incoming.dice) d.locked = false;
+  // Per-turn card-consumption list resets when the *outgoing* player's turn
+  // ends. We clear both sides so each player starts their own turn fresh.
+  state.players.p1.consumedOncePerTurnCards = [];
+  state.players.p2.consumedOncePerTurnCards = [];
+  // Forced face-value overrides (Last Stand) are also turn-scoped.
+  state.players.p1.forcedFaceValue = undefined;
+  state.players.p2.forcedFaceValue = undefined;
   const events: GameEvent[] = [
     { t: "turn-started", player: state.activePlayer, turn: state.turn },
   ];
@@ -283,8 +291,9 @@ function playCard(state: GameState, cardId: string, targetDie?: number, _targetP
   if (card.kind === "mastery" && card.masteryTier != null && (card.occupiesSlot ?? true)) {
     active.masterySlots[card.masteryTier as 1 | 2 | 3 | "defensive"] = card.id;
   }
-  // Once-per-match consumption.
+  // Once-per-match / once-per-turn consumption.
   if (card.oncePerMatch) active.consumedOncePerMatchCards.push(card.id);
+  if (card.oncePerTurn) active.consumedOncePerTurnCards.push(card.id);
   events.push({ t: "card-played", player: active.player, cardId, target: targetDie != null ? { die: targetDie } : undefined });
 
   // Resolve effect
@@ -431,6 +440,7 @@ function clonePlayer(p: HeroSnapshot | undefined): HeroSnapshot {
     lastStripped: { ...p.lastStripped },
     masterySlots: { ...p.masterySlots },
     consumedOncePerMatchCards: p.consumedOncePerMatchCards.slice(),
+    consumedOncePerTurnCards: p.consumedOncePerTurnCards.slice(),
   };
 }
 

@@ -256,6 +256,7 @@ function LadderDemo() {
       lastStripped: {},
       masterySlots: {},
       consumedOncePerMatchCards: [],
+      consumedOncePerTurnCards: [],
     };
   }, [hero, dice, attemptsRemaining]);
 

@@ -163,6 +163,14 @@ export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent
       }, effect.id);
     case "bonus-dice-damage":
       return resolveBonusDiceDamage(ctx.state, ctx.caster, ctx.opponent, effect);
+    case "force-face-value": {
+      const fv = effect.faceValue ?? ctx.targetFaceValue;
+      if (fv == null) return [];
+      ctx.caster.forcedFaceValue = fv;
+      // Duration "this-turn" — cleared by the engine at passTurn. No event
+      // type for it yet; UIs can read the snapshot field if needed.
+      return [];
+    }
   }
 }
 
@@ -430,7 +438,24 @@ export function checkState(
       for (const f of firingFaces) counts.set(f.faceValue, (counts.get(f.faceValue) ?? 0) + 1);
       return Math.max(0, ...counts.values()) >= check.count;
     }
+    case "combo-straight": {
+      if (!firingFaces) return false;
+      return longestStraight(firingFaces.map(f => f.faceValue)) >= check.length;
+    }
   }
+}
+
+/** Length of the longest contiguous-value run in a list of faceValues. */
+function longestStraight(values: ReadonlyArray<number>): number {
+  if (values.length === 0) return 0;
+  const seen = new Set(values);
+  let best = 0;
+  for (const v of seen) {
+    let len = 1;
+    while (seen.has(v + len)) len++;
+    if (len > best) best = len;
+  }
+  return best;
 }
 
 void rollOn;            // re-export keeps the AI/sim sharing the seeded stream
@@ -541,8 +566,9 @@ export function canPlay(state: GameState, hero: HeroSnapshot, opponent: HeroSnap
     if (card.playable.minHpFraction != null && frac < card.playable.minHpFraction) return false;
     if (card.playable.maxHpFraction != null && frac > card.playable.maxHpFraction) return false;
   }
-  // Once-per-match consumption check.
+  // Once-per-match / once-per-turn consumption checks.
   if (card.oncePerMatch && hero.consumedOncePerMatchCards.includes(card.id)) return false;
+  if (card.oncePerTurn && hero.consumedOncePerTurnCards.includes(card.id)) return false;
   // Richer play-time gate.
   if (card.playCondition) {
     const pc = card.playCondition;

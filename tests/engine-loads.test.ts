@@ -145,5 +145,6 @@ function mockSnapshot(): HeroSnapshot {
     isLowHp: false, nextAbilityBonusDamage: 0,
     abilityModifiers: [], symbolBends: [], lastStripped: {}, masterySlots: {},
     consumedOncePerMatchCards: [],
+    consumedOncePerTurnCards: [],
   };
 }

@@ -316,9 +316,10 @@ export const BERSERKER: HeroDefinition = {
       kind: "roll-phase",
       name: "Iron Focus",
       cost: 1,
-      text: "Set 1 of your dice to a face value of your choice.",
+      text: "Set 1 of your dice to a face value of your choice. Once per turn.",
       trigger: { kind: "manual" },
       effect: { kind: "set-die-face", count: 1, filter: "any", target: { kind: "face" } },
+      oncePerTurn: true,
       flavor: "He chooses where the storm strikes.",
     },
     {
@@ -409,7 +410,7 @@ export const BERSERKER: HeroDefinition = {
             field: "base-damage",
             operation: "set",
             value: 11,
-            conditional: { kind: "combo-n-of-a-kind", count: 1 },
+            conditional: { kind: "combo-straight", length: 4 },
           },
         ],
       },
@@ -589,14 +590,16 @@ export const BERSERKER: HeroDefinition = {
       kind: "roll-phase",
       name: "Last Stand",
       cost: 4,
-      text: "Playable only when at ≤10 HP. Choose a face value; all 5 of your dice show that face for combo purposes. Once per match.",
+      text: "Playable only when at ≤10 HP. Choose a face value; until end of turn, all 5 of your dice count as that face. Once per match.",
       trigger: { kind: "manual" },
       effect: {
-        kind: "set-die-face",
-        count: 5,
-        filter: "any",
-        target: { kind: "face" },
-        lockAfter: true,
+        kind: "compound",
+        effects: [
+          // Visual: set + lock all dice to the picked face for the dice tray.
+          { kind: "set-die-face", count: 5, filter: "any", target: { kind: "face" }, lockAfter: true },
+          // Combo evaluation: override survives any reroll until end of turn.
+          { kind: "force-face-value", duration: "this-turn" },
+        ],
       },
       playCondition: { kind: "match-state-threshold", metric: "self-hp", op: "<=", value: 10 },
       oncePerMatch: true,

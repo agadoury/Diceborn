@@ -54,6 +54,22 @@ const NEXT: Record<Phase, Phase> = {
 
 export function nextPhase(p: Phase): Phase { return NEXT[p]; }
 
+/** Compute the effective firing faces for a hero — applies symbol bends and,
+ *  if the hero has a `forcedFaceValue` set this turn (Last Stand), returns
+ *  five copies of the hero's `diceIdentity.faces[forcedFaceValue - 1]`
+ *  regardless of actual die state. Survives rerolls. */
+export function effectiveFiringFaces(
+  hero_snapshot: HeroSnapshot,
+  hero: HeroDefinition,
+): import("./types").DieFace[] {
+  if (hero_snapshot.forcedFaceValue != null) {
+    const forced = hero.diceIdentity.faces[hero_snapshot.forcedFaceValue - 1];
+    return hero_snapshot.dice.map(() => ({ ...forced }));
+  }
+  const rawFaces = hero_snapshot.dice.map(d => d.faces[d.current]);
+  return bentFaces(rawFaces, hero_snapshot.symbolBends);
+}
+
 // ── Phase enter handlers (auto-running pieces) ──────────────────────────────
 export function enterPhase(state: GameState, phase: Phase): GameEvent[] {
   const events: GameEvent[] = [];
@@ -220,8 +236,7 @@ export function beginOffensivePick(state: GameState): GameEvent[] {
   const opponent = state.players[other(state.activePlayer)];
   const hero = getHero(active.hero);
 
-  const rawFaces = active.dice.map(d => d.faces[d.current]);
-  const faces = bentFaces(rawFaces, active.symbolBends);
+  const faces = effectiveFiringFaces(active, hero);
 
   // Collect all matching abilities, sorted highest-tier-first then
   // highest-base-damage-first (legacy auto-pick order — UX-friendly default
@@ -288,8 +303,7 @@ export function commitOffensiveAbility(state: GameState, abilityIndex: number): 
   const opponent = state.players[other(state.activePlayer)];
   const hero = getHero(active.hero);
 
-  const rawFaces = active.dice.map(d => d.faces[d.current]);
-  const faces = bentFaces(rawFaces, active.symbolBends);
+  const faces = effectiveFiringFaces(active, hero);
   const ability = hero.abilityLadder[abilityIndex];
 
   events.push({
@@ -924,6 +938,17 @@ function conditionalMatches(
       const counts = new Map<number, number>();
       for (const f of firingFaces) counts.set(f.faceValue, (counts.get(f.faceValue) ?? 0) + 1);
       return Math.max(0, ...counts.values()) >= cond.count;
+    }
+    case "combo-straight": {
+      if (!firingFaces) return false;
+      const seen = new Set<number>(firingFaces.map(f => f.faceValue));
+      let best = 0;
+      for (const v of seen) {
+        let len = 1;
+        while (seen.has(v + len)) len++;
+        if (len > best) best = len;
+      }
+      return best >= cond.length;
     }
     default: return false;
   }
