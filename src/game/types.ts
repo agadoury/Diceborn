@@ -64,6 +64,9 @@ export type AbilityEffect =
    *  4 swords = base + perExtra, 5 swords = base + 2*perExtra. Capped by
    *  maxExtra (typically 2 since 5 dice − 3 minimum = 2 extras). */
   | { kind: "scaling-damage"; baseAmount: number; perExtra: number; maxExtra: number; type: DamageType }
+  /** Defensive: reduce incoming damage by this amount during the current
+   *  defensive roll. Used by defensive-ladder abilities. */
+  | { kind: "reduce-damage"; amount: number }
   | { kind: "apply-status"; status: StatusId; stacks: number; target: "self" | "opponent" }
   | { kind: "remove-status"; status: StatusId; stacks: number; target: "self" | "opponent" }
   | { kind: "heal"; amount: number; target: "self" | "opponent" }

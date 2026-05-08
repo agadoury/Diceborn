@@ -78,6 +78,11 @@ export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent
       );
       return r.events;
     }
+    case "reduce-damage": {
+      // Cards-context shouldn't normally use reduce-damage (defensive abilities
+      // resolve in phases.ts). No-op here so the switch stays exhaustive.
+      return [];
+    }
     case "apply-status": {
       const target = effect.target === "self" ? ctx.caster : ctx.opponent;
       return applyStatus(target, ctx.caster.player, effect.status, effect.stacks);

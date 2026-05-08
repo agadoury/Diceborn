@@ -326,44 +326,137 @@ function autoResolveDefense(
   state: GameState,
   defender: HeroSnapshot,
 ): { reduction: number; events: GameEvent[] } {
-  // MVP: simple deterministic reduction policy — sum 1 for every SHIELD face
-  // showing on the defender's current dice (fresh single roll, no rerolls).
   const events: GameEvent[] = [];
   // Reset locks on the defender's dice and reroll all (defense is fresh).
   for (const d of defender.dice) d.locked = false;
   rollUnlocked(state, defender.dice);
-  let reduction = 0;
-  for (const d of defender.dice) {
-    if (d.faces[d.current].symbol.endsWith(":shield")) reduction++;
-  }
   events.push({
     t: "dice-rolled",
     player: defender.player,
     dice: defender.dice.map(d => ({ index: d.index, current: d.current, symbol: d.faces[d.current].symbol, locked: d.locked })),
     attemptNumber: 1,
   });
-  events.push({ t: "defense-resolved", player: defender.player, reduction });
+
+  const defHero = getHero(defender.hero);
+  const attacker = state.players[other(defender.player)];
+  const faces = defender.dice.map(d => d.faces[d.current]);
+  let reduction = 0;
+  let matchedTier: 1 | 2 | 3 | 4 | undefined;
+  let matchedAbilityName: string | undefined;
+
+  // Evaluate the hero's defensive ladder if declared. Picker is the same
+  // highest-tier-then-highest-reduction policy as the offensive ladder.
+  const dl = defHero.defensiveLadder;
+  if (dl && dl.length > 0) {
+    let bestIdx = -1;
+    let bestTier = -1;
+    let bestReduction = -Infinity;
+    for (let i = 0; i < dl.length; i++) {
+      if (!comboMatchesFaces(dl[i].combo, faces)) continue;
+      const a = dl[i];
+      const r = effectReductionAmount(a.effect);
+      if (a.tier > bestTier || (a.tier === bestTier && r > bestReduction)) {
+        bestIdx = i;
+        bestTier = a.tier;
+        bestReduction = r;
+      }
+    }
+    if (bestIdx >= 0) {
+      const ability = dl[bestIdx];
+      matchedTier = ability.tier;
+      matchedAbilityName = ability.name;
+      const r = resolveDefensiveEffect(ability.effect, {
+        defender, attacker, firingCombo: ability.combo, firingFaces: faces,
+      });
+      reduction += r.reduction;
+      events.push(...r.events);
+    }
+  } else {
+    // Legacy fallback — heroes without a declared defensiveLadder still get
+    // the simple shield-face reduction so existing content keeps working.
+    for (const d of defender.dice) {
+      if (d.faces[d.current].symbol.endsWith(":shield")) reduction++;
+    }
+  }
+
+  events.push({
+    t: "defense-resolved",
+    player: defender.player,
+    reduction,
+    matchedTier,
+    abilityName: matchedAbilityName,
+  });
   if (reduction >= 2) events.push({ t: "hero-state", player: defender.player, state: "defended" });
 
-  // Paladin's Divine Favor passive — successful defense (≥1 reduction) grants
-  // +1 Protect to defender AND applies +1 Judgment to the attacker.
-  const defHero = getHero(defender.hero);
+  // Hero passives — Paladin's Divine Favor on successful defense.
   const sig = defHero.signatureMechanic.implementation;
   if (sig.kind === "divine-favor" && reduction >= 1) {
-    const attacker = state.players[other(defender.player)];
-    // Cap protect via the passive's own cap — applyStatus uses the registry's
-    // stackLimit (5), and our divine-favor cap matches.
     events.push(...applyStatus(defender, defender.player, "protect", sig.protectPerDefense));
     events.push(...applyStatus(attacker, defender.player, "judgment", sig.judgmentPerDefense));
   }
-
-  // Defender's CP gain trigger: "+1 CP on successful defense" (Paladin).
   if (reduction >= 1) {
     for (const trig of defHero.resourceIdentity.cpGainTriggers) {
       if (trig.on === "successfulDefense") events.push(...gainCp(defender, trig.gain));
     }
   }
   return { reduction, events };
+}
+
+/** Sum reduce-damage amounts across an effect tree — used by the picker so
+ *  defensive abilities are compared on their reduction value. */
+function effectReductionAmount(effect: import("./types").AbilityEffect): number {
+  switch (effect.kind) {
+    case "reduce-damage": return effect.amount;
+    case "compound":      return effect.effects.reduce((a, e) => a + effectReductionAmount(e), 0);
+    default:              return 0;
+  }
+}
+
+interface DefenseCtx {
+  defender: HeroSnapshot;
+  attacker: HeroSnapshot;
+  firingCombo: import("./types").DiceCombo;
+  firingFaces: ReadonlyArray<import("./types").DieFace>;
+}
+
+/** Resolve the matched defensive ability's effect tree. Returns the
+ *  damage reduction it contributes (from reduce-damage leaves) and any
+ *  events from heal / apply-status / etc. */
+function resolveDefensiveEffect(
+  effect: import("./types").AbilityEffect,
+  ctx: DefenseCtx,
+): { reduction: number; events: GameEvent[] } {
+  switch (effect.kind) {
+    case "reduce-damage":
+      return { reduction: effect.amount, events: [] };
+    case "heal": {
+      const target = effect.target === "self" ? ctx.defender : ctx.attacker;
+      const before = target.hp;
+      target.hp = Math.min(target.hpCap, before + effect.amount);
+      const delta = target.hp - before;
+      if (delta <= 0) return { reduction: 0, events: [] };
+      return { reduction: 0, events: [
+        { t: "heal-applied", player: target.player, amount: delta },
+        { t: "hp-changed", player: target.player, delta, total: target.hp },
+      ]};
+    }
+    case "apply-status": {
+      const target = effect.target === "self" ? ctx.defender : ctx.attacker;
+      return { reduction: 0, events: applyStatus(target, ctx.defender.player, effect.status, effect.stacks) };
+    }
+    case "compound": {
+      let reduction = 0;
+      const events: GameEvent[] = [];
+      for (const e of effect.effects) {
+        const r = resolveDefensiveEffect(e, ctx);
+        reduction += r.reduction;
+        events.push(...r.events);
+      }
+      return { reduction, events };
+    }
+    default:
+      return { reduction: 0, events: [] };
+  }
 }
 
 // ── Effect resolver wrapper that applies crit modulation ────────────────────
