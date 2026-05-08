@@ -15,8 +15,9 @@ import type { CardId, GameEvent, HeroId, PlayerId } from "@/game/types";
 export interface DamageNumber {
   id: number;
   amount: number;
-  /** "dmg" red / "heal" green / "pure" purple / "crit" gold / "white" undefendable. */
-  variant: "dmg" | "heal" | "pure" | "crit" | "white";
+  /** "dmg" red / "heal" green / "pure" purple / "crit" gold / "white"
+   *  undefendable / "cp" ember-gold (used for sell-card +1 CP floaters). */
+  variant: "dmg" | "heal" | "pure" | "crit" | "white" | "cp";
   /** Approx position 0..1 of the screen, both axes. Test bench uses center.  */
   x: number; y: number;
   /** Big-number flag for ≥10 / ≥20 sizes. */

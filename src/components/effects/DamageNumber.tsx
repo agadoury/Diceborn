@@ -13,6 +13,7 @@ const VARIANT_COLOR: Record<DN["variant"], string> = {
   pure:  "text-violet-300",
   crit:  "text-amber-300",
   white: "text-white",
+  cp:    "text-amber-300 drop-shadow-[0_0_12px_rgba(245,158,11,0.7)]",
 };
 
 export function DamageNumberLayer() {
@@ -50,7 +51,9 @@ function DamageNumberItem({ dn }: { dn: DN }) {
         willChange: "transform, opacity",
       }}
     >
-      {dn.variant === "heal" ? `+${dn.amount}` : dn.amount}
+      {dn.variant === "heal" ? `+${dn.amount}` :
+       dn.variant === "cp"   ? `+${dn.amount} CP` :
+       dn.amount}
 
       <style>{`
         @keyframes dn-float {

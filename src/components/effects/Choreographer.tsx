@@ -172,7 +172,7 @@ interface PlayCtx {
   reduced: boolean;
   setShake:       (s: { magnitude: number; duration: number; startedAt: number } | null) => void;
   triggerHitStop: (ms: number) => void;
-  spawnDmg:       (n: { amount: number; variant: "dmg"|"heal"|"pure"|"crit"|"white"; x: number; y: number; size: "sm"|"md"|"lg" }) => void;
+  spawnDmg:       (n: { amount: number; variant: "dmg"|"heal"|"pure"|"crit"|"white"|"cp"; x: number; y: number; size: "sm"|"md"|"lg" }) => void;
   startCinematic: (c: { hero: HeroId; abilityName: string; isUlt: boolean; isCritical: boolean; durationMs: number }) => void;
   endCinematic:   () => void;
   startAttackEffect: (e: { hero: HeroId; abilityId: string; abilityName: string; tier: 1 | 2 | 3; accent: string; isCritical: boolean; durationMs: number }) => void;
@@ -211,7 +211,10 @@ function playEvent(ev: GameEvent, ctx: PlayCtx): number {
 
     case "card-drawn":         return 350;
     case "card-played":        vibrate("card-play"); return 700;
-    case "card-sold":          return 450;
+    case "card-sold": {
+      ctx.spawnDmg({ amount: ev.cpGained, variant: "cp", x: 0.5, y: 0.62, size: "sm" });
+      return 600;
+    }
     case "card-discarded":     return 350;
 
     case "cp-changed":         return 350;
