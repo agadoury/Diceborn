@@ -33,10 +33,16 @@ export function tally(symbols: ReadonlyArray<SymbolId>): Map<SymbolId, number> {
 }
 
 // ── Combo evaluation ─────────────────────────────────────────────────────────
-/** Does the given symbol multiset satisfy the combo? */
+/** Does the given symbol multiset satisfy the combo?
+ *
+ *  Note: `n-of-a-kind` and `straight` need face VALUES, not just symbols.
+ *  When called via this signature they return false; use `comboMatchesFaces`
+ *  (below) for face-aware evaluation. Existing hero data uses only symbol-
+ *  based combos, so this is currently a no-op for them. */
 export function comboMatches(combo: DiceCombo, symbols: ReadonlyArray<SymbolId>): boolean {
   const t = tally(symbols);
   switch (combo.kind) {
+    case "symbol-count": return (t.get(combo.symbol) ?? 0) >= combo.count;
     case "matching":     return (t.get(combo.symbol) ?? 0) >= combo.count;
     case "at-least":     return (t.get(combo.symbol) ?? 0) >= combo.count;
     case "matching-any": {
@@ -50,31 +56,53 @@ export function comboMatches(combo: DiceCombo, symbols: ReadonlyArray<SymbolId>)
       return false;
     }
     case "specific-set": {
-      // Every required symbol must appear at least once.
       for (const sym of combo.symbols) {
         if ((t.get(sym) ?? 0) < 1) return false;
       }
       return true;
     }
+    case "n-of-a-kind":
+      // Symbol-only signature can't determine n-of-a-kind. Use comboMatchesFaces.
+      return false;
+    case "straight":
+      // Symbol-only signature can't determine straight. Use comboMatchesFaces.
+      return false;
+    case "compound": {
+      const results = combo.clauses.map(c => comboMatches(c, symbols));
+      return combo.op === "and" ? results.every(Boolean) : results.some(Boolean);
+    }
+  }
+}
+
+/** Face-aware combo evaluation — used by n-of-a-kind and straight. */
+export function comboMatchesFaces(combo: DiceCombo, faces: ReadonlyArray<DieFace>): boolean {
+  switch (combo.kind) {
+    case "n-of-a-kind": {
+      const counts = new Map<number, number>();
+      for (const f of faces) counts.set(f.faceValue, (counts.get(f.faceValue) ?? 0) + 1);
+      const max = Math.max(0, ...counts.values());
+      return max >= combo.count;
+    }
     case "straight": {
-      // Treat symbols as ordered by registration index; for MVP heroes we don't
-      // use straights, so this is a stub that compares numeric face indices.
-      const numeric = symbols.map(s => Number(s)).filter(n => Number.isFinite(n)).sort((a, b) => a - b);
+      const present = new Set<number>(faces.map(f => f.faceValue));
+      const sorted = [...present].sort((a, b) => a - b);
       let best = 1;
-      for (let i = 1; i < numeric.length; i++) {
-        if (numeric[i] === numeric[i - 1] + 1) {
+      for (let i = 1; i < sorted.length; i++) {
+        if (sorted[i] === sorted[i - 1] + 1) {
           best++;
           if (best >= combo.length) return true;
-        } else if (numeric[i] !== numeric[i - 1]) {
+        } else {
           best = 1;
         }
       }
       return false;
     }
     case "compound": {
-      const results = combo.clauses.map(c => comboMatches(c, symbols));
+      const results = combo.clauses.map(c => comboMatchesFaces(c, faces));
       return combo.op === "and" ? results.every(Boolean) : results.some(Boolean);
     }
+    default:
+      return comboMatches(combo, faces.map(f => f.symbol));
   }
 }
 
@@ -147,7 +175,12 @@ export function pickKeepMask(combo: DiceCombo, symbols: ReadonlyArray<SymbolId>)
   switch (combo.kind) {
     case "matching":
     case "at-least":
+    case "symbol-count":
       for (let i = 0; i < symbols.length; i++) if (symbols[i] === combo.symbol) keep[i] = true;
+      return keep;
+    case "n-of-a-kind":
+      // Heuristic: keep all dice (caller resolves via face values elsewhere).
+      for (let i = 0; i < symbols.length; i++) keep[i] = true;
       return keep;
     case "matching-any": {
       // Keep dice matching the most-common symbol.
@@ -346,7 +379,12 @@ function everyDieContributes(combo: DiceCombo, symbols: ReadonlyArray<SymbolId>)
   switch (combo.kind) {
     case "matching":
     case "at-least":
+    case "symbol-count":
       return symbols.every(s => s === combo.symbol);
+    case "n-of-a-kind":
+      // Without face values we conservatively return false; face-aware
+      // crit detection lives elsewhere when needed.
+      return false;
     case "matching-any": {
       const t = tally(symbols);
       // every die has the same symbol

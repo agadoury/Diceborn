@@ -21,12 +21,12 @@ const SYM = {
 } as const;
 
 const FACES = [
-  { symbol: SYM.AXE,    label: "Axe"    },
-  { symbol: SYM.AXE,    label: "Axe"    },
-  { symbol: SYM.FIST,   label: "Fist"   },
-  { symbol: SYM.FURY,   label: "Fury"   },
-  { symbol: SYM.SHIELD, label: "Shield" },
-  { symbol: SYM.ULT,    label: "Roar"   },
+  { faceValue: 1, symbol: SYM.AXE,    label: "Axe"    },
+  { faceValue: 2, symbol: SYM.AXE,    label: "Axe"    },
+  { faceValue: 3, symbol: SYM.FIST,   label: "Fist"   },
+  { faceValue: 4, symbol: SYM.FURY,   label: "Fury"   },
+  { faceValue: 5, symbol: SYM.SHIELD, label: "Shield" },
+  { faceValue: 6, symbol: SYM.ULT,    label: "Roar"   },
 ] as const;
 
 export const BARBARIAN: HeroDefinition = {

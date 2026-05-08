@@ -23,7 +23,7 @@ import { sfx } from "@/audio/sfx";
 
 interface AbilityLadderProps {
   hero: HeroDefinition;
-  rows: [LadderRowState, LadderRowState, LadderRowState, LadderRowState];
+  rows: readonly LadderRowState[];
   className?: string;
   /** Set false on the opponent's ladder to suppress some treatments. */
   isOpponentView?: boolean;
@@ -215,7 +215,10 @@ function renderCombo(combo: DiceCombo): ComboPiece[] {
   switch (combo.kind) {
     case "matching":
     case "at-least":
+    case "symbol-count":
       return [{ kind: "symbol", symbol: combo.symbol, count: combo.count }];
+    case "n-of-a-kind":
+      return [{ kind: "text", text: `×${combo.count}` }];
     case "matching-any":
       return [{ kind: "text", text: `${combo.count}×` }, { kind: "text", text: "★" }];
     case "any-of":

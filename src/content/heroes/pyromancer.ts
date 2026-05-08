@@ -22,12 +22,12 @@ const SYM = {
 } as const;
 
 const FACES = [
-  { symbol: SYM.FLAME,  label: "Flame"   },
-  { symbol: SYM.FLAME,  label: "Flame"   },
-  { symbol: SYM.SPARK,  label: "Spark"   },
-  { symbol: SYM.STAFF,  label: "Staff"   },
-  { symbol: SYM.SHIELD, label: "Ward"    },
-  { symbol: SYM.ULT,    label: "Inferno" },
+  { faceValue: 1, symbol: SYM.FLAME,  label: "Flame"   },
+  { faceValue: 2, symbol: SYM.FLAME,  label: "Flame"   },
+  { faceValue: 3, symbol: SYM.SPARK,  label: "Spark"   },
+  { faceValue: 4, symbol: SYM.STAFF,  label: "Staff"   },
+  { faceValue: 5, symbol: SYM.SHIELD, label: "Ward"    },
+  { faceValue: 6, symbol: SYM.ULT,    label: "Inferno" },
 ] as const;
 
 export const PYROMANCER: HeroDefinition = {

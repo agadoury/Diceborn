@@ -24,12 +24,12 @@ const SYM = {
 } as const;
 
 const FACES = [
-  { symbol: SYM.HAMMER, label: "Hammer" },
-  { symbol: SYM.HAMMER, label: "Hammer" },
-  { symbol: SYM.CROSS,  label: "Cross"  },
-  { symbol: SYM.SHIELD, label: "Shield" },
-  { symbol: SYM.FIST,   label: "Fist"   },
-  { symbol: SYM.ULT,    label: "Light"  },
+  { faceValue: 1, symbol: SYM.HAMMER, label: "Hammer" },
+  { faceValue: 2, symbol: SYM.HAMMER, label: "Hammer" },
+  { faceValue: 3, symbol: SYM.CROSS,  label: "Cross"  },
+  { faceValue: 4, symbol: SYM.SHIELD, label: "Shield" },
+  { faceValue: 5, symbol: SYM.FIST,   label: "Fist"   },
+  { faceValue: 6, symbol: SYM.ULT,    label: "Light"  },
 ] as const;
 
 export const PALADIN: HeroDefinition = {

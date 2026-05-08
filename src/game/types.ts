@@ -21,7 +21,12 @@ export type Phase =
   | "discard" | "match-end";
 
 // ── Dice ────────────────────────────────────────────────────────────────────
-export interface DieFace { symbol: SymbolId; label: string; }
+export interface DieFace {
+  /** Numeric face value 1..6. Used for n-of-a-kind and straight evaluation. */
+  faceValue: 1 | 2 | 3 | 4 | 5 | 6;
+  symbol: SymbolId;
+  label: string;
+}
 
 export interface Die {
   index: 0 | 1 | 2 | 3 | 4;
@@ -30,13 +35,21 @@ export interface Die {
   locked: boolean;
 }
 
-// ── Combo grammar (the agreed-upon shape with `op: "and" | "or"` and `any-of`) ─
+// ── Combo grammar ───────────────────────────────────────────────────────────
+// Per spec Correction 1, the canonical kinds are symbol-count, n-of-a-kind,
+// straight, and compound. Older kinds (matching, matching-any, at-least,
+// any-of, specific-set) are retained for backward compatibility — symbol-count
+// is functionally equivalent to at-least. Migration of existing hero data
+// happens per-hero; new content uses the canonical kinds.
 export type DiceCombo =
+  | { kind: "symbol-count";   symbol: SymbolId; count: number }   // canonical: N+ dice with this symbol
+  | { kind: "n-of-a-kind";    count: 2 | 3 | 4 | 5 }              // canonical: N dice sharing one face value
+  | { kind: "straight";       length: 4 | 5 | number }            // canonical: small/large straight
+  | { kind: "compound";       op: "and" | "or"; clauses: DiceCombo[] }
+  // ── Legacy kinds (still supported) ────────────────────────────────────────
   | { kind: "matching";       symbol: SymbolId; count: number }
   | { kind: "matching-any";   count: number }
   | { kind: "specific-set";   symbols: SymbolId[] }
-  | { kind: "straight";       length: number }
-  | { kind: "compound";       op: "and" | "or"; clauses: DiceCombo[] }
   | { kind: "at-least";       symbol: SymbolId; count: number }
   | { kind: "any-of";         symbols: SymbolId[]; count: number };
 
@@ -67,7 +80,12 @@ export interface AbilityDef {
 }
 
 // ── Cards ───────────────────────────────────────────────────────────────────
-export type CardKind = "upgrade" | "main-action" | "roll-action" | "status";
+// Per spec Correction 4, the canonical categories per the rulebook are
+// main-phase, roll-phase, instant. Legacy "upgrade" and "status" labels are
+// kept for backward compatibility with existing hero data.
+export type CardKind =
+  | "upgrade" | "main-action" | "roll-action" | "status"   // legacy
+  | "main-phase" | "roll-phase" | "instant";               // canonical
 export type CardTrigger =
   | { kind: "manual" }
   | { kind: "on-symbol-rolled"; symbol: SymbolId | "*:ult"; by: "self" | "opponent" }
@@ -108,7 +126,15 @@ export interface HeroDefinition {
   diceIdentity: { faces: readonly DieFace[]; fluffDescription: string }; // length 6
   resourceIdentity: { cpGainTriggers: PassiveTrigger[]; fluffDescription: string };
   signatureMechanic: { name: string; description: string; implementation: PassiveBehavior };
-  abilityLadder: readonly [AbilityDef, AbilityDef, AbilityDef, AbilityDef]; // T1..T4
+  /** Variable count — one or more abilities per tier. Engine picks the
+   *  highest-tier matched ability to fire; if multiple match in the same
+   *  tier, picks the highest-damage one. Older heroes ship with exactly
+   *  4 entries (one per tier); newer heroes can declare 5-9 abilities
+   *  spread across the four tiers. */
+  abilityLadder: readonly AbilityDef[];
+  /** Optional defensive ladder — auto-resolved during the Defensive Roll
+   *  Phase. Same picker logic as the offensive ladder. */
+  defensiveLadder?: readonly AbilityDef[];
   cards: Card[];
   /** Optional: applied to every successful offensive ability landed by this hero
    *  (e.g. Barbarian → Bleeding, Pyromancer → Smolder). */
@@ -148,7 +174,8 @@ export interface HeroSnapshot {
   /** Transient state for the signature mechanic — Rage stacks, Protect tokens, etc.
    *  Generic key-value bag so the engine doesn't need to know per-hero shapes. */
   signatureState: Record<string, number>;
-  ladderState: [LadderRowState, LadderRowState, LadderRowState, LadderRowState];
+  /** Variable length — matches the hero's abilityLadder length. */
+  ladderState: LadderRowState[];
   isLowHp: boolean;
   /** Pending bonus to next offensive ability (e.g. Berserk Rush). */
   nextAbilityBonusDamage: number;
