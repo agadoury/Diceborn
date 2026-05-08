@@ -1,6 +1,6 @@
 # DICEBORN — Hero Creation Requirements
 
-> **You are designing a brand-new, original hero for Diceborn — a 1v1 dice-and-card combat game.** This document is your full brief: the game's constraints, the engine's mechanical primitives, the originality rules, the output format, and a self-check list. Read all of it before you start designing. Output the filled-in template at the end.
+> **You are designing a hero for Diceborn — a 1v1 dice-and-card combat game.** This document is your full brief: the game's constraints, the engine's mechanical primitives, a light originality guideline, the output format, and a self-check list. Read all of it before you start designing. Output the filled-in template at the end.
 
 ---
 
@@ -32,27 +32,13 @@ The engine, choreographer, audio, UI, and screens are already built. Heroes are 
 
 ---
 
-## 3. Originality rules — read this carefully
+## 3. Originality guideline
 
-Diceborn is a fan project that explicitly avoids reproducing creative content from published commercial games. The mechanical patterns (dice + cards, tier-based abilities, combo grammar, status tokens) are public game mechanics, not copyrightable. **The hero contents you design — names, ability rosters, card kits, dice compositions, signature mechanics — must be original creations, not transcriptions or translations of any published game's hero boards.**
+Game mechanics — dice + cards, tier-based abilities, combo grammar, status tokens, hero archetypes (Barbarian, Pyromancer, Paladin, Wizard, Rogue, etc.) — are all common to the genre and free to use. Mainstream fantasy archetypes are welcome.
 
-### Specifically:
+**The one rule: don't copy creative content word-for-word from another IP.** Specifically, don't reuse another game's exact ability names, card names, or token names verbatim. Pick your own phrasing — even when the underlying mechanic is similar, give it a name that's yours.
 
-- **Do NOT reference, transcribe, paraphrase, or translate any published game's hero boards.** This includes (non-exhaustive list): the Dice Throne game by Roxley/Nerd Ninjas, the Quarriors family by Wizkids, the Roll Player family, any video-game character ability set, any TTRPG class ability list, etc.
-- **Do NOT use ability or card names that are clearly drawn from a published game.** Names like *Strike, Resolute Strike, Powerful Blow, Overpower, Critical Strike, Reckless, RAGE!, Thick Skin, Patience, Scorch, Fire Blast, Flamewall, Inferno, Pyroclast, Meteor, Pyroblast, Smite, Righteous Blow, Consecrate, Holy Strike, Divine Wrath, Redemption, Judgment Day, Lay on Hands, Divine Barrier, Wall of Faith, Battle Focus, Bloodthirst, Cleave, Berserk, Trophy Pole, Last Stand, Stoke the Flames, Heat Wave, Phoenix Form, Final Burn, Sanctuary, Aegis, Vow* are all directly traceable to a published Dice Throne hero board and must NOT be used. If a name you're considering feels like something you've seen in a TTRPG or video game, swap it for an original phrase.
-- **Do NOT pick obvious mainstream-fantasy archetypes** (Barbarian, Pyromancer, Paladin, Wizard, Cleric, Rogue, Monk, Ranger). These map directly to existing TTRPG/digital-game character lineups and bias the design toward known ability rosters. Pick something more lateral.
-- **Do NOT design dice compositions that mirror published hero boards** (e.g. *3 sword + 2 vitality + 1 strength*, *2 flame + 2 spark + 1 ember + 1 pyroblast*, *2 hammer + 2 shield + 1 heal + 1 divine* are all from the published Dice Throne hero boards).
-- **Do NOT use signature mechanics or token names that trace to published games.** RAGE-on-low-HP, IGNITE-on-hit, DIVINE FAVOR-on-defense, Bleeding, Smolder, Judgment all trace to published Dice Throne. Invent your own.
-
-### Heuristic:
-
-If you find yourself thinking *"this archetype maps to X character from Y game,"* **redirect**. Pick a less obvious archetype. Pick mechanics that don't have a 1:1 analogue.
-
-### Encouraged archetype directions (less mainstream):
-
-A Cartographer · a Beekeeper · a Lighthouse-Keeper · a Distiller · a Glassblower · a Falconer · an Astronomer · a Stevedore · a Ferryman · a Mortician · a Locksmith · a Cooper · a Watchmaker · a Gravedigger · a Fishmonger · an Acrobat · a Storm-Caller · a Mushroom-Forager · a Tax-Collector · a Tide-Tracker · a Knot-Tier · a Bell-Ringer · a Quarry-Cutter — anything that doesn't have a famous pre-existing video-game hero or TTRPG class.
-
-You can absolutely design a hero who is mechanically aggressive, defensive, or DOT-focused — those are mechanical archetypes, not specific character archetypes. Just hang the hero on an unusual concept.
+That's it. Pick the archetype that excites you, design the kit you want, and just make sure the names on the surface are your own writing rather than lifted strings.
 
 ---
 
@@ -113,7 +99,7 @@ These are pre-registered in the engine. Any hero can apply them.
 
 You can also design **your own signature token** — give it a name, a stack limit, a tick behaviour ("ticks at holder's upkeep" / "ticks at applier's upkeep" / "never ticks (consumed by other rules)" / "fires on a specific trigger"), an effect per stack (damage, heal, mitigation), and an optional on-removal effect (e.g. "ignites for +2 dmg when removed").
 
-Token names should be descriptive and original — not Bleeding/Smolder/Judgment (those trace to a published game).
+Token names should be descriptive and original — pick your own phrasing rather than lifting names verbatim from another game.
 
 ### 4.4 Cards
 
@@ -204,7 +190,7 @@ Fill this in for ONE hero. Paste back exactly this format. Sections marked **COR
 ```
 === HERO === [CORE]
 
-ID:           <lowercase-slug>          (e.g. "tide-tracker", not a published character)
+ID:           <lowercase-slug>          (e.g. "tide-tracker" — used internally as the hero's key)
 NAME:         <DISPLAY NAME>            (all caps)
 ARCHETYPE:    <one of: rush | control | burn | combo | survival>
 COMPLEXITY:   <1–6>                     (1 = teach-the-game, 6 = expert)
@@ -427,15 +413,10 @@ If a field is left as `(skip)`, the renderer falls back to a generic default (co
 
 Run through this list. If you can't answer "yes" to all of them, redesign.
 
-- [ ] None of the ability names appear in any published game's character ability list (Dice Throne, Hearthstone, MTG, D&D, video games, etc.). I have done a mental search.
-- [ ] None of the card names match published game card names.
-- [ ] The dice composition (e.g. *X swords + Y vitality + Z strength*) is not a known published hero board's dice mix.
-- [ ] The signature passive concept is not a 1:1 translation of a known published game's mechanic. (Generic patterns like "stacks-at-low-HP" or "DOT-on-hit" are common mechanics, but the *specific* mechanic should be your own design — different threshold, different stack curve, different effect, different name.)
-- [ ] The hero archetype is not the obvious mainstream-fantasy character (Barbarian, Pyromancer, Paladin, Wizard, Rogue, etc.).
+- [ ] Ability names, card names, and token names are my own phrasing — not lifted verbatim from another game.
 - [ ] The four uniqueness pillars (dice identity, resource identity, win-condition identity, signature mechanic) all answer different questions. The hero would feel mechanically distinct from any other I might design.
 - [ ] Damage numbers fit the 30-HP-match envelope. T1 basics 3–7, T4 ultimates 13–18.
 - [ ] Each ability's combo uses an engine primitive (symbol-count / n-of-a-kind / straight / compound). Custom logic is flagged with `[custom]` and described in plain English.
-- [ ] All names in the spec (hero, abilities, token, cards) are original.
 
 ---
 
