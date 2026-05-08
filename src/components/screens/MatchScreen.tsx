@@ -101,7 +101,7 @@ export default function MatchScreen() {
       if (live.activePlayer !== aiPlayer) return;
       const action = nextAiAction(live, aiPlayer);
       dispatch(action);
-    }, 350);
+    }, 900);   // breathe between AI actions so the player can read what just happened
     return () => { if (aiCooldownRef.current) window.clearTimeout(aiCooldownRef.current); };
   }, [state, mode, aiPlayer, inputUnlocked, dispatch]);
 

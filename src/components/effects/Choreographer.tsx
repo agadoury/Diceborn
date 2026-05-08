@@ -27,6 +27,7 @@ import { HitStop } from "./HitStop";
 import { DamageNumberLayer } from "./DamageNumber";
 import { AbilityCinematicLayer } from "./AbilityCinematic";
 import { Banner } from "./Banner";
+import { ActionLog } from "./ActionLog";
 
 interface Props { children: ReactNode }
 
@@ -38,6 +39,7 @@ export function Choreographer({ children }: Props) {
       <DamageNumberLayer />
       <AbilityCinematicLayer />
       <Banner />
+      <ActionLog />
     </ScreenShake>
   );
 }
@@ -109,50 +111,56 @@ interface PlayCtx {
   setBanner:      (text: string | null) => void;
 }
 
-/** Run side-effects for an event, return its beat duration in ms. */
+/** Run side-effects for an event, return its beat duration in ms.
+ *
+ * Pacing philosophy: every important event needs to "land" before the next
+ * one starts, or the player can't follow the action. Defaults are tuned so
+ * a typical AI turn (card → roll → ability → damage → status) takes ~5-7s
+ * to play out. Reduced-motion shortcuts everything to ≤220ms.
+ */
 function playEvent(ev: GameEvent, ctx: PlayCtx): number {
   switch (ev.t) {
     case "match-started":
       ctx.setBanner(`${ev.players.p1.toUpperCase()} vs ${ev.players.p2.toUpperCase()}`);
-      setTimeout(() => ctx.setBanner(null), 1400);
-      return 1400;
+      setTimeout(() => ctx.setBanner(null), 1800);
+      return 1800;
 
     case "match-won": {
       ctx.setBanner(ev.winner === "draw" ? "DRAW" : `${ev.winner.toUpperCase()} WINS`);
       vibrate("victory");
-      setTimeout(() => ctx.setBanner(null), 2000);
-      return 2200;
+      setTimeout(() => ctx.setBanner(null), 2400);
+      return 2600;
     }
 
     case "turn-started": {
       ctx.setBanner(`Turn ${ev.turn} — ${ev.player.toUpperCase()}`);
-      setTimeout(() => ctx.setBanner(null), 700);
-      return 700;
+      setTimeout(() => ctx.setBanner(null), 1100);
+      return 1100;
     }
 
-    case "phase-changed":      return 0;
+    case "phase-changed":      return 200;       // small breath between phases
 
-    case "card-drawn":         return 200;
-    case "card-played":        vibrate("card-play"); return 320;
-    case "card-sold":          return 220;
-    case "card-discarded":     return 180;
+    case "card-drawn":         return 350;
+    case "card-played":        vibrate("card-play"); return 700;
+    case "card-sold":          return 450;
+    case "card-discarded":     return 350;
 
-    case "cp-changed":         return 200;
+    case "cp-changed":         return 350;
     case "hp-changed":         return 0;       // rendered by HealthBar via prop change
 
-    case "dice-rolled":        return 0;       // DiceTray drives its own choreography
-    case "die-locked":         vibrate("die-lock"); return 200;
-    case "die-face-changed":   return 360;
+    case "dice-rolled":        return 1100;    // wait for the DiceTray's full tumble + settle
+    case "die-locked":         vibrate("die-lock"); return 350;
+    case "die-face-changed":   return 600;
 
-    case "ladder-state-changed": return 200;
+    case "ladder-state-changed": return 400;
 
     case "ability-triggered": {
-      if (ev.tier === 4) return 280;
-      return ev.isCritical ? 600 : 380;
+      if (ev.tier === 4) return 500;             // ult cinematic handles its own hold
+      return ev.isCritical ? 1100 : 800;         // let the player read the ability name
     }
 
     case "ultimate-fired": {
-      const dur = ev.isCritical ? (ctx.reduced ? 540 : 2600) : (ctx.reduced ? 540 : 1800);
+      const dur = ev.isCritical ? (ctx.reduced ? 540 : 3000) : (ctx.reduced ? 540 : 2200);
       ctx.startCinematic({
         hero: heroIdFromPlayer(ev.player),
         abilityName: ev.abilityName,
@@ -166,12 +174,12 @@ function playEvent(ev: GameEvent, ctx: PlayCtx): number {
     }
 
     case "damage-dealt": {
-      if (ev.amount <= 0) return 0;
-      ctx.triggerHitStop(ev.type === "ultimate" ? 150 : 100);
+      if (ev.amount <= 0) return 200;
+      ctx.triggerHitStop(ev.type === "ultimate" ? 200 : 140);
       const mag = ev.type === "ultimate" ? 10 : ev.amount >= 15 ? 6 : 2;
-      const dur = ev.type === "ultimate" ? 600 : ev.amount >= 15 ? 250 : 100;
-      ctx.setShake({ magnitude: mag, duration: dur, startedAt: performance.now() });
-      setTimeout(() => ctx.setShake(null), dur);
+      const shakeDur = ev.type === "ultimate" ? 600 : ev.amount >= 15 ? 300 : 140;
+      ctx.setShake({ magnitude: mag, duration: shakeDur, startedAt: performance.now() });
+      setTimeout(() => ctx.setShake(null), shakeDur);
 
       const variant: "dmg" | "pure" | "white" | "crit" =
         ev.type === "pure" ? "pure" :
@@ -182,27 +190,28 @@ function playEvent(ev: GameEvent, ctx: PlayCtx): number {
       ctx.spawnDmg({ amount: ev.amount, variant, x: 0.5, y: 0.42, size });
 
       vibrate("damage-taken");
-      return Math.max(dur, ev.amount >= 15 ? 350 : 200);
+      // Hold long enough to read the number floating up + the new HP value.
+      return ev.amount >= 15 ? 1300 : 900;
     }
 
     case "heal-applied": {
       ctx.spawnDmg({ amount: ev.amount, variant: "heal", x: 0.5, y: 0.42, size: "sm" });
-      return 320;
+      return 800;
     }
 
-    case "defense-resolved":   return ev.reduction > 0 ? 600 : 220;
+    case "defense-resolved":   return ev.reduction > 0 ? 1100 : 500;
 
     case "status-applied":
-      vibrate("card-play"); return 360;
-    case "status-ticked":      return 280;
-    case "status-removed":     return 240;
-    case "status-triggered":   return 240;
+      vibrate("card-play"); return 700;
+    case "status-ticked":      return 600;
+    case "status-removed":     return 500;
+    case "status-triggered":   return 500;
 
-    case "hero-state":         return 200;
-    case "rage-changed":       return 280;
+    case "hero-state":         return 400;
+    case "rage-changed":       return 600;
 
     case "counter-prompt":     return 0;
-    case "counter-resolved":   return 200;
+    case "counter-resolved":   return 400;
   }
 }
 
