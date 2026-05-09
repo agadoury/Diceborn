@@ -281,40 +281,54 @@ function passTurn(state: GameState): GameEvent[] {
 
 // ── Card play / sell / counter ──────────────────────────────────────────────
 function playCard(state: GameState, cardId: string, targetDie?: number, _targetPlayer?: PlayerId, targetFaceValue?: 1|2|3|4|5|6): GameEvent[] {
-  const active = state.players[state.activePlayer];
-  const opponent = state.players[other(state.activePlayer)];
-  const card = active.hand.find(c => c.id === cardId);
+  // Search both hands so off-turn Instants (Phoenix Veil, Counterstrike,
+  // Final Heat) are reachable. Card holder, not active player, is the caster.
+  let casterId: PlayerId = state.activePlayer;
+  let card = state.players[casterId].hand.find(c => c.id === cardId);
+  if (!card) {
+    const otherId = other(casterId);
+    const found = state.players[otherId].hand.find(c => c.id === cardId);
+    if (found) {
+      // Off-turn play is only permitted for Instants — every other card kind
+      // is phase-gated and `canPlay` will reject it.
+      if (found.kind !== "instant") return [];
+      casterId = otherId;
+      card = found;
+    }
+  }
   if (!card) return [];
-  if (!canPlay(state, active, opponent, card)) return [];
+  const caster = state.players[casterId];
+  const opponent = state.players[other(casterId)];
+  if (!canPlay(state, caster, opponent, card)) return [];
 
   // Pay cost
   const events: GameEvent[] = [];
-  events.push(...gainCp(active, -card.cost));
+  events.push(...gainCp(caster, -card.cost));
   // Move card to discard FIRST so handlers that read hand don't double-resolve.
-  active.hand = active.hand.filter(c => c.id !== cardId);
-  active.discard.push(card);
+  caster.hand = caster.hand.filter(c => c.id !== cardId);
+  caster.discard.push(card);
   // Mastery cards occupy a Hero Upgrade slot for the rest of the match.
   if (card.kind === "mastery" && card.masteryTier != null && (card.occupiesSlot ?? true)) {
-    active.masterySlots[card.masteryTier as 1 | 2 | 3 | "defensive"] = card.id;
+    caster.masterySlots[card.masteryTier as 1 | 2 | 3 | "defensive"] = card.id;
   }
   // Once-per-match / once-per-turn consumption.
-  if (card.oncePerMatch) active.consumedOncePerMatchCards.push(card.id);
-  if (card.oncePerTurn) active.consumedOncePerTurnCards.push(card.id);
-  events.push({ t: "card-played", player: active.player, cardId, target: targetDie != null ? { die: targetDie } : undefined });
+  if (card.oncePerMatch) caster.consumedOncePerMatchCards.push(card.id);
+  if (card.oncePerTurn) caster.consumedOncePerTurnCards.push(card.id);
+  events.push({ t: "card-played", player: caster.player, cardId, target: targetDie != null ? { die: targetDie } : undefined });
 
   // Resolve effect
   if (card.effect.kind === "custom") {
     const handler = getCustomHandler(card.effect.id);
-    if (handler) events.push(...handler({ state, caster: active, opponent, targetDie }));
+    if (handler) events.push(...handler({ state, caster, opponent, targetDie }));
   } else {
-    events.push(...resolveEffect(card.effect, { state, caster: active, opponent, targetDie, targetFaceValue }));
+    events.push(...resolveEffect(card.effect, { state, caster, opponent, targetDie, targetFaceValue }));
   }
 
   // Re-emit ladder state (cards may have changed dice / upgrades / damage bonus).
-  events.push(...emitLadderState(state, getHero(active.hero), active));
+  events.push(...emitLadderState(state, getHero(caster.hero), caster));
 
   // Lethality check
-  if (opponent.hp <= 0) events.push(...endMatch(state, active.player));
+  if (opponent.hp <= 0) events.push(...endMatch(state, caster.player));
   return events;
 }
 

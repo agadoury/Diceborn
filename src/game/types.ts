@@ -60,6 +60,7 @@ export type DamageType =
 /** State-check predicates used by conditional damage modifiers + critical
  *  ultimate evaluation. Each kind is a one-shot inspection of game state. */
 export type StateCheck =
+  | { kind: "always" }                                          // unconditional — pairs with sources like "damage-prevented-amount"
   | { kind: "opponent-has-status-min"; status: StatusId; count: number }
   | { kind: "self-has-status-min";     status: StatusId; count: number }
   | { kind: "self-stripped-status";    status: StatusId }      // set by remove-status; consumed by reader

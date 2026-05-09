@@ -602,6 +602,7 @@ export function checkState(
 ): boolean {
   void state;
   switch (check.kind) {
+    case "always":                  return true;
     case "opponent-has-status-min": return stacksOf(opponent, check.status) >= check.count;
     case "self-has-status-min":     return stacksOf(caster, check.status) >= check.count;
     case "self-stripped-status":    return (caster.lastStripped[check.status] ?? 0) > 0;

@@ -1010,6 +1010,7 @@ function conditionalMatches(
   firingFaces?: ReadonlyArray<import("./types").DieFace>,
 ): boolean {
   switch (cond.kind) {
+    case "always":                   return true;
     case "self-low-hp":              return caster.isLowHp;
     case "self-has-status-min":      return (caster.statuses.find(s => s.id === cond.status)?.stacks ?? 0) >= cond.count;
     case "passive-counter-min":      return (caster.signatureState[cond.passiveKey] ?? 0) >= cond.count;

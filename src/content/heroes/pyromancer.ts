@@ -617,7 +617,7 @@ export const PYROMANCER: HeroDefinition = {
             stacks: 0,
             target: "opponent",
             conditional_bonus: {
-              condition: { kind: "self-low-hp" },           // any always-true gate; engine still reads source
+              condition: { kind: "always" },
               bonusPerUnit: 1,
               source: "damage-prevented-amount",
             },
