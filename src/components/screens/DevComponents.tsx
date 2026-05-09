@@ -10,7 +10,7 @@
  */
 import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { GENERIC_CARDS, HEROES } from "@/content";
+import { GENERIC_CARDS, HEROES, getDeckCards } from "@/content";
 import { evaluateLadder } from "@/game/dice";
 import type { Die, GameEvent, HeroDefinition, HeroSnapshot, LadderRowState, StatusInstance } from "@/game/types";
 
@@ -258,6 +258,9 @@ function LadderDemo() {
       consumedOncePerMatchCards: [],
       consumedOncePerTurnCards: [],
       tokenOverrides: [],
+      pipelineBuffs: [],
+      triggerBuffs: [],
+      comboOverrides: [],
     };
   }, [hero, dice, attemptsRemaining]);
 
@@ -468,7 +471,7 @@ function PrimitivesShowcase() {
 function CardShowcase() {
   const hero = firstHero();
   const accent = hero?.accentColor ?? "var(--c-brand)";
-  const heroCards = hero?.cards.slice(0, 6) ?? [];
+  const heroCards = hero ? getDeckCards(hero.id).slice(0, 6) : [];
   const cards = [...heroCards, ...GENERIC_CARDS];
   return (
     <Section title="Cards">

@@ -68,7 +68,12 @@ export type StateCheck =
   | { kind: "passive-counter-min";     passiveKey: string; count: number }
   | { kind: "combo-symbol-count";      symbol: SymbolId; count: number }   // counts on firingFaces
   | { kind: "combo-n-of-a-kind";       count: number }
-  | { kind: "combo-straight";          length: number };                   // longest contiguous run on firingFaces ≥ length
+  | { kind: "combo-straight";          length: number }                    // longest contiguous run on firingFaces ≥ length
+  /** True when the firing defensive ability's tier is ≥ the stated tier.
+   *  Used by `triggerModifier.condition` to gate "Tier 2+ defenses gain
+   *  bonus Radiance" (Vow of Service) and similar selectors. Evaluates
+   *  to false outside a defensive resolution context. */
+  | { kind: "defense-tier-min";        tier: AbilityTier };
 
 /** How to count a "source" of bonus when a conditional fires. */
 export type ConditionalSource =
@@ -143,6 +148,7 @@ export type AbilityUpgradeField =
   | "applied-status-stacks" | "applied-status-stacks-self" | "applied-status-stacks-on-success"
   | "applied-status-conditional-bonus"
   | "removed-status-stacks"
+  | "passive-counter-gain-amount"
   | "reduce-damage-amount" | "reduce-damage-negate-attack"
   | "reduce-damage-apply-to-attacker-stacks" | "reduce-damage-apply-to-attacker-status"
   | "bonus-dice-count" | "bonus-dice-threshold"
@@ -189,10 +195,20 @@ export type AbilityEffect =
       conditional_type_override?: ConditionalTypeOverride }
   /** Defensive: reduce incoming damage by this amount during the current
    *  defensive roll, OR (when `negate_attack: true`) reduce to 0 regardless
-   *  of incoming. Optional `apply_to_attacker` reflects a status onto the
-   *  attacker after the reduction lands. Optional `conditional_bonus` adds
-   *  per-unit bonus reduction. */
+   *  of incoming, OR (when `multiplier` is set) reduce incoming by a
+   *  fractional amount — `incoming - round(incoming × multiplier)`.
+   *  `amount`, `multiplier`, and `negate_attack` are mutually exclusive;
+   *  exactly one must be set (with `amount: 0` as the conventional inert
+   *  marker when only `negate_attack` or `multiplier` matters).
+   *  `rounding` is only meaningful when `multiplier` is set; defaults to
+   *  `"ceil"` (round in the attacker's favour — more damage gets through).
+   *  Optional `apply_to_attacker` reflects a status onto the attacker
+   *  after the reduction lands. Optional `conditional_bonus` adds
+   *  per-unit bonus to `amount` (ignored when `multiplier` /
+   *  `negate_attack` resolves the reduction). */
   | { kind: "reduce-damage"; amount: number;
+      multiplier?: number;
+      rounding?: "ceil" | "floor";
       conditional_bonus?: ConditionalBonus;
       negate_attack?: true;
       apply_to_attacker?: {
@@ -204,7 +220,19 @@ export type AbilityEffect =
    *  stacks when a state check holds (added to base `stacks`). */
   | { kind: "apply-status"; status: StatusId; stacks: number; target: "self" | "opponent";
       conditional_bonus?: ConditionalBonus }
-  | { kind: "remove-status"; status: StatusId; stacks: number; target: "self" | "opponent" }
+  /** Remove stacks of a status from a target. `status` may be a specific
+   *  StatusId or one of the wildcard categories (`any-debuff` / `any-buff` /
+   *  `any-status`); the legacy `any-positive` is retained as an alias of
+   *  `any-buff`. `stacks: "all"` strips every stack of the resolved status;
+   *  a finite count strips that many. `selection` only matters when the
+   *  wildcard could resolve to multiple statuses — defaults to
+   *  `"player-choice"` (a UI prompt would surface; the engine falls back
+   *  to deterministic first-found resolution if no UI input arrives). */
+  | { kind: "remove-status";
+      status: StatusId | "any-positive" | "any-debuff" | "any-buff" | "any-status";
+      stacks: number | "all";
+      target: "self" | "opponent";
+      selection?: "player-choice" | "highest-stack" | "lowest-stack" | "longest-active" }
   /** Heal N HP on self/opponent. Optional conditional_bonus: per-unit bonus
    *  heal when a state check holds (added to base `amount`). */
   | { kind: "heal"; amount: number; target: "self" | "opponent";
@@ -243,8 +271,14 @@ export type AbilityEffect =
       modifications: AbilityUpgradeMod[];
       permanent: boolean }
   /** Direct manipulation of a signature passive counter (e.g. War Cry adds
-   *  +3 Frenzy without the "must take damage" trigger). */
-  | { kind: "passive-counter-modifier"; passiveKey: string; operation: "add" | "set"; value: number; respectsCap?: boolean }
+   *  +3 Frenzy without the "must take damage" trigger). `value` may be
+   *  negative for spend-style conversions (e.g. Dawnsong burns 2 Radiance
+   *  for +4 CP — see Clarification A in the engine update notes). When
+   *  `conditional` is set the modifier only fires if the StateCheck holds
+   *  at resolution time (used by combo-gated Mastery effects like
+   *  Cathedral Light's "+1 Radiance on 4+ sun"). */
+  | { kind: "passive-counter-modifier"; passiveKey: string; operation: "add" | "set"; value: number; respectsCap?: boolean;
+      conditional?: StateCheck }
   /** Force the caster's dice to count as a specific face (and its associated
    *  symbol) for combo evaluation until end of turn. When `faceValue` is
    *  omitted, the player's `targetFaceValue` from the play-card action is
@@ -254,22 +288,39 @@ export type AbilityEffect =
    *  fires, this effect cancels the queued removal so the stacks stay
    *  intact. No-op outside that context. */
   | { kind: "prevent-pending-status-removal" }
-  /** Match-long buff applied immediately. The buff itself is any standard
-   *  effect-shaped modifier (e.g. +1 dmg on offensive abilities). Discarded
-   *  on the named trigger, if any. */
-  /** Match-long buff applied immediately. When `target` is set, the modifier
-   *  patches the named signature token's definition (per-player override
-   *  stored in `tokenOverrides`) rather than scoping to abilities — used by
-   *  Crater Wind to bump Cinder's detonation amount mid-match. When `scope`
-   *  is set instead, the buff applies to abilities matching it. The two
-   *  forms are mutually exclusive at runtime. */
-  | { kind: "persistent-buff"; id: string; modifier: AbilityUpgradeMod;
+  /** Match-long buff applied immediately. Exactly one of the three modifier
+   *  shapes must be set:
+   *
+   *  - `modifier` (existing) — modifies ability output per `AbilityUpgradeMod`.
+   *    Pair with `scope` (offensive / defensive ability matcher) or `target`
+   *    (signature-token-id, patches the token's mechanical fields per-player —
+   *    used by Crater Wind to bump Cinder's detonation amount mid-match).
+   *  - `pipelineModifier` (NEW §15.3) — modifies the damage pipeline
+   *    directly: incoming-damage / outgoing-damage / status-tick-damage by
+   *    add or multiply. Sanctuary's "all incoming damage reduced by 2 until
+   *    your next turn" expresses with `target: "incoming-damage"`,
+   *    `operation: "add"`, `value: -2`, `cap: { min: 0 }`.
+   *  - `triggerModifier` (NEW §15.4) — modifies how much a hero's
+   *    `cpGainTriggers[]` entry grants when it fires. Vow of Service's
+   *    "successful Tier 2+ defense gains +2 Radiance instead of +1"
+   *    expresses with `triggerEvent: "successfulDefense"`, `operation: "set"`,
+   *    `value: 2`, `targetField: "gain"`, `condition: { kind: "defense-tier-min", tier: 2 }`. */
+  | { kind: "persistent-buff"; id: string;
+      modifier?: AbilityUpgradeMod;
+      pipelineModifier?: PipelineModifier;
+      triggerModifier?: TriggerModifier;
       scope?: AbilityScope;
       target?: StatusId;
-      discardOn?:
-        | { kind: "damage-taken-from-tier"; tier: AbilityTier }
-        | { kind: "status-removed"; status: StatusId }
-        | { kind: "match-ends" } }
+      discardOn?: DiscardTrigger }
+  /** Combo relaxation (§15.6). While active, abilities matching `scope`
+   *  evaluate against `override` instead of their declared combo. Distinct
+   *  from `face-symbol-bend` (which rewrites symbols on dice); this rewrites
+   *  the combo requirement itself. Sunburst expresses as
+   *  `scope: { kind: "ability-ids", ids: ["Dawnblade", "Sun Strike"] }`,
+   *  `override: { kind: "symbol-count", symbol: "lightbearer:sword", count: 1 }`,
+   *  `duration: "this-turn"`. */
+  | { kind: "combo-override"; scope: AbilityScope; override: DiceCombo;
+      duration: "this-turn" | "this-roll" | { kind: "until-status"; status: StatusId; on: "applied" | "removed" } }
   /** Roll N additional dice (using the caster's hero faces) and deal damage
    *  derived from the rolled faces. */
   | { kind: "bonus-dice-damage"; bonusDice: number;
@@ -385,7 +436,10 @@ export interface Card {
    *  pendingAttack's damage type (Phoenix Veil — "not Ultimate"). */
   playCondition?:
     | { kind: "match-state-threshold"; metric: "self-hp" | "opponent-hp"; op: "<=" | ">="; value: number }
-    | { kind: "incoming-attack-damage-type"; op: "is" | "is-not"; value: DamageType };
+    | { kind: "incoming-attack-damage-type"; op: "is" | "is-not"; value: DamageType }
+    /** Gate the play on the caster's bankable-passive counter — Dawnsong
+     *  burns 2 Radiance for +4 CP and is unplayable below 2 Radiance. */
+    | { kind: "passive-counter-min"; passiveKey: string; count: number };
   /** When true, the card may only be played a single time per match. The
    *  engine records the cardId in `consumedOncePerMatchCards` on play. */
   oncePerMatch?: boolean;
@@ -482,7 +536,6 @@ export interface HeroDefinition {
   /** Optional defensive ladder — auto-resolved during the Defensive Roll
    *  Phase. Same picker logic as the offensive ladder. */
   defensiveLadder?: readonly AbilityDef[];
-  cards: Card[];
   /** Optional: applied to every successful offensive ability landed by this hero
    *  (e.g. Barbarian → Bleeding, Pyromancer → Smolder). */
   onHitApplyStatus?: { status: StatusId; stacks: number };
@@ -498,19 +551,92 @@ export interface StatusInstance {
 
 // ── Transient runtime state (HeroSnapshot extensions) ──────────────────────
 
+/** Discriminated union of every event that can drop a persistent buff
+ *  (ability-modifier / pipeline / trigger / combo-override). Carried on
+ *  the buff entry; evaluated by the engine when the matching event fires. */
+export type DiscardTrigger =
+  | { kind: "damage-taken-from-tier"; tier: AbilityTier }
+  | { kind: "status-removed";         status: StatusId }
+  | { kind: "match-ends" }
+  /** Drops at the end of the buff-creator's CURRENT turn (the turn it was
+   *  played on). Sunburst's "this turn only" buffs use this. (§15.5) */
+  | { kind: "end-of-self-turn" }
+  /** Drops at the end of the buff-creator's NEXT turn (after the opponent's
+   *  reply turn). Sanctuary's "until your next turn" uses this. (§15.5) */
+  | { kind: "next-turn-of-self" }
+  /** Drops at the end of any turn. Rare; symmetric counterpart for
+   *  scenarios where the buff should sunset regardless of who acts. (§15.5) */
+  | { kind: "end-of-any-turn" };
+
+/** Card-applied damage-pipeline modifier (§15.3). Aggregated by phases.ts
+ *  alongside signature-token `passiveModifier` blocks. */
+export interface PipelineModifier {
+  target: "incoming-damage" | "outgoing-damage" | "status-tick-damage";
+  operation: "add" | "multiply";
+  value: number;
+  cap?: { min?: number; max?: number };
+}
+
+/** Card-applied resource-trigger modifier (§15.4). When the matching
+ *  `cpGainTrigger` fires, the dispatcher rewrites the configured field
+ *  (`gain` or `perStack`) before crediting the resource. */
+export interface TriggerModifier {
+  /** Which `cpGainTrigger.on` this modifier targets. */
+  triggerEvent: PassiveTrigger["on"];
+  operation: "add" | "set" | "multiply";
+  value: number;
+  targetField: "gain" | "perStack";
+  /** Optional gate evaluated when the trigger fires (e.g. defense-tier-min). */
+  condition?: StateCheck;
+}
+
 /** Persistent ability modifier in flight on a player. Either applied by a
  *  played mastery card (`permanent: true`) or by a temporary effect.
- *  `discardOn` lets the engine remove the entry on a qualifying event. */
+ *  `discardOn` lets the engine remove the entry on a qualifying event.
+ *  `creatorPlayer` + `creatorTurnsElapsed` (per §15.5) drive the
+ *  turn-bounded discard variants — incremented when the creator's turn ends. */
 export interface ActiveAbilityModifier {
   id: string;                   // unique within the snapshot; lets discardOn target it
   source: "mastery" | "card" | "ability";
   scope: AbilityScope;
   modifications: AbilityUpgradeMod[];
   permanent: boolean;
-  discardOn?:
-    | { kind: "damage-taken-from-tier"; tier: AbilityTier }
-    | { kind: "status-removed"; status: StatusId }
-    | { kind: "match-ends" };
+  discardOn?: DiscardTrigger;
+  /** PlayerId who created the buff. Used by turn-bounded discardOn. */
+  creatorPlayer?: PlayerId;
+  /** Number of times the creator's turn has ended since this buff was
+   *  applied. Incremented at end-of-turn; consulted by `end-of-self-turn`
+   *  (drops at 1) and `next-turn-of-self` (drops at 2). */
+  creatorTurnsElapsed?: number;
+}
+
+/** A pipelineModifier currently in flight on a player. (§15.3) */
+export interface ActivePipelineBuff {
+  id: string;
+  pipelineModifier: PipelineModifier;
+  discardOn?: DiscardTrigger;
+  creatorPlayer?: PlayerId;
+  creatorTurnsElapsed?: number;
+}
+
+/** A triggerModifier currently in flight on a player. (§15.4) */
+export interface ActiveTriggerBuff {
+  id: string;
+  triggerModifier: TriggerModifier;
+  discardOn?: DiscardTrigger;
+  creatorPlayer?: PlayerId;
+  creatorTurnsElapsed?: number;
+}
+
+/** A combo-override currently in flight on a player. (§15.6) */
+export interface ActiveComboOverride {
+  id: string;
+  scope: AbilityScope;
+  override: DiceCombo;
+  expires:
+    | { kind: "this-roll";    appliedAtAttempt: number }
+    | { kind: "this-turn";    appliedOnTurn: number }
+    | { kind: "until-status"; status: StatusId; on: "applied" | "removed" };
 }
 
 /** Per-snapshot override of a registered status definition's mechanical
@@ -570,6 +696,12 @@ export interface HeroSnapshot {
   tokenOverrides: TokenOverride[];
   /** Active face-symbol bends. */
   symbolBends: ActiveSymbolBend[];
+  /** Active card-applied pipeline modifiers (Sanctuary etc.) — §15.3. */
+  pipelineBuffs: ActivePipelineBuff[];
+  /** Active card-applied trigger modifiers (Vow of Service etc.) — §15.4. */
+  triggerBuffs: ActiveTriggerBuff[];
+  /** Active combo-relaxation overrides (Sunburst etc.) — §15.6. */
+  comboOverrides: ActiveComboOverride[];
   /** When set, the combo evaluator treats all of this hero's dice as the
    *  hero's `diceIdentity.faces[forcedFaceValue - 1]` regardless of the
    *  actual die state. Cleared at `passTurn`. Set by `force-face-value`
@@ -676,6 +808,15 @@ export interface GameState {
      *  number of tokens the player commits). */
     optionIndex: number;
   };
+  /** Halted offensive-commit awaiting a `spend-bank` decision (Lightbearer's
+   *  Radiance offers a spend option at offensive-resolution). When the
+   *  player resolves the spend, the engine resumes by calling
+   *  `commitOffensiveAbility` with this ability index. Cleared once the
+   *  ability fires. */
+  pendingOffensiveCommit?: {
+    attacker: PlayerId;
+    abilityIndex: number;
+  };
   log: LogEntry[];
   winner?: PlayerId | "draw";
 }
@@ -689,6 +830,13 @@ export type Action =
   | { kind: "toggle-die-lock"; die: 0 | 1 | 2 | 3 | 4 }
   | { kind: "roll-dice" }
   | { kind: "play-card"; card: CardId; targetDie?: 0 | 1 | 2 | 3 | 4; targetPlayer?: PlayerId;
+      /** Explicit caster id. Required when both players hold the same
+       *  card (mirror matches) and the engine needs to know which copy
+       *  to consume — without it, `playCard` defaults to
+       *  `state.activePlayer`, which is wrong for off-turn Instant
+       *  responses. UI / AI drivers should set this whenever the
+       *  intended caster differs from the active player. */
+      casterPlayer?: PlayerId;
       /** Used by `set-die-face` effects whose target declares
        *  `{ kind: "face" }` without a faceValue — the UI surfaces a 1–6
        *  picker and forwards the choice here. */
@@ -713,6 +861,12 @@ export type Action =
    *  must be ≤ available counter and respects the spend option's costPerUnit. */
   | { kind: "spend-bank"; amount: number }
   | { kind: "decline-bank-spend" }
+  /** Holder pays a configured cost (CP / HP / discard) to remove stacks of
+   *  a status they carry — driven by the status definition's
+   *  `holderRemovalActions[]` entries (§15.2). `actionIndex` selects which
+   *  declared action to invoke when the token offers more than one.
+   *  Only valid when the active phase matches the action's declared `phase`. */
+  | { kind: "status-holder-action"; status: StatusId; actionIndex?: number }
   | { kind: "concede"; player: PlayerId };
 
 // ── GameEvent (the choreography contract) ───────────────────────────────────
@@ -776,7 +930,12 @@ export type GameEvent =
   | { t: "symbol-bend-expired"; player: PlayerId; bendId: string }
   /** Bankable-passive prompt + resolution. */
   | { t: "bank-spend-prompt"; holder: PlayerId; passiveKey: string; available: number; context: "offensive-resolution" | "defensive-resolution" | "main-phase-on-demand" }
-  | { t: "bank-spent"; holder: PlayerId; passiveKey: string; amount: number };
+  | { t: "bank-spent"; holder: PlayerId; passiveKey: string; amount: number }
+  /** Holder paid the configured cost to remove stacks via the token's
+   *  `holderRemovalActions[]` (§15.2). The downstream `status-removed`
+   *  event still fires from the strip itself — this event records the
+   *  player-initiated cause. */
+  | { t: "status-removal-by-holder-action"; holder: PlayerId; status: StatusId; actionName: string; stacksRemoved: number };
 
 // ── Engine entrypoint ───────────────────────────────────────────────────────
 export interface ApplyResult { state: GameState; events: GameEvent[]; }

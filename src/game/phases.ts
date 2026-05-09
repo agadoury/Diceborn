@@ -36,6 +36,7 @@ import {
   classifyCrit,
   rollUnlocked,
   bentFaces,
+  effectiveCombo,
 } from "./dice";
 import { nextInt } from "./rng";
 
@@ -248,7 +249,8 @@ export function beginOffensivePick(state: GameState): GameEvent[] {
   }> = [];
   for (let i = 0; i < hero.abilityLadder.length; i++) {
     const a = hero.abilityLadder[i];
-    if (!comboMatchesFaces(a.combo, faces)) continue;
+    const combo = effectiveCombo(active, a);
+    if (!comboMatchesFaces(combo, faces)) continue;
     matches.push({
       abilityIndex: i,
       abilityName: a.name,
@@ -342,6 +344,20 @@ export function commitOffensiveAbility(state: GameState, abilityIndex: number): 
     events.push({ t: "ultimate-fired", player: active.player, abilityName: ability.name, isCritical: !!isCritical });
   }
 
+  // Resource trigger: `opponentAttackedWithStatusActive` fires on the
+  // DEFENDER when the attacker (active player) carries the named status.
+  // Lightbearer banks +1 CP every time the opponent attacks while Verdict
+  // sits on them — even if Verdict's damage debuff zeroes the hit.
+  {
+    const oppHero = getHero(opponent.hero);
+    for (const trig of oppHero.resourceIdentity.cpGainTriggers) {
+      if (trig.on !== "opponentAttackedWithStatusActive") continue;
+      if (trig.status && stacksOf(active, trig.status) <= 0) continue;
+      const adjusted = applyTriggerModifiersToTrigger(state, opponent, active, trig, ability.tier);
+      events.push(...gainCp(opponent, adjusted.gain));
+    }
+  }
+
   const defendable = ability.damageType === "normal" || ability.damageType === "collateral";
   const incomingAmount = computeIncomingAmount(ability.effect, ability.combo, faces, damageBonus, critFlat, critMul);
 
@@ -356,11 +372,13 @@ export function commitOffensiveAbility(state: GameState, abilityIndex: number): 
     defendable,
   });
 
-  if (!defendable) {
-    events.push(...applyAttackEffects(state, abilityIndex, faces, damageBonus, critFlat, critMul, isCritical, /*defensiveReduction*/ 0, critTriggered));
-    return events;
-  }
-
+  // ALWAYS halt on pendingAttack — even for non-defendable types
+  // (undefendable / pure / ultimate). The defender may still want to
+  // play an Instant (Aegis of Dawn halves T4 ultimates; Phoenix Veil
+  // negates undefendable attacks). The defender's `select-defense`
+  // resolves with abilityIndex: null for non-defendable types, and the
+  // engine applies the queued damage with any `injectedReduction` from
+  // resolved Instants.
   state.pendingAttack = {
     attacker: active.player,
     defender: opponent.player,
@@ -526,9 +544,27 @@ export function resolveDefenseChoice(state: GameState, abilityIndex: number | nu
     // Generic CP-gain triggers tied to successful defense.
     if (landed && reduction >= 1) {
       for (const trig of defHero.resourceIdentity.cpGainTriggers) {
-        if (trig.on === "successfulDefense") events.push(...gainCp(defender, trig.gain));
+        if (trig.on !== "successfulDefense") continue;
+        // §15.4: triggerModifier may rewrite this trigger's `gain` /
+        // `perStack` on a per-fire basis. The condition (e.g.
+        // defense-tier-min) is evaluated with the firing defense's tier.
+        const adjusted = applyTriggerModifiersToTrigger(
+          state, defender, state.players[pa.attacker], trig, matchedTier,
+        );
+        const gain = adjusted.perStack ? adjusted.gain : adjusted.gain;
+        events.push(...gainCp(defender, gain));
       }
     }
+  }
+  // §15.3: incoming-damage pipeline buffs add to the final reduction the
+  // defender receives. We treat the aggregated negative adjustment as
+  // bonus reduction (e.g. Sanctuary's -2 incoming damage adds 2 to the
+  // reduction for any defendable damage type).
+  {
+    const baseline = pa.incomingAmount;
+    const adjusted = aggregatePipelineModifiers(state.players[pa.defender], "incoming-damage", baseline);
+    const extraReduction = Math.max(0, baseline - adjusted);
+    if (extraReduction > 0) reduction += extraReduction;
   }
 
   // Apply the attack effects with the computed reduction.
@@ -661,14 +697,23 @@ function resolveDefensiveEffect(
 ): { reduction: number; events: GameEvent[] } {
   switch (effect.kind) {
     case "reduce-damage": {
-      // Negation supersedes graded reduction. Mastery mods can flip
-      // `negate-attack` on/off via `reduce-damage-negate-attack`.
+      // Resolution mode (mutually exclusive — multiplier > negate > flat amount).
+      // §15.1: when `multiplier` is set, the reduction equals
+      // incoming − round(incoming × multiplier); rounding defaults to ceil.
+      // Mastery mods can flip `negate-attack` on/off via
+      // `reduce-damage-negate-attack`.
       const negate = applyDefensiveBooleanModifier(
         ctx.defender, ctx.abilityName ?? "", "reduce-damage-negate-attack",
         effect.negate_attack === true, ctx.firingFaces,
       );
       let amount: number;
-      if (negate) {
+      if (effect.multiplier != null) {
+        const rounding = effect.rounding ?? "ceil";
+        const finalDamage = rounding === "ceil"
+          ? Math.ceil(ctx.incomingAmount * effect.multiplier)
+          : Math.floor(ctx.incomingAmount * effect.multiplier);
+        amount = Math.max(0, ctx.incomingAmount - finalDamage);
+      } else if (negate) {
         amount = ctx.incomingAmount;
       } else {
         amount = applyDefensiveNumericModifier(ctx.defender, ctx.abilityName ?? "", "reduce-damage-amount", effect.amount, ctx.firingFaces);
@@ -750,6 +795,25 @@ function resolveDefensiveEffect(
         events.push(...r.events);
       }
       return { reduction, events };
+    }
+    case "passive-counter-modifier":
+    case "gain-cp":
+    case "draw": {
+      // Defensive compounds may include resource grants (Prayer of
+      // Shielding's inline +1 Radiance, Cathedral Light's combo-gated
+      // bonus, etc.). Forward to the shared `resolveEffect` with ability
+      // context so `passive-counter-gain-amount` ability-modifiers and
+      // combo-state checks evaluate against the firing defense.
+      const events = resolveEffect(effect, {
+        state: ctx.state,
+        caster: ctx.defender,
+        opponent: ctx.attacker,
+        isAbility: true,
+        abilityName: ctx.abilityName,
+        abilityTier: ctx.abilityTier,
+        firingFaces: ctx.firingFaces,
+      });
+      return { reduction: 0, events };
     }
     default:
       return { reduction: 0, events: [] };
@@ -868,19 +932,21 @@ function resolveAbilityEffect(state: GameState, effect: import("./types").Abilit
   // ability modifiers before forwarding to the shared resolver.
   if (effect.kind === "bonus-dice-damage") {
     const patched = applyModifiersToBonusDiceDamage(ctx.caster, ctx.abilityName ?? "", ctx.abilityTier ?? 0, effect, ctx.firingFaces);
-    return resolveEffect(patched, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
+    return resolveEffect(patched, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true, abilityName: ctx.abilityName, abilityTier: ctx.abilityTier, firingFaces: ctx.firingFaces });
   }
   // Patch heal with `heal-amount`, `self-heal-amount` (on self target), and
   // `heal-conditional-bonus` modifiers.
   if (effect.kind === "heal") {
     const patched = applyModifiersToHeal(ctx.caster, ctx.abilityName ?? "", ctx.abilityTier ?? 0, effect, ctx.firingFaces);
-    return resolveEffect(patched, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
+    return resolveEffect(patched, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true, abilityName: ctx.abilityName, abilityTier: ctx.abilityTier, firingFaces: ctx.firingFaces });
   }
   // Patch remove-status with `removed-status-stacks` modifier.
-  if (effect.kind === "remove-status") {
+  // §15.7: `stacks` may be `"all"` — masteries that try to bump the stack
+  // count are no-ops in that case (already removing everything).
+  if (effect.kind === "remove-status" && typeof effect.stacks === "number") {
     const stacks = applyNumericModifier(ctx.caster, ctx.abilityName ?? "", ctx.abilityTier ?? 0, "removed-status-stacks", effect.stacks, ctx.firingFaces);
     if (stacks !== effect.stacks) {
-      return resolveEffect({ ...effect, stacks }, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
+      return resolveEffect({ ...effect, stacks }, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true, abilityName: ctx.abilityName, abilityTier: ctx.abilityTier, firingFaces: ctx.firingFaces });
     }
   }
   // For non-damage effects: apply crit flat to status stacks. Conditional
@@ -908,13 +974,13 @@ function resolveAbilityEffect(state: GameState, effect: import("./types").Abilit
         stacks: (patchedStacks + bonus) * 2,
         conditional_bonus: undefined,
       };
-      return resolveEffect(stacked, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
+      return resolveEffect(stacked, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true, abilityName: ctx.abilityName, abilityTier: ctx.abilityTier, firingFaces: ctx.firingFaces });
     }
     if (patchedStacks !== effect.stacks || patchedCB !== effect.conditional_bonus) {
-      return resolveEffect({ ...effect, stacks: patchedStacks, conditional_bonus: patchedCB }, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
+      return resolveEffect({ ...effect, stacks: patchedStacks, conditional_bonus: patchedCB }, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true, abilityName: ctx.abilityName, abilityTier: ctx.abilityTier, firingFaces: ctx.firingFaces });
     }
   }
-  return resolveEffect(effect, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
+  return resolveEffect(effect, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true, abilityName: ctx.abilityName, abilityTier: ctx.abilityTier, firingFaces: ctx.firingFaces });
 }
 
 // ── Offensive fallback (Correction 6 §7) ────────────────────────────────────
@@ -1226,6 +1292,59 @@ function applyModifiersToHeal(
 }
 
 
+/** §15.4: rewrite a `cpGainTrigger` entry through the holder's active
+ *  triggerBuffs that target it. Returns a fresh object with the (possibly
+ *  modified) `gain` / `perStack`. Buffs whose `condition` is set are only
+ *  applied when the StateCheck holds at this resolution moment.
+ *
+ *  `firingTier` is the defending ability's tier (when applicable) — feeds
+ *  the `defense-tier-min` StateCheck. */
+export function applyTriggerModifiersToTrigger(
+  state: GameState,
+  caster: HeroSnapshot,
+  opponent: HeroSnapshot,
+  trig: import("./types").PassiveTrigger,
+  firingTier?: import("./types").AbilityTier,
+): { gain: number; perStack: boolean } {
+  let gain = trig.gain;
+  let perStack = trig.perStack ?? false;
+  for (const buff of caster.triggerBuffs) {
+    const tm = buff.triggerModifier;
+    if (tm.triggerEvent !== trig.on) continue;
+    if (tm.condition && !checkState(state, caster, opponent, tm.condition, undefined, firingTier)) continue;
+    const applyOp = (current: number) => {
+      if (tm.operation === "set")      return tm.value;
+      if (tm.operation === "add")      return current + tm.value;
+      if (tm.operation === "multiply") return Math.ceil(current * tm.value);
+      return current;
+    };
+    if (tm.targetField === "gain")      gain = applyOp(gain);
+    else if (tm.targetField === "perStack") perStack = applyOp(perStack ? 1 : 0) > 0;
+  }
+  return { gain, perStack };
+}
+
+/** §15.3: aggregate the holder's active pipelineBuffs that target the named
+ *  pipeline stage. `add` ops are summed; `multiply` ops are composed
+ *  multiplicatively against `base`. Returns the adjusted value (clamped to
+ *  any per-buff cap). Used in damage.ts integration via the helpers below. */
+export function aggregatePipelineModifiers(
+  holder: HeroSnapshot,
+  target: "incoming-damage" | "outgoing-damage" | "status-tick-damage",
+  base: number,
+): number {
+  let result = base;
+  for (const buff of holder.pipelineBuffs) {
+    const pm = buff.pipelineModifier;
+    if (pm.target !== target) continue;
+    if (pm.operation === "add")      result += pm.value;
+    else if (pm.operation === "multiply") result = result * pm.value;
+    if (pm.cap?.max != null) result = Math.min(result, pm.cap.max);
+    if (pm.cap?.min != null) result = Math.max(result, pm.cap.min);
+  }
+  return result;
+}
+
 /** Sum per-stack passive modifiers from active statuses on the caster matching
  *  the trigger / field. Frost-bite contributes -1 dmg per stack on
  *  on-offensive-ability + damage. */
@@ -1262,11 +1381,15 @@ const FRENZY_TICK_PENDING = "__frenzyTickPending";
 
 /** Set on a defender when they take ≥1 damage from an opponent's offensive
  *  ability. Read at the defender's next Upkeep by `resolveUpkeepSignaturePassive`
- *  to grant +1 to the hero's bankable counter (capped per-turn). */
+ *  to grant +1 to the hero's bankable counter (capped per-turn).
+ *  Both the Berserker (Frenzy) and the Lightbearer (Radiance) build their
+ *  bank from being hit, so the same flag handles both — the upkeep
+ *  dispatcher branches on the hero's `signatureMechanic.implementation.kind`. */
 export function noteOffensiveDamageTaken(defender: HeroSnapshot, amount: number): void {
   if (amount <= 0) return;
   const heroDef = getHero(defender.hero);
-  if (heroDef.signatureMechanic.implementation.kind !== "frenzy") return;
+  const kind = heroDef.signatureMechanic.implementation.kind;
+  if (kind !== "frenzy" && kind !== "lightbearer-radiance") return;
   defender.signatureState[FRENZY_TICK_PENDING] = 1;
 }
 
@@ -1278,11 +1401,13 @@ function resolveUpkeepSignaturePassive(active: HeroSnapshot): GameEvent[] {
   const events: GameEvent[] = [];
   const heroDef = getHero(active.hero);
   const impl = heroDef.signatureMechanic.implementation;
-  if (impl.kind !== "frenzy") return events;
+  // Both Frenzy and Radiance grant +1 to their bankable counter when the
+  // holder took offensive damage on their previous turn.
+  if (impl.kind !== "frenzy" && impl.kind !== "lightbearer-radiance") return events;
   const flagged = (active.signatureState[FRENZY_TICK_PENDING] ?? 0) > 0;
   if (!flagged) return events;
   delete active.signatureState[FRENZY_TICK_PENDING];
-  const key = impl.passiveKey ?? "frenzy";
+  const key = impl.passiveKey ?? (impl.kind === "frenzy" ? "frenzy" : "radiance");
   const cap = impl.bankCap ?? Infinity;
   const before = active.signatureState[key] ?? 0;
   const after = Math.min(cap, before + 1);

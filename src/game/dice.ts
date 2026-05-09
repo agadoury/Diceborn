@@ -35,6 +35,27 @@ export function bendSymbol(symbol: SymbolId, bends: ReadonlyArray<{ fromSymbol: 
   return symbol;
 }
 
+/** §15.6: resolve the effective combo for a firing ability against the
+ *  caster's active `comboOverrides[]`. Returns the override's combo when
+ *  one matches by ability id or tier; otherwise the ability's declared
+ *  combo. Lives in dice.ts so the ladder evaluator can use it without a
+ *  cycle through phases.ts. */
+export function effectiveCombo(
+  caster: HeroSnapshot,
+  ability: AbilityDef,
+): DiceCombo {
+  for (const ov of caster.comboOverrides) {
+    if (ov.scope.kind === "ability-ids"
+        && ov.scope.ids.some(id => id.toLowerCase() === ability.name.toLowerCase())) {
+      return ov.override;
+    }
+    if (ov.scope.kind === "all-tier" && ov.scope.tier === ability.tier) {
+      return ov.override;
+    }
+  }
+  return ability.combo;
+}
+
 /** Project DieFaces through any active symbol bends, returning a new face
  *  array with bent symbols (faceValue and label preserved). */
 export function bentFaces(
@@ -280,7 +301,9 @@ export function evaluateLadder(
   const faces = active.dice.map(d => d.faces[d.current]);
   const currentlyMatched: number[] = [];
   for (let i = 0; i < hero.abilityLadder.length; i++) {
-    if (comboMatchesFaces(hero.abilityLadder[i].combo, faces)) currentlyMatched.push(i);
+    // §15.6: combo-overrides loosen the match requirement on selected abilities.
+    const combo = effectiveCombo(active, hero.abilityLadder[i]);
+    if (comboMatchesFaces(combo, faces)) currentlyMatched.push(i);
   }
 
   // Picker: highest tier among matched, then highest base damage among ties.
@@ -307,9 +330,10 @@ export function evaluateLadder(
     if (currentlyMatched.includes(idx)) {
       return { kind: "triggered", tier, lethal };
     }
-    // Reachability
+    // Reachability — also honours any active combo-override.
+    const reachabilityCombo = effectiveCombo(active, ability);
     const p = reachabilityProbability(
-      ability.combo,
+      reachabilityCombo,
       active.dice,
       attemptsRemaining,
       hero.diceIdentity.faces,

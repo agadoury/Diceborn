@@ -149,6 +149,7 @@ function formatEvent(ev: GameEvent): string | null {
     case "bank-spent":           return ev.amount > 0 ? `${p(ev.holder)} spends ${ev.amount} ${ev.passiveKey}` : null;
     case "status-remove-prompt": return `${p(ev.holder)} intercept ${ev.status}?`;
     case "status-remove-attempted": return ev.prevented ? `${p(ev.holder)} prevents ${ev.status} removal` : null;
+    case "status-removal-by-holder-action": return `${p(ev.holder)} ${ev.actionName} (${ev.status} ×${ev.stacksRemoved})`;
   }
 }
 

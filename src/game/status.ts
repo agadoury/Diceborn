@@ -47,6 +47,37 @@ export interface PassiveModifier {
   cap?: { min?: number; max?: number };
 }
 
+/** §15.2 — actions the holder can take during their own phases to remove
+ *  stacks of a status by paying a configured cost (CP, HP, or a discarded
+ *  card). Surfaced as a button on the token chip during the matching phase;
+ *  invoked via `Action: { kind: "status-holder-action" }`. The classic
+ *  example is Verdict's atonement ("spend 2 CP during your Main Phase to
+ *  remove all Verdict stacks"), modeled as a token-level mechanic so it
+ *  travels with the token rather than needing a phantom always-available
+ *  card. */
+export interface HolderRemovalAction {
+  /** Phase windows where the action is offered. `main-phase` is shorthand
+   *  for both `main-pre` and `main-post` (Verdict's atonement is available
+   *  any time during the Main Phase). */
+  phase: "main-pre" | "main-post" | "main-phase";
+  cost: {
+    resource: "cp" | "hp" | "discard-card";
+    amount: number;
+  };
+  effect: {
+    /** Either `"all"` (full strip) or a specific stack count. */
+    stacksRemoved: number | "all";
+    /** Optional ride-along effect (e.g. "atone heals 1 HP per stack stripped"). */
+    additionalEffect?: AbilityEffect;
+  };
+  /** When true, the holder may invoke this action only once per turn. */
+  oncePerTurn?: boolean;
+  ui: {
+    actionName: string;
+    confirmationPrompt?: string;
+  };
+}
+
 /** A token whose presence at or above `threshold` stacks blocks game actions
  *  on the holder (Correction 6 §1c). Verdict at 3+ blocks main-phase cards
  *  and instants on the holder's next Main Phase. */
@@ -95,6 +126,9 @@ export interface StatusDefinition {
   stateThresholdEffects?: StateThresholdEffect[];
   /** Threshold-detonation: on apply (or upkeep), check stacks and trigger. */
   detonation?: DetonationDefinition;
+  /** §15.2 — player-initiated paid removal actions surfaced on the holder's
+   *  HUD chip during the matching phase. */
+  holderRemovalActions?: HolderRemovalAction[];
   visualTreatment: { icon: string; color: string; pulse: boolean; particle?: string };
 }
 
