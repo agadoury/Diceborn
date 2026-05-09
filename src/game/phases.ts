@@ -344,6 +344,20 @@ export function commitOffensiveAbility(state: GameState, abilityIndex: number): 
     events.push({ t: "ultimate-fired", player: active.player, abilityName: ability.name, isCritical: !!isCritical });
   }
 
+  // Resource trigger: `opponentAttackedWithStatusActive` fires on the
+  // DEFENDER when the attacker (active player) carries the named status.
+  // Lightbearer banks +1 CP every time the opponent attacks while Verdict
+  // sits on them — even if Verdict's damage debuff zeroes the hit.
+  {
+    const oppHero = getHero(opponent.hero);
+    for (const trig of oppHero.resourceIdentity.cpGainTriggers) {
+      if (trig.on !== "opponentAttackedWithStatusActive") continue;
+      if (trig.status && stacksOf(active, trig.status) <= 0) continue;
+      const adjusted = applyTriggerModifiersToTrigger(state, opponent, active, trig, ability.tier);
+      events.push(...gainCp(opponent, adjusted.gain));
+    }
+  }
+
   const defendable = ability.damageType === "normal" || ability.damageType === "collateral";
   const incomingAmount = computeIncomingAmount(ability.effect, ability.combo, faces, damageBonus, critFlat, critMul);
 
@@ -780,6 +794,25 @@ function resolveDefensiveEffect(
       }
       return { reduction, events };
     }
+    case "passive-counter-modifier":
+    case "gain-cp":
+    case "draw": {
+      // Defensive compounds may include resource grants (Prayer of
+      // Shielding's inline +1 Radiance, Cathedral Light's combo-gated
+      // bonus, etc.). Forward to the shared `resolveEffect` with ability
+      // context so `passive-counter-gain-amount` ability-modifiers and
+      // combo-state checks evaluate against the firing defense.
+      const events = resolveEffect(effect, {
+        state: ctx.state,
+        caster: ctx.defender,
+        opponent: ctx.attacker,
+        isAbility: true,
+        abilityName: ctx.abilityName,
+        abilityTier: ctx.abilityTier,
+        firingFaces: ctx.firingFaces,
+      });
+      return { reduction: 0, events };
+    }
     default:
       return { reduction: 0, events: [] };
   }
@@ -897,13 +930,13 @@ function resolveAbilityEffect(state: GameState, effect: import("./types").Abilit
   // ability modifiers before forwarding to the shared resolver.
   if (effect.kind === "bonus-dice-damage") {
     const patched = applyModifiersToBonusDiceDamage(ctx.caster, ctx.abilityName ?? "", ctx.abilityTier ?? 0, effect, ctx.firingFaces);
-    return resolveEffect(patched, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
+    return resolveEffect(patched, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true, abilityName: ctx.abilityName, abilityTier: ctx.abilityTier, firingFaces: ctx.firingFaces });
   }
   // Patch heal with `heal-amount`, `self-heal-amount` (on self target), and
   // `heal-conditional-bonus` modifiers.
   if (effect.kind === "heal") {
     const patched = applyModifiersToHeal(ctx.caster, ctx.abilityName ?? "", ctx.abilityTier ?? 0, effect, ctx.firingFaces);
-    return resolveEffect(patched, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
+    return resolveEffect(patched, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true, abilityName: ctx.abilityName, abilityTier: ctx.abilityTier, firingFaces: ctx.firingFaces });
   }
   // Patch remove-status with `removed-status-stacks` modifier.
   // §15.7: `stacks` may be `"all"` — masteries that try to bump the stack
@@ -911,7 +944,7 @@ function resolveAbilityEffect(state: GameState, effect: import("./types").Abilit
   if (effect.kind === "remove-status" && typeof effect.stacks === "number") {
     const stacks = applyNumericModifier(ctx.caster, ctx.abilityName ?? "", ctx.abilityTier ?? 0, "removed-status-stacks", effect.stacks, ctx.firingFaces);
     if (stacks !== effect.stacks) {
-      return resolveEffect({ ...effect, stacks }, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
+      return resolveEffect({ ...effect, stacks }, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true, abilityName: ctx.abilityName, abilityTier: ctx.abilityTier, firingFaces: ctx.firingFaces });
     }
   }
   // For non-damage effects: apply crit flat to status stacks. Conditional
@@ -939,13 +972,13 @@ function resolveAbilityEffect(state: GameState, effect: import("./types").Abilit
         stacks: (patchedStacks + bonus) * 2,
         conditional_bonus: undefined,
       };
-      return resolveEffect(stacked, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
+      return resolveEffect(stacked, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true, abilityName: ctx.abilityName, abilityTier: ctx.abilityTier, firingFaces: ctx.firingFaces });
     }
     if (patchedStacks !== effect.stacks || patchedCB !== effect.conditional_bonus) {
-      return resolveEffect({ ...effect, stacks: patchedStacks, conditional_bonus: patchedCB }, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
+      return resolveEffect({ ...effect, stacks: patchedStacks, conditional_bonus: patchedCB }, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true, abilityName: ctx.abilityName, abilityTier: ctx.abilityTier, firingFaces: ctx.firingFaces });
     }
   }
-  return resolveEffect(effect, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
+  return resolveEffect(effect, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true, abilityName: ctx.abilityName, abilityTier: ctx.abilityTier, firingFaces: ctx.firingFaces });
 }
 
 // ── Offensive fallback (Correction 6 §7) ────────────────────────────────────

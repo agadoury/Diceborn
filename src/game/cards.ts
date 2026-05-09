@@ -62,6 +62,15 @@ export interface ResolveCtx {
   /** Player-chosen face value for `set-die-face` effects whose target leaves
    *  faceValue unspecified (Iron Focus, Last Stand). */
   targetFaceValue?: 1 | 2 | 3 | 4 | 5 | 6;
+  /** Firing ability name + tier — passed when an effect is a leaf inside an
+   *  ability's compound. Lets `passive-counter-modifier` honour
+   *  `passive-counter-gain-amount` ability-upgrade modifications (Solar
+   *  Devotion, Cathedral Light) and combo-gated conditionals (Cathedral
+   *  Light's "+1 Radiance on 4+ sun"). */
+  abilityName?: string;
+  abilityTier?: import("./types").AbilityTier;
+  /** Faces that fired the current ability — for combo-aware conditionals. */
+  firingFaces?: ReadonlyArray<DieFace>;
 }
 
 export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent[] {
@@ -602,24 +611,98 @@ function modifyPassiveCounter(
 ): GameEvent[] {
   // §15.8: optional conditional gate — skip the modifier when the state
   // check is false at resolution time (e.g. Cathedral Light's "+1 Radiance
-  // when 4+ sun faces" — only fires on the stricter combo).
-  if (effect.conditional && !checkState(ctx.state, ctx.caster, ctx.opponent, effect.conditional)) {
+  // when 4+ sun faces" — only fires on the stricter combo). When the
+  // ability context is present we forward firing-faces so combo-state
+  // checks evaluate correctly.
+  if (effect.conditional
+      && !checkState(ctx.state, ctx.caster, ctx.opponent, effect.conditional, ctx.firingFaces, ctx.abilityTier)) {
     return [];
   }
   const caster = ctx.caster;
+  // Lightbearer §Mastery: `passive-counter-gain-amount` ability-upgrade
+  // modifications rewrite the leaf's `value` when this modifier resolves
+  // inside an ability's compound (Solar Devotion bumps Sun Strike's
+  // Radiance gain 1→2, Cathedral Light activates Dawn-Ward's inert gain).
+  let value = effect.value;
+  if (ctx.isAbility && ctx.abilityName) {
+    value = applyPassiveCounterGainModifier(ctx.caster, ctx.abilityName, ctx.abilityTier ?? 0, value, ctx.firingFaces);
+  }
   const before = caster.signatureState[effect.passiveKey] ?? 0;
   // Clarification A: `operation: "add"` accepts negative values for
   // spending the resource (Dawnsong burns 2 Radiance for +4 CP). The
   // result is clamped to ≥ 0 below; no separate "subtract" operation.
-  const after = effect.operation === "set" ? effect.value : before + effect.value;
+  const after = effect.operation === "set" ? value : before + value;
   // Respect cap from hero passive definition (read by phases.ts when the cap
   // is known); cards-context can't see it, so allow if respectsCap: false,
-  // otherwise clamp at CP_CAP as a sane default.
-  const clamped = effect.respectsCap === false ? after : Math.min(after, CP_CAP);
+  // otherwise clamp at the hero's bankCap (when registered) or CP_CAP.
+  const bankCap = bankCapFor(caster, effect.passiveKey);
+  const cap = bankCap ?? CP_CAP;
+  const clamped = effect.respectsCap === false ? after : Math.min(after, cap);
   caster.signatureState[effect.passiveKey] = Math.max(0, clamped);
   const delta = caster.signatureState[effect.passiveKey] - before;
   if (delta === 0) return [];
   return [{ t: "passive-counter-changed", player: caster.player, passiveKey: effect.passiveKey, delta, total: caster.signatureState[effect.passiveKey] }];
+}
+
+/** Lightbearer §Mastery: walk active ability-upgrade modifiers targeting
+ *  `passive-counter-gain-amount` and rewrite the firing leaf's `value`.
+ *  Mirrors phases.ts `applyNumericModifier`'s shape so authoring is
+ *  consistent. Cards-context resolutions skip this lookup entirely. */
+function applyPassiveCounterGainModifier(
+  caster: HeroSnapshot,
+  abilityName: string,
+  tier: number,
+  base: number,
+  firingFaces?: ReadonlyArray<DieFace>,
+): number {
+  let value = base;
+  for (const m of caster.abilityModifiers) {
+    let scopeMatches = false;
+    if (m.scope.kind === "ability-ids") scopeMatches = m.scope.ids.some(id => id.toLowerCase() === abilityName.toLowerCase());
+    else if (m.scope.kind === "all-tier") scopeMatches = m.scope.tier === tier;
+    else if (m.scope.kind === "all-defenses") scopeMatches = true;
+    if (!scopeMatches) continue;
+    for (const mod of m.modifications) {
+      if (mod.field !== "passive-counter-gain-amount") continue;
+      if (mod.conditional && !checkStateForMod(mod.conditional, caster, firingFaces, tier)) continue;
+      const v = typeof mod.value === "number" ? mod.value : 0;
+      if (mod.operation === "set") value = v;
+      else if (mod.operation === "add") value += v;
+      else if (mod.operation === "multiply") value = Math.ceil(value * v);
+    }
+  }
+  return value;
+}
+
+/** Lightweight StateCheck evaluator for ability-modifier conditionals.
+ *  Mirrors the cheap evaluator in phases.ts but lives here so cards.ts
+ *  can use it without importing back into phases.ts. Only handles the
+ *  shapes a Mastery `conditional` realistically uses. */
+function checkStateForMod(
+  cond: import("./types").StateCheck,
+  caster: HeroSnapshot,
+  firingFaces?: ReadonlyArray<DieFace>,
+  firingTier?: number,
+): boolean {
+  switch (cond.kind) {
+    case "always":              return true;
+    case "self-low-hp":         return caster.isLowHp;
+    case "self-has-status-min": return (caster.statuses.find(s => s.id === cond.status)?.stacks ?? 0) >= cond.count;
+    case "passive-counter-min": return (caster.signatureState[cond.passiveKey] ?? 0) >= cond.count;
+    case "combo-symbol-count":  return !!firingFaces && firingFaces.filter(f => f.symbol === cond.symbol).length >= cond.count;
+    case "defense-tier-min":    return firingTier != null && firingTier >= cond.tier;
+    default:                    return false;
+  }
+}
+
+/** Resolve a hero's `bankCap` for the named passive key, when registered. */
+function bankCapFor(caster: HeroSnapshot, passiveKey: string): number | undefined {
+  // Late-bind via the content registry to avoid a circular import; the
+  // registry exposes `getHero` lazily.
+  const heroDef = getHero(caster.hero);
+  const impl = heroDef?.signatureMechanic?.implementation;
+  if (impl?.passiveKey === passiveKey && typeof impl.bankCap === "number") return impl.bankCap;
+  return undefined;
 }
 
 function resolveBonusDiceDamage(
@@ -994,6 +1077,9 @@ export function canPlay(state: GameState, hero: HeroSnapshot, opponent: HeroSnap
       if (!dt) return false;
       if (pc.op === "is"     && dt !== pc.value) return false;
       if (pc.op === "is-not" && dt === pc.value) return false;
+    } else if (pc.kind === "passive-counter-min") {
+      const count = hero.signatureState[pc.passiveKey] ?? 0;
+      if (count < pc.count) return false;
     }
   }
   // Phase gating per Correction 5: roll-phase / roll-action cards are

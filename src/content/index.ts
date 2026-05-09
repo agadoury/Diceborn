@@ -13,10 +13,12 @@ import type { Card, HeroDefinition, HeroId } from "../game/types";
 import { GENERIC_CARDS, HERO_CARDS } from "./cards";
 import { BERSERKER } from "./heroes/berserker";
 import { PYROMANCER } from "./heroes/pyromancer";
+import { LIGHTBEARER } from "./heroes/lightbearer";
 
 export const HEROES: Partial<Record<HeroId, HeroDefinition>> = {
   [BERSERKER.id]: BERSERKER,
   [PYROMANCER.id]: PYROMANCER,
+  [LIGHTBEARER.id]: LIGHTBEARER,
 };
 
 export function getHero(id: HeroId): HeroDefinition {

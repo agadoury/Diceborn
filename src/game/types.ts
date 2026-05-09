@@ -148,6 +148,7 @@ export type AbilityUpgradeField =
   | "applied-status-stacks" | "applied-status-stacks-self" | "applied-status-stacks-on-success"
   | "applied-status-conditional-bonus"
   | "removed-status-stacks"
+  | "passive-counter-gain-amount"
   | "reduce-damage-amount" | "reduce-damage-negate-attack"
   | "reduce-damage-apply-to-attacker-stacks" | "reduce-damage-apply-to-attacker-status"
   | "bonus-dice-count" | "bonus-dice-threshold"
@@ -435,7 +436,10 @@ export interface Card {
    *  pendingAttack's damage type (Phoenix Veil — "not Ultimate"). */
   playCondition?:
     | { kind: "match-state-threshold"; metric: "self-hp" | "opponent-hp"; op: "<=" | ">="; value: number }
-    | { kind: "incoming-attack-damage-type"; op: "is" | "is-not"; value: DamageType };
+    | { kind: "incoming-attack-damage-type"; op: "is" | "is-not"; value: DamageType }
+    /** Gate the play on the caster's bankable-passive counter — Dawnsong
+     *  burns 2 Radiance for +4 CP and is unplayable below 2 Radiance. */
+    | { kind: "passive-counter-min"; passiveKey: string; count: number };
   /** When true, the card may only be played a single time per match. The
    *  engine records the cardId in `consumedOncePerMatchCards` on play. */
   oncePerMatch?: boolean;

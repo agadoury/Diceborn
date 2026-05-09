@@ -24,6 +24,7 @@ import type { Card, HeroId } from "../../game/types";
 import { GENERIC_CARDS } from "./generic";
 import { BERSERKER_CARDS } from "./berserker";
 import { PYROMANCER_CARDS } from "./pyromancer";
+import { LIGHTBEARER_CARDS } from "./lightbearer";
 
 /** Per-hero card pools. Heroes that haven't been ingested yet are absent;
  *  `getDeckCards` returns an empty deck for them and the deck-validator
@@ -31,6 +32,7 @@ import { PYROMANCER_CARDS } from "./pyromancer";
 export const HERO_CARDS: Partial<Record<HeroId, Card[]>> = {
   berserker: BERSERKER_CARDS,
   pyromancer: PYROMANCER_CARDS,
+  lightbearer: LIGHTBEARER_CARDS,
 };
 
 export { GENERIC_CARDS };
