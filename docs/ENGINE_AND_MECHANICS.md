@@ -463,7 +463,6 @@ interface HeroDefinition {
   signatureMechanic: { name; description; implementation: PassiveBehavior };
   abilityLadder: AbilityDef[];          // any number, across tiers 1-4
   defensiveLadder?: AbilityDef[];       // optional
-  cards: Card[];                        // ~12
   onHitApplyStatus?: { status; stacks };  // shorthand for "every landed ability also applies X"
 }
 ```
@@ -488,6 +487,17 @@ Anything outside these well-known fields is hero-specific and dispatched via `ph
 - `masterySlots: { 1?, 2?, 3?, defensive? }` — locks the per-tier mastery slot once played
 
 Heroes register themselves in `src/content/index.ts` (`HEROES: Partial<Record<HeroId, HeroDefinition>>`). The HeroSelect screen, simulator, and dev showcase all read this registry live.
+
+### Card files (separate from hero data)
+
+Cards are NOT carried on `HeroDefinition` — they live in their own per-hero module under `src/content/cards/<heroId>.ts` and are looked up at runtime via `getDeckCards(heroId)`. The split is structural prep for an upcoming deck-builder feature: callers go through `getDeckCards` so they don't need to change when player-selected decks land. Today the registry returns the per-hero pool as-is; generic cards live in `src/content/cards/generic.ts` but are not auto-mixed into decks (that decision belongs to the deck-builder).
+
+Adding a hero is therefore two file drops, not one:
+
+1. `src/content/heroes/<heroId>.ts` — `HeroDefinition` (dice, abilities, signature passive, defensive ladder). No `cards` field.
+2. `src/content/cards/<heroId>.ts` — `export const <HERO>_CARDS: Card[] = [...]` (the 12-card deck per `validateDeckComposition`).
+
+Both files are then registered in `src/content/index.ts` (hero) and `src/content/cards/index.ts` (cards).
 
 For the full hero-authoring brief — what fields each hero must provide, what the simulator validates, what the renderer/choreographer can consume — see `docs/HERO_REQUIREMENTS.md`.
 

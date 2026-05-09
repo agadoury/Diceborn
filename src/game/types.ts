@@ -532,7 +532,6 @@ export interface HeroDefinition {
   /** Optional defensive ladder — auto-resolved during the Defensive Roll
    *  Phase. Same picker logic as the offensive ladder. */
   defensiveLadder?: readonly AbilityDef[];
-  cards: Card[];
   /** Optional: applied to every successful offensive ability landed by this hero
    *  (e.g. Barbarian → Bleeding, Pyromancer → Smolder). */
   onHitApplyStatus?: { status: StatusId; stacks: number };

@@ -1,0 +1,327 @@
+/**
+ * Diceborn — Berserker cards.
+ *
+ * Hero-specific card pool. Loaded by the content registry via
+ * `getDeckCards(BERSERKER.id)`. Cards live here (not on `HeroDefinition`)
+ * so the upcoming deck-builder feature can swap card lists per match
+ * without touching hero data.
+ */
+
+import type { Card } from "../../game/types";
+
+export const BERSERKER_CARDS: Card[] = [
+    // ── Dice manipulation ─────────────────────────────────────────────────
+    {
+      id: "berserker/iron-focus",
+      hero: "berserker",
+      kind: "roll-phase",
+      name: "Iron Focus",
+      cost: 1,
+      text: "Set 1 of your dice to a face value of your choice. Once per turn.",
+      trigger: { kind: "manual" },
+      effect: { kind: "set-die-face", count: 1, filter: "any", target: { kind: "face" } },
+      oncePerTurn: true,
+      flavor: "He chooses where the storm strikes.",
+    },
+    {
+      id: "berserker/berserker-rage",
+      hero: "berserker",
+      kind: "roll-phase",
+      name: "Berserker Rage",
+      cost: 2,
+      text: "Reroll all your dice once, ignoring lock states. Cannot be used on the final attempt.",
+      trigger: { kind: "manual" },
+      effect: { kind: "reroll-dice", filter: "all", ignoresLock: true, on_attempt: "not-final" },
+      flavor: "The frost forgets nothing — except patience.",
+    },
+    {
+      id: "berserker/pelt-of-the-wolf",
+      hero: "berserker",
+      kind: "main-phase",
+      name: "Pelt of the Wolf",
+      cost: 1,
+      text: "Until end of turn, your fur faces count as axe faces for combo purposes.",
+      trigger: { kind: "manual" },
+      effect: {
+        kind: "face-symbol-bend",
+        from_symbol: "berserker:fur",
+        to_symbol: "berserker:axe",
+        duration: "this-turn",
+      },
+      flavor: "His mother stitched the pelt with prayers. The prayers still listen.",
+    },
+
+    // ── Tiered masteries ──────────────────────────────────────────────────
+    {
+      id: "berserker/cleave-mastery",
+      hero: "berserker",
+      kind: "mastery",
+      masteryTier: 1,
+      upgradesAbilities: ["Cleave"],
+      occupiesSlot: true,
+      name: "Cleave Mastery",
+      cost: 2,
+      text: "Permanent. Cleave damage becomes 5/7/9. Cleave with 4+ axes becomes undefendable.",
+      trigger: { kind: "manual" },
+      effect: {
+        kind: "ability-upgrade",
+        scope: { kind: "ability-ids", ids: ["Cleave"] },
+        permanent: true,
+        modifications: [
+          { field: "scaling-damage-base", operation: "set", value: 5 },
+          {
+            field: "damage-type",
+            operation: "set",
+            value: "undefendable",
+            conditional: { kind: "combo-symbol-count", symbol: "berserker:axe", count: 4 },
+          },
+        ],
+      },
+      flavor: "Every breath sharpens the blade.",
+    },
+    {
+      id: "berserker/northern-storm",
+      hero: "berserker",
+      kind: "mastery",
+      masteryTier: 2,
+      upgradesAbilities: ["Glacier Strike", "Winter Storm"],
+      occupiesSlot: true,
+      name: "Northern Storm",
+      cost: 3,
+      text: "Permanent. Glacier Strike: 7 unblockable, self-heal 2 HP. Winter Storm: 11 dmg.",
+      trigger: { kind: "manual" },
+      effect: {
+        kind: "ability-upgrade",
+        scope: { kind: "ability-ids", ids: ["Glacier Strike", "Winter Storm"] },
+        permanent: true,
+        modifications: [
+          {
+            field: "base-damage",
+            operation: "set",
+            value: 7,
+            conditional: { kind: "combo-symbol-count", symbol: "berserker:axe", count: 2 },
+          },
+          {
+            field: "heal-amount",
+            operation: "set",
+            value: 2,
+            conditional: { kind: "combo-symbol-count", symbol: "berserker:axe", count: 2 },
+          },
+          {
+            field: "base-damage",
+            operation: "set",
+            value: 11,
+            conditional: { kind: "combo-straight", length: 4 },
+          },
+        ],
+      },
+      flavor: "The storm answers his name.",
+    },
+    {
+      id: "berserker/bloodbound",
+      hero: "berserker",
+      kind: "mastery",
+      masteryTier: 3,
+      upgradesAbilities: ["Blood Harvest", "Frostfang"],
+      occupiesSlot: true,
+      name: "Bloodbound",
+      cost: 3,
+      text: "Permanent. Blood Harvest: threshold becomes 10, heals 3 HP per Frenzy stack. Frostfang: damage becomes 9, +3 Frost-bite.",
+      trigger: { kind: "manual" },
+      effect: {
+        kind: "ability-upgrade",
+        scope: { kind: "ability-ids", ids: ["Blood Harvest", "Frostfang"] },
+        permanent: true,
+        modifications: [
+          {
+            field: "bonus-dice-threshold",
+            operation: "set",
+            value: 10,
+            conditional: { kind: "combo-symbol-count", symbol: "berserker:howl", count: 2 },
+          },
+          {
+            field: "heal-conditional-bonus",
+            operation: "set",
+            value: 3,
+            conditional: { kind: "combo-symbol-count", symbol: "berserker:howl", count: 2 },
+          },
+          {
+            field: "base-damage",
+            operation: "set",
+            value: 9,
+            conditional: { kind: "combo-symbol-count", symbol: "berserker:howl", count: 4 },
+          },
+          {
+            field: "applied-status-stacks",
+            operation: "set",
+            value: 3,
+            conditional: { kind: "combo-symbol-count", symbol: "berserker:howl", count: 4 },
+          },
+        ],
+      },
+      flavor: "What was given returns. Stronger.",
+    },
+    {
+      id: "berserker/wolfborn",
+      hero: "berserker",
+      kind: "mastery",
+      masteryTier: "defensive",
+      upgradesAbilities: "all-defenses",
+      occupiesSlot: true,
+      name: "Wolfborn",
+      cost: 3,
+      text: "Permanent. Wolfhide: -5 dmg. Bloodoath: heal scales 4/5/6 with fur count. Glacial Counter: -7 dmg, +2 Frost-bite.",
+      trigger: { kind: "manual" },
+      effect: {
+        kind: "ability-upgrade",
+        scope: { kind: "all-defenses" },
+        permanent: true,
+        modifications: [
+          {
+            field: "reduce-damage-amount",
+            operation: "set",
+            value: 5,
+            conditional: { kind: "combo-symbol-count", symbol: "berserker:fur", count: 1 },
+          },
+          {
+            field: "heal-amount",
+            operation: "set",
+            value: 5,
+            conditional: { kind: "combo-symbol-count", symbol: "berserker:fur", count: 3 },
+          },
+          {
+            field: "heal-amount",
+            operation: "set",
+            value: 6,
+            conditional: { kind: "combo-symbol-count", symbol: "berserker:fur", count: 4 },
+          },
+          {
+            field: "reduce-damage-amount",
+            operation: "set",
+            value: 7,
+            conditional: { kind: "combo-symbol-count", symbol: "berserker:howl", count: 1 },
+          },
+          {
+            field: "applied-status-stacks",
+            operation: "set",
+            value: 2,
+            conditional: { kind: "combo-symbol-count", symbol: "berserker:howl", count: 1 },
+          },
+        ],
+      },
+      flavor: "The pelt remembers every wound it spared.",
+    },
+
+    // ── Signature plays ───────────────────────────────────────────────────
+    {
+      id: "berserker/war-cry",
+      hero: "berserker",
+      kind: "main-phase",
+      name: "War Cry",
+      cost: 3,
+      text: "Add 3 Frenzy stacks immediately, regardless of HP threshold.",
+      trigger: { kind: "manual" },
+      effect: {
+        kind: "passive-counter-modifier",
+        passiveKey: "frenzy",
+        operation: "add",
+        value: 3,
+        respectsCap: true,
+      },
+      flavor: "He wakes the storm in himself.",
+    },
+    {
+      id: "berserker/hunters-mark",
+      hero: "berserker",
+      kind: "main-phase",
+      name: "Hunter's Mark",
+      cost: 1,
+      text: "Apply 2 Frost-bite to opponent directly, no roll required.",
+      trigger: { kind: "manual" },
+      effect: {
+        kind: "apply-status",
+        status: "berserker:frostbite",
+        stacks: 2,
+        target: "opponent",
+      },
+      flavor: "He marks the ones the wolves will follow.",
+    },
+    {
+      id: "berserker/ancestral-spirits",
+      hero: "berserker",
+      kind: "main-phase",
+      name: "Ancestral Spirits",
+      cost: 2,
+      text: "Until end of match, all your offensive abilities deal +1 damage. Discarded if you take damage from a Tier 4 Ultimate.",
+      trigger: { kind: "manual" },
+      // Persistent buff that targets every offensive tier (1, 2, 3). T4 is
+      // intentionally excluded — and the discardOn breaks the buff when a
+      // T4 lands on the Berserker.
+      effect: {
+        kind: "compound",
+        effects: [
+          {
+            kind: "persistent-buff",
+            id: "ancestral-spirits-t1",
+            scope: { kind: "all-tier", tier: 1 },
+            modifier: { field: "base-damage", operation: "add", value: 1 },
+            discardOn: { kind: "damage-taken-from-tier", tier: 4 },
+          },
+          {
+            kind: "persistent-buff",
+            id: "ancestral-spirits-t2",
+            scope: { kind: "all-tier", tier: 2 },
+            modifier: { field: "base-damage", operation: "add", value: 1 },
+            discardOn: { kind: "damage-taken-from-tier", tier: 4 },
+          },
+          {
+            kind: "persistent-buff",
+            id: "ancestral-spirits-t3",
+            scope: { kind: "all-tier", tier: 3 },
+            modifier: { field: "base-damage", operation: "add", value: 1 },
+            discardOn: { kind: "damage-taken-from-tier", tier: 4 },
+          },
+        ],
+      },
+      flavor: "His ancestors stand with him until the storm breaks.",
+    },
+    {
+      id: "berserker/last-stand",
+      hero: "berserker",
+      kind: "roll-phase",
+      name: "Last Stand",
+      cost: 4,
+      text: "Playable only when at ≤10 HP. Choose a face value; until end of turn, all 5 of your dice count as that face. Once per match.",
+      trigger: { kind: "manual" },
+      effect: {
+        kind: "compound",
+        effects: [
+          // Visual: set + lock all dice to the picked face for the dice tray.
+          { kind: "set-die-face", count: 5, filter: "any", target: { kind: "face" }, lockAfter: true },
+          // Combo evaluation: override survives any reroll until end of turn.
+          { kind: "force-face-value", duration: "this-turn" },
+        ],
+      },
+      playCondition: { kind: "match-state-threshold", metric: "self-hp", op: "<=", value: 10 },
+      oncePerMatch: true,
+      flavor: "When the wolf dies, it dies looking forward.",
+    },
+    {
+      id: "berserker/counterstrike",
+      hero: "berserker",
+      kind: "instant",
+      name: "Counterstrike",
+      cost: 2,
+      text: "Once per match. When an opponent's offensive ability deals you 1+ damage, gain +2 Frenzy AND apply +1 Frost-bite to the attacker.",
+      trigger: { kind: "self-takes-damage", from: "offensive-ability" },
+      effect: {
+        kind: "compound",
+        effects: [
+          { kind: "passive-counter-modifier", passiveKey: "frenzy", operation: "add", value: 2, respectsCap: true },
+          { kind: "apply-status", status: "berserker:frostbite", stacks: 1, target: "opponent" },
+        ],
+      },
+      oncePerMatch: true,
+      flavor: "Hit me. The wolf has been waiting.",
+    },
+];

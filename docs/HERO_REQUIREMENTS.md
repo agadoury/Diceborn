@@ -645,6 +645,15 @@ damage types so the offense has answers to a strong defender.
 
 === CARDS (exactly 12) ===
 
+> **File layout note.** Cards are NOT carried on `HeroDefinition` and are
+> NOT defined inside the hero file. They live in their own per-hero card
+> module (`src/content/cards/<heroId>.ts`) and are looked up at runtime
+> via `getDeckCards(heroId)`. This separation exists so the upcoming
+> deck-builder feature can swap card lists per match without touching
+> hero data. **Always submit cards as a separate block** — the ingestion
+> tool drops them into the matching `cards/<heroId>.ts` file, not into
+> the hero module.
+
 Required composition — the validator rejects decks that don't match:
   3 dice manipulation     (set-die-face / reroll-dice / face-symbol-bend)
   4 tiered Masteries      (1 each: T1, T2, T3, Defensive — never T4)
@@ -748,6 +757,8 @@ So the writer knows what each field becomes when the hero is implemented:
 
 | Template field | Becomes | Used by |
 |---|---|---|
+| **HERO** block | `HeroDefinition` in `src/content/heroes/<heroId>.ts` | engine + presentation |
+| **CARDS** block | `<HERO>_CARDS: Card[]` in `src/content/cards/<heroId>.ts` (separate file) | `getDeckCards(heroId)` registry |
 | ID | `HeroId` slug | routing, save data, debug |
 | NAME | `hero.name` | hero-select, banner, action log |
 | ACCENT | `hero.accentColor` | UI theming, glows, button accents |
