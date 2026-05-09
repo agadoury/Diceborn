@@ -14,11 +14,11 @@
  * Counter-prompt responses are decided by a simple "is this worth it" check.
  */
 
-import type { Action, GameState, PlayerId } from "./types";
+import type { Action, GameState, PlayerId, StatusId } from "./types";
 import { ROLL_ATTEMPTS } from "./types";
 import { getHero } from "../content";
-import { evaluateLadder, pickKeepMask, symbolsOnDice, comboMatches } from "./dice";
-import { stacksOf } from "./status";
+import { evaluateLadder, pickKeepMask, symbolsOnDice, comboMatchesFaces } from "./dice";
+import { stacksOf, getStatusDef } from "./status";
 
 // ── Top-level driver: returns the next action the AI wants to take. ─────────
 export function nextAiAction(state: GameState, ai: PlayerId): Action {
@@ -73,6 +73,16 @@ function decideMainPre(state: GameState, ai: PlayerId): Action {
   const opponent = state.players[other(ai)];
   void opponent;
 
+  // §15.2: holder-paid status removal. If we carry a status with a
+  // `holderRemovalActions[]` entry and the cost is affordable AND the
+  // stacks are high enough to be worth the spend, trigger atonement.
+  // Without this the AI can sit under permanently-applied debuffs (e.g.
+  // Verdict's -2 dmg/stack) and stall the match indefinitely.
+  const atone = pickHolderRemovalAction(me);
+  if (atone) {
+    return { kind: "status-holder-action", status: atone.status, actionIndex: atone.actionIndex };
+  }
+
   // 1) Removal: clear heavy generic DoTs (Burn) when affordable.
   const myBurn = stacksOf(me, "burn");
   if (myBurn >= 3 && me.hand.find(c => c.id === "generic/cleanse" && c.cost <= me.cp)) {
@@ -111,19 +121,27 @@ function decideOffensiveRoll(state: GameState, ai: PlayerId): Action {
       // If any ability is currently firing, pin the target to the highest
       // firing tier. This avoids the lock/reachability oscillation where
       // pickTargetTier flip-flops between tiers as we toggle locks.
+      // Face-aware match — symbol-only `comboMatches` misses n-of-a-kind
+      // and straight combos, which would leave firingTier=-1 and dump
+      // every decision through the unstable pickTargetTier path.
       const symbols = symbolsOnDice(me.dice);
+      const faces = me.dice.map(d => d.faces[d.current]);
       let firingTier = -1;
       for (let i = 0; i < hero.abilityLadder.length; i++) {
-        if (comboMatches(hero.abilityLadder[i].combo, symbols)) firingTier = i;
+        if (comboMatchesFaces(hero.abilityLadder[i].combo, faces)) firingTier = i;
       }
       const targetTier = firingTier >= 0 ? firingTier : pickTargetTier(state, ai);
       if (targetTier >= 0) {
         const ability = hero.abilityLadder[targetTier];
         const keep = pickKeepMask(ability.combo, symbols);
-        // If lock states differ from keep mask, toggle one die.
+        // Monotonic lock policy: only LOCK a die that the keep mask wants
+        // locked. Never UNLOCK mid-attempt — `pickTargetTier`'s MC depends
+        // on current locks, so an unlock could flip the target tier and
+        // produce a different keep mask, causing an infinite toggle cycle.
+        // Locks naturally reset at `passTurn` so this is purely scoped
+        // to the current attempt.
         for (let i = 0; i < me.dice.length; i++) {
-          const desired = keep[i];
-          if (me.dice[i].locked !== desired) {
+          if (keep[i] && !me.dice[i].locked) {
             return { kind: "toggle-die-lock", die: i as 0|1|2|3|4 };
           }
         }
@@ -190,9 +208,47 @@ function locksAreOptimal(state: GameState, ai: PlayerId): boolean {
 }
 void locksAreOptimal;
 
+/** §15.2: scan the holder's statuses for a `holderRemovalActions[]` entry
+ *  worth invoking now. Picks the first action whose cost is affordable
+ *  and whose stack count is "worth" stripping — defined as either ≥ the
+ *  smallest `stateThresholdEffects.threshold` on the status (so we
+ *  evict before the bind fires) or ≥ 75% of `stackLimit`. Returns
+ *  `{ status, actionIndex }` or `null`. */
+function pickHolderRemovalAction(holder: import("./types").HeroSnapshot): { status: StatusId; actionIndex: number } | null {
+  for (const inst of holder.statuses) {
+    const def = getStatusDef(inst.id);
+    const actions = def?.holderRemovalActions;
+    if (!def || !actions || actions.length === 0) continue;
+
+    // "Worth it" threshold: smallest threshold among stateThresholdEffects,
+    // or 75% of stackLimit when no thresholds are declared.
+    const lowestThreshold = def.stateThresholdEffects?.length
+      ? Math.min(...def.stateThresholdEffects.map(s => s.threshold))
+      : Math.ceil(def.stackLimit * 0.75);
+    if (inst.stacks < lowestThreshold) continue;
+
+    for (let i = 0; i < actions.length; i++) {
+      const action = actions[i];
+      const affordable =
+        action.cost.resource === "cp"           ? holder.cp >  action.cost.amount :
+        action.cost.resource === "hp"           ? holder.hp >  action.cost.amount + 4 : // keep a 4-HP cushion
+        action.cost.resource === "discard-card" ? holder.hand.length >= action.cost.amount + 1 :
+        false;
+      if (!affordable) continue;
+      return { status: inst.id, actionIndex: i };
+    }
+  }
+  return null;
+}
+
 // ── Main post-roll: play follow-up cards, then end turn ─────────────────────
 function decideMainPost(state: GameState, ai: PlayerId): Action {
   const me = state.players[ai];
+  // §15.2 atonement is also valid during main-post.
+  const atone = pickHolderRemovalAction(me);
+  if (atone) {
+    return { kind: "status-holder-action", status: atone.status, actionIndex: atone.actionIndex };
+  }
   // Cheap CP-fueled plays only — most decisions happen pre-roll.
   if (me.cp >= 1 && me.hand.find(c => c.id === "generic/focus" && c.cost === 0)) {
     return { kind: "play-card", card: "generic/focus" };
