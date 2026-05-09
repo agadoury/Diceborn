@@ -113,17 +113,18 @@ describe("Correction 6 primitives", () => {
     expect(stacksOf(snap, "test:cinder")).toBe(0);
   });
 
-  it("validateDeckComposition enforces 12 cards + 4 masteries (no T4)", () => {
-    const card = (id: string, kind: Card["kind"], extras: Partial<Card> = {}): Card => ({
-      id, hero: "h", kind, name: id, cost: 1, text: "", trigger: { kind: "manual" },
+  it("validateDeckComposition enforces 4/3/3/2 by cardCategory (no T4 upgrades, no duplicate slots)", () => {
+    const card = (id: string, kind: Card["kind"], cardCategory: Card["cardCategory"], extras: Partial<Card> = {}): Card => ({
+      id, hero: "h", kind, cardCategory, name: id, cost: 1, text: "", trigger: { kind: "manual" },
       effect: { kind: "gain-cp", amount: 1 }, ...extras,
     });
     const good: Card[] = [
-      card("h/m1", "mastery", { masteryTier: 1 }),
-      card("h/m2", "mastery", { masteryTier: 2 }),
-      card("h/m3", "mastery", { masteryTier: 3 }),
-      card("h/md", "mastery", { masteryTier: "defensive" }),
-      ...Array.from({ length: 8 }, (_, i) => card(`h/p${i}`, "main-phase")),
+      ...Array.from({ length: 4 }, (_, i) => card(`h/g${i}`, "main-phase", "generic")),
+      ...Array.from({ length: 3 }, (_, i) => card(`h/d${i}`, "roll-phase", "dice-manip")),
+      card("h/u1", "mastery", "ladder-upgrade", { masteryTier: 1 }),
+      card("h/u2", "mastery", "ladder-upgrade", { masteryTier: 2 }),
+      card("h/u3", "mastery", "ladder-upgrade", { masteryTier: 3 }),
+      ...Array.from({ length: 2 }, (_, i) => card(`h/s${i}`, "main-phase", "signature")),
     ];
     expect(validateDeckComposition(good)).toEqual([]);
 

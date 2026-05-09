@@ -705,27 +705,46 @@ export function buildDeck(state: GameState, cards: ReadonlyArray<Card>): Card[] 
   return deck;
 }
 
-/** Validate a hero's deck composition per Correction 6 §9: exactly 12 cards,
- *  exactly 4 Masteries (one per T1 / T2 / T3 / defensive). T4 abilities have
- *  no Mastery — power lives at the curve peak. Returns issues found; an
+/** Validate a deck's composition per the deck-building overhaul: exactly
+ *  12 cards split 4 generic / 3 dice-manip / 3 ladder-upgrade / 2 signature.
+ *  Ladder upgrades may target any 3 of {T1, T2, T3, defensive}, but no two
+ *  upgrades may target the same slot (one upgrade per ladder tier per game).
+ *  T4 ultimates intentionally have no upgrade. Returns issues found; an
  *  empty array means the deck is conformant. */
 export function validateDeckComposition(cards: ReadonlyArray<Card>): string[] {
   const issues: string[] = [];
   if (cards.length !== 12) {
     issues.push(`deck size is ${cards.length}, expected exactly 12`);
   }
-  const masteries = cards.filter(c => c.kind === "mastery");
-  if (masteries.length !== 4) {
-    issues.push(`deck contains ${masteries.length} mastery cards, expected exactly 4`);
-  }
-  const tiers = new Set(masteries.map(m => m.masteryTier));
-  for (const required of [1, 2, 3, "defensive"] as const) {
-    if (!tiers.has(required)) issues.push(`missing mastery for tier ${required}`);
-  }
-  for (const m of masteries) {
-    if ((m.masteryTier as number | string) === 4) {
-      issues.push(`mastery card "${m.name}" targets T4 — T4 ultimates intentionally have no mastery`);
+  const counts: Record<Card["cardCategory"], number> = {
+    "generic": 0, "dice-manip": 0, "ladder-upgrade": 0, "signature": 0,
+  };
+  for (const c of cards) counts[c.cardCategory]++;
+  const required = { "generic": 4, "dice-manip": 3, "ladder-upgrade": 3, "signature": 2 } as const;
+  for (const cat of ["generic", "dice-manip", "ladder-upgrade", "signature"] as const) {
+    if (counts[cat] !== required[cat]) {
+      issues.push(`category "${cat}" has ${counts[cat]} cards, expected ${required[cat]}`);
     }
+  }
+  // One upgrade per ladder tier slot. Each ladder-upgrade card declares its
+  // target slot via `masteryTier`. Duplicate slots are rejected at deck-build
+  // time so the player can't accidentally bring two T1 upgrades.
+  const upgrades = cards.filter(c => c.cardCategory === "ladder-upgrade");
+  const slotCounts = new Map<string, number>();
+  for (const u of upgrades) {
+    if (u.masteryTier == null) {
+      issues.push(`ladder-upgrade "${u.name}" is missing masteryTier slot`);
+      continue;
+    }
+    if ((u.masteryTier as unknown) === 4) {
+      issues.push(`ladder-upgrade "${u.name}" targets T4 — T4 ultimates intentionally have no upgrade`);
+      continue;
+    }
+    const key = String(u.masteryTier);
+    slotCounts.set(key, (slotCounts.get(key) ?? 0) + 1);
+  }
+  for (const [slot, n] of slotCounts) {
+    if (n > 1) issues.push(`two ladder-upgrades target slot "${slot}" — only one upgrade per ladder tier per game`);
   }
   return issues;
 }

@@ -369,10 +369,17 @@ export type CardTrigger =
   | { kind: "on-symbol-rolled"; symbol: SymbolId | "*:ult"; by: "self" | "opponent" }
   | { kind: "on-tier-fired";    tier: AbilityTier; by: "self" | "opponent" };
 
+/** Collection-level categorization used by the deck builder + validator.
+ *  Orthogonal to `kind`: `kind` drives engine dispatch (phase gating, slot
+ *  occupation), while `cardCategory` drives deck-composition rules (4 generic /
+ *  3 dice-manip / 3 ladder-upgrade / 2 signature = 12 total). */
+export type CardCategory = "generic" | "dice-manip" | "ladder-upgrade" | "signature";
+
 export interface Card {
   id: CardId;
   hero: HeroId | "generic";
   kind: CardKind;
+  cardCategory: CardCategory;
   name: string;
   cost: number;
   text: string;
