@@ -89,13 +89,15 @@ export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent
       return r.events;
     }
     case "reduce-damage": {
-      // Cards / Instants — used by Phoenix-Veil-style cards that fire
-      // mid-attack to reduce or negate the incoming damage. We compute the
-      // prevented amount based on the live `pendingAttack.incomingAmount`
-      // (if any), stash it on the caster's `__damagePrevented` so a sibling
-      // apply-status with `source: "damage-prevented-amount"` reads it, and
-      // queue the reduction on `pendingAttack.injectedReduction` so the
-      // defense-resolution path adds it to the final reduction.
+      // Cards / Instants — used by Phoenix-Veil / Aegis-of-Dawn style cards
+      // that fire mid-attack to reduce, halve, or negate the incoming damage
+      // (Clarification B in §15: `reduce-damage` resolved from an Instant
+      // response window injects on the queued in-flight damage via
+      // `pendingAttack.injectedReduction`). We compute the prevented amount
+      // based on the live `pendingAttack.incomingAmount` (if any), stash it
+      // on the caster's `__damagePrevented` so a sibling apply-status with
+      // `source: "damage-prevented-amount"` reads it, and queue the
+      // reduction on `pendingAttack.injectedReduction`.
       const pa = ctx.state.pendingAttack;
       const incoming = pa?.incomingAmount ?? 0;
       let amount = effect.amount;
@@ -105,7 +107,21 @@ export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent
       ) {
         amount += computeConditionalBonus(ctx.caster, ctx.opponent, effect.conditional_bonus);
       }
-      const reduction = effect.negate_attack ? incoming : amount;
+      // Resolution mode (mutually exclusive — multiplier > negate > flat amount).
+      // §15.1: multiplier produces fractional reduction — final damage =
+      // round(incoming × multiplier); reduction = incoming − final.
+      let reduction: number;
+      if (effect.multiplier != null) {
+        const rounding = effect.rounding ?? "ceil";
+        const finalDamage = rounding === "ceil"
+          ? Math.ceil(incoming * effect.multiplier)
+          : Math.floor(incoming * effect.multiplier);
+        reduction = Math.max(0, incoming - finalDamage);
+      } else if (effect.negate_attack) {
+        reduction = incoming;
+      } else {
+        reduction = amount;
+      }
       const prevented = Math.max(0, Math.min(reduction, incoming));
       ctx.caster.signatureState["__damagePrevented"] = prevented;
       if (pa) {
@@ -140,32 +156,44 @@ export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent
     }
     case "remove-status": {
       const target = effect.target === "self" ? ctx.caster : ctx.opponent;
+      // §15.7 wildcard category resolution. `any-positive` is the legacy
+      // alias of `any-buff`. The resolver picks ONE matching status per
+      // resolution; multi-strip cards compose via `compound`.
+      const wildcards = ["any-debuff", "any-buff", "any-positive", "any-status"] as const;
+      const isWildcard = (wildcards as readonly string[]).includes(effect.status);
+      const statusesForCategory = isWildcard
+        ? listStatusesByCategory(target, effect.status as "any-debuff" | "any-buff" | "any-positive" | "any-status")
+        : (target.statuses.find(s => s.id === effect.status) ? [target.statuses.find(s => s.id === effect.status)!] : []);
+      const selection = effect.selection ?? "player-choice";
+      const picked = pickWildcardSelection(statusesForCategory, selection);
+      const statusToStrip = picked?.id ?? (!isWildcard ? effect.status : undefined);
+      if (!statusToStrip) return [];
+
       // Opponent-initiated removal — give the holder a chance to intercept
       // via an Instant with a matching trigger. Pauses the resolver and
       // returns no events; the engine resumes via `respond-to-status-removal`
       // and finalises the strip (or drops it if `prevented`).
       if (target !== ctx.caster) {
-        const intercept = maybeQueueStatusRemovalIntercept(ctx.state, target, ctx.caster.player, effect.status);
+        const intercept = maybeQueueStatusRemovalIntercept(ctx.state, target, ctx.caster.player, statusToStrip);
         if (intercept) return intercept;
       }
-      // Wildcard expansion — `any-positive` strips one (1 stack) of the
-      // target's first buff-type status. Multi-status player choice would
-      // need UI support; for now we pick deterministically.
-      const statusToStrip = effect.status === "any-positive"
-        ? findFirstBuffStatusId(target)
-        : effect.status;
-      if (!statusToStrip) return [];
       // Snapshot applier-of-status BEFORE stripping; once stripped we lose
       // the inst.appliedBy reference.
       const stripped = target.statuses.find(s => s.id === statusToStrip);
       const stripCount = stripped?.stacks ?? 0;
       const applierId = stripped?.appliedBy;
       const events: GameEvent[] = [];
-      if (effect.status === "any-positive" || effect.stacks >= (stripped?.stacks ?? 0)) {
+      // Determine the strip amount. `stacks: "all"` always strips fully;
+      // a numeric `stacks` strips up to that count (legacy behaviour).
+      // Wildcards default to "strip the whole resolved status" since the
+      // category is itself the targeting decision.
+      const stripAll = effect.stacks === "all" || isWildcard
+        || (typeof effect.stacks === "number" && effect.stacks >= (stripped?.stacks ?? 0));
+      if (stripAll) {
         events.push(...stripStatus(target, statusToStrip).events);
       } else {
         // Decrement-style remove (rare): trim N without firing onRemove.
-        if (stripped) {
+        if (stripped && typeof effect.stacks === "number") {
           stripped.stacks = Math.max(0, stripped.stacks - effect.stacks);
           if (stripped.stacks === 0) {
             target.statuses = target.statuses.filter(s => s.id !== statusToStrip);
@@ -224,8 +252,17 @@ export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent
         permanent: effect.permanent,
       });
     case "passive-counter-modifier":
-      return modifyPassiveCounter(ctx.caster, effect);
-    case "persistent-buff":
+      return modifyPassiveCounter(ctx, effect);
+    case "persistent-buff": {
+      // §15.3 / §15.4 / existing forms. Exactly one of `modifier` /
+      // `pipelineModifier` / `triggerModifier` should be set.
+      if (effect.pipelineModifier) {
+        return addPipelineBuff(ctx.caster, effect.id, effect.pipelineModifier, effect.discardOn);
+      }
+      if (effect.triggerModifier) {
+        return addTriggerBuff(ctx.caster, effect.id, effect.triggerModifier, effect.discardOn);
+      }
+      if (!effect.modifier) return [];
       // Token-targeted form (Crater Wind etc.) — patches the named status's
       // mechanical fields per-snapshot. Otherwise behaves as an ability-scoped
       // persistent modifier.
@@ -239,7 +276,12 @@ export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent
         modifications: [effect.modifier],
         permanent: true,
         discardOn: effect.discardOn,
+        creatorPlayer: ctx.caster.player,
+        creatorTurnsElapsed: 0,
       }, effect.id);
+    }
+    case "combo-override":
+      return applyComboOverride(ctx.state, ctx.caster, effect);
     case "bonus-dice-damage":
       return resolveBonusDiceDamage(ctx.state, ctx.caster, ctx.opponent, effect);
     case "force-face-value": {
@@ -383,14 +425,101 @@ function addAbilityModifier(
   return [{ t: "ability-modifier-added", player: caster.player, modifierId: id, source: spec.source }];
 }
 
-/** Pick the first buff-type status currently on `holder`. Returns undefined
- *  when none. Used by the `any-positive` wildcard target on remove-status. */
-function findFirstBuffStatusId(holder: HeroSnapshot): import("./types").StatusId | undefined {
-  for (const inst of holder.statuses) {
-    const def = getStatusDef(inst.id);
-    if (def?.type === "buff") return inst.id;
+/** §15.3: register a card-applied pipeline modifier. */
+function addPipelineBuff(
+  caster: HeroSnapshot,
+  givenId: string,
+  pm: import("./types").PipelineModifier,
+  discardOn?: import("./types").DiscardTrigger,
+): GameEvent[] {
+  const id = givenId || `pipe-${_modIdCounter++}`;
+  caster.pipelineBuffs.push({
+    id,
+    pipelineModifier: pm,
+    discardOn,
+    creatorPlayer: caster.player,
+    creatorTurnsElapsed: 0,
+  });
+  return [{ t: "ability-modifier-added", player: caster.player, modifierId: id, source: "card" }];
+}
+
+/** §15.4: register a card-applied trigger modifier. */
+function addTriggerBuff(
+  caster: HeroSnapshot,
+  givenId: string,
+  tm: import("./types").TriggerModifier,
+  discardOn?: import("./types").DiscardTrigger,
+): GameEvent[] {
+  const id = givenId || `trig-${_modIdCounter++}`;
+  caster.triggerBuffs.push({
+    id,
+    triggerModifier: tm,
+    discardOn,
+    creatorPlayer: caster.player,
+    creatorTurnsElapsed: 0,
+  });
+  return [{ t: "ability-modifier-added", player: caster.player, modifierId: id, source: "card" }];
+}
+
+/** §15.6: register a combo override on the caster. Same lifecycle shape
+ *  as ActiveSymbolBend so the dice evaluator can age them on the same
+ *  pass at end-of-turn / end-of-roll. */
+function applyComboOverride(
+  state: GameState,
+  caster: HeroSnapshot,
+  effect: Extract<AbilityEffect, { kind: "combo-override" }>,
+): GameEvent[] {
+  const id = `combo-${state.rngCursor}-${caster.comboOverrides.length}`;
+  let expires: import("./types").ActiveComboOverride["expires"];
+  if (effect.duration === "this-roll") {
+    expires = { kind: "this-roll", appliedAtAttempt: caster.rollAttemptsRemaining };
+  } else if (effect.duration === "this-turn") {
+    expires = { kind: "this-turn", appliedOnTurn: state.turn };
+  } else {
+    expires = { kind: "until-status", status: effect.duration.status, on: effect.duration.on };
   }
-  return undefined;
+  caster.comboOverrides.push({ id, scope: effect.scope, override: effect.override, expires });
+  return [{ t: "ability-modifier-added", player: caster.player, modifierId: id, source: "card" }];
+}
+
+/** List the holder's statuses matching a wildcard category (§15.7). */
+function listStatusesByCategory(
+  holder: HeroSnapshot,
+  category: "any-debuff" | "any-buff" | "any-positive" | "any-status",
+): import("./types").StatusInstance[] {
+  return holder.statuses.filter(inst => {
+    const def = getStatusDef(inst.id);
+    if (!def) return false;
+    if (category === "any-status") return true;
+    if (category === "any-buff" || category === "any-positive") return def.type === "buff";
+    if (category === "any-debuff") return def.type === "debuff";
+    return false;
+  });
+}
+
+/** Resolve the wildcard `selection` modifier on a list of candidates.
+ *  `player-choice` is best-effort deterministic (no UI prompt is wired in
+ *  the engine; a UI overlay can intercept the action and pre-pick before
+ *  dispatch). The deterministic options resolve immediately. */
+function pickWildcardSelection(
+  candidates: ReadonlyArray<import("./types").StatusInstance>,
+  selection: "player-choice" | "highest-stack" | "lowest-stack" | "longest-active",
+): import("./types").StatusInstance | undefined {
+  if (candidates.length === 0) return undefined;
+  if (candidates.length === 1) return candidates[0];
+  switch (selection) {
+    case "highest-stack":
+      return candidates.reduce((a, b) => (b.stacks > a.stacks ? b : a));
+    case "lowest-stack":
+      return candidates.reduce((a, b) => (b.stacks < a.stacks ? b : a));
+    case "longest-active":
+      // No timestamp on the StatusInstance — fall back to first-found
+      // (insertion-order proxy for "applied earliest").
+      return candidates[0];
+    case "player-choice":
+    default:
+      return candidates[0];
+  }
 }
 
 /** Dispatch the `opponentRemovedSelfStatus` resource trigger on the applier
@@ -468,10 +597,20 @@ function addTokenOverride(
 }
 
 function modifyPassiveCounter(
-  caster: HeroSnapshot,
+  ctx: ResolveCtx,
   effect: Extract<AbilityEffect, { kind: "passive-counter-modifier" }>,
 ): GameEvent[] {
+  // §15.8: optional conditional gate — skip the modifier when the state
+  // check is false at resolution time (e.g. Cathedral Light's "+1 Radiance
+  // when 4+ sun faces" — only fires on the stricter combo).
+  if (effect.conditional && !checkState(ctx.state, ctx.caster, ctx.opponent, effect.conditional)) {
+    return [];
+  }
+  const caster = ctx.caster;
   const before = caster.signatureState[effect.passiveKey] ?? 0;
+  // Clarification A: `operation: "add"` accepts negative values for
+  // spending the resource (Dawnsong burns 2 Radiance for +4 CP). The
+  // result is clamped to ≥ 0 below; no separate "subtract" operation.
   const after = effect.operation === "set" ? effect.value : before + effect.value;
   // Respect cap from hero passive definition (read by phases.ts when the cap
   // is known); cards-context can't see it, so allow if respectsCap: false,
@@ -517,32 +656,118 @@ function resolveBonusDiceDamage(
 
 /** Called when an event happens that may discard ability modifiers (e.g. a
  *  T4 hit clears Ancestral Spirits). Iterates each player's modifiers and
- *  removes those whose `discardOn` matches the event. */
+ *  removes those whose `discardOn` matches the event. Also walks the
+ *  pipeline / trigger buff lists added in §15.3 / §15.4. */
 export function evaluateModifierDiscards(state: GameState, ev: GameEvent): GameEvent[] {
   const events: GameEvent[] = [];
   for (const pid of ["p1", "p2"] as const) {
     const player = state.players[pid];
-    const keep: ActiveAbilityModifier[] = [];
-    for (const m of player.abilityModifiers) {
-      if (!m.discardOn) { keep.push(m); continue; }
-      const d = m.discardOn;
-      let match = false;
+    const matchEvent = (d: import("./types").DiscardTrigger | undefined): boolean => {
+      if (!d) return false;
       if (d.kind === "damage-taken-from-tier" && ev.t === "damage-dealt" && ev.to === pid) {
         // Damage-tier requires reading the originating ability — we approximate
-        // by carrying tier on damage-dealt? Currently we do not. Defer: leave
-        // intact (tier-aware discard will need a richer event payload).
-      } else if (d.kind === "status-removed" && ev.t === "status-removed" && ev.holder === pid && ev.status === d.status) {
-        match = true;
-      } else if (d.kind === "match-ends" && ev.t === "match-won") {
-        match = true;
+        // by carrying tier on damage-dealt? Currently we do not. Defer.
+        return false;
       }
-      if (match) {
+      if (d.kind === "status-removed" && ev.t === "status-removed" && ev.holder === pid && ev.status === d.status) return true;
+      if (d.kind === "match-ends" && ev.t === "match-won") return true;
+      // Turn-bounded discards (§15.5) are evaluated by `tickTurnBuffs`,
+      // not from a single GameEvent.
+      return false;
+    };
+    const keep: ActiveAbilityModifier[] = [];
+    for (const m of player.abilityModifiers) {
+      if (matchEvent(m.discardOn)) {
         events.push({ t: "ability-modifier-removed", player: pid, modifierId: m.id, reason: "discard-trigger" });
       } else {
         keep.push(m);
       }
     }
     player.abilityModifiers = keep;
+
+    const keepPipe: import("./types").ActivePipelineBuff[] = [];
+    for (const b of player.pipelineBuffs) {
+      if (matchEvent(b.discardOn)) {
+        events.push({ t: "ability-modifier-removed", player: pid, modifierId: b.id, reason: "discard-trigger" });
+      } else {
+        keepPipe.push(b);
+      }
+    }
+    player.pipelineBuffs = keepPipe;
+
+    const keepTrig: import("./types").ActiveTriggerBuff[] = [];
+    for (const b of player.triggerBuffs) {
+      if (matchEvent(b.discardOn)) {
+        events.push({ t: "ability-modifier-removed", player: pid, modifierId: b.id, reason: "discard-trigger" });
+      } else {
+        keepTrig.push(b);
+      }
+    }
+    player.triggerBuffs = keepTrig;
+  }
+  return events;
+}
+
+/** §15.5 turn-bounded discard sweep. Called from passTurn AFTER incrementing
+ *  the outgoing player's `creatorTurnsElapsed` counters. `endingPlayer` is
+ *  the player whose turn just ended.
+ *
+ *  - `end-of-self-turn`     drops at creatorTurnsElapsed === 1 on the creator.
+ *  - `next-turn-of-self`    drops at creatorTurnsElapsed === 2 on the creator.
+ *  - `end-of-any-turn`      drops at any turn end. */
+export function tickTurnBuffs(state: GameState, endingPlayer: import("./types").PlayerId): GameEvent[] {
+  const events: GameEvent[] = [];
+  for (const pid of ["p1", "p2"] as const) {
+    const player = state.players[pid];
+
+    const bumpAndCheck = <T extends { id: string; discardOn?: import("./types").DiscardTrigger; creatorPlayer?: import("./types").PlayerId; creatorTurnsElapsed?: number }>(b: T): boolean => {
+      // Increment elapsed counter when the creator's turn just ended.
+      if (b.creatorPlayer === endingPlayer) {
+        b.creatorTurnsElapsed = (b.creatorTurnsElapsed ?? 0) + 1;
+      }
+      const d = b.discardOn;
+      if (!d) return true;
+      if (d.kind === "end-of-any-turn") return false;
+      if (d.kind === "end-of-self-turn"
+          && b.creatorPlayer === endingPlayer
+          && (b.creatorTurnsElapsed ?? 0) >= 1) return false;
+      if (d.kind === "next-turn-of-self"
+          && b.creatorPlayer === endingPlayer
+          && (b.creatorTurnsElapsed ?? 0) >= 2) return false;
+      return true;
+    };
+
+    const keepMods: ActiveAbilityModifier[] = [];
+    for (const m of player.abilityModifiers) {
+      if (bumpAndCheck(m)) keepMods.push(m);
+      else events.push({ t: "ability-modifier-removed", player: pid, modifierId: m.id, reason: "discard-trigger" });
+    }
+    player.abilityModifiers = keepMods;
+
+    const keepPipe: import("./types").ActivePipelineBuff[] = [];
+    for (const b of player.pipelineBuffs) {
+      if (bumpAndCheck(b)) keepPipe.push(b);
+      else events.push({ t: "ability-modifier-removed", player: pid, modifierId: b.id, reason: "discard-trigger" });
+    }
+    player.pipelineBuffs = keepPipe;
+
+    const keepTrig: import("./types").ActiveTriggerBuff[] = [];
+    for (const b of player.triggerBuffs) {
+      if (bumpAndCheck(b)) keepTrig.push(b);
+      else events.push({ t: "ability-modifier-removed", player: pid, modifierId: b.id, reason: "discard-trigger" });
+    }
+    player.triggerBuffs = keepTrig;
+
+    // Combo overrides on `this-turn` duration drop when the creator's turn ends.
+    const keepCombo: import("./types").ActiveComboOverride[] = [];
+    for (const c of player.comboOverrides) {
+      if (c.expires.kind === "this-turn" && pid === endingPlayer) {
+        events.push({ t: "ability-modifier-removed", player: pid, modifierId: c.id, reason: "discard-trigger" });
+      } else {
+        keepCombo.push(c);
+      }
+    }
+    player.comboOverrides = keepCombo;
   }
   return events;
 }
@@ -599,6 +824,9 @@ export function checkState(
   opponent: HeroSnapshot,
   check: StateCheck,
   firingFaces?: ReadonlyArray<DieFace>,
+  /** Optional firing-ability tier — supplied by the defensive resolver
+   *  so `defense-tier-min` (and similar tier-aware checks) can evaluate. */
+  firingAbilityTier?: import("./types").AbilityTier,
 ): boolean {
   void state;
   switch (check.kind) {
@@ -621,6 +849,11 @@ export function checkState(
       if (!firingFaces) return false;
       return longestStraight(firingFaces.map(f => f.faceValue)) >= check.length;
     }
+    case "defense-tier-min":
+      // Only meaningful inside a defensive-resolution context. Evaluators
+      // that don't have the firing tier available (e.g. card-context
+      // resolution) fall through as false, which is the safe default.
+      return firingAbilityTier != null && firingAbilityTier >= check.tier;
   }
 }
 

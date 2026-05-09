@@ -340,6 +340,7 @@ function playEvent(ev: GameEvent, ctx: PlayCtx): number {
     case "bank-spent":               return ev.amount > 0 ? 600 : 200;
     case "status-remove-prompt":     return 0;          // pause for player response
     case "status-remove-attempted":  return ev.prevented ? 600 : 200;
+    case "status-removal-by-holder-action": return 500;
   }
 }
 

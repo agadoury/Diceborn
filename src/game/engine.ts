@@ -29,8 +29,8 @@ import { getHero, getDeckCards, HEROES } from "../content";
 // Wire the status engine's applier-hero lookup once. status.ts can't import
 // the content registry directly (cycle), so we hand it a lookup function.
 setHeroLookup((id) => HEROES[id] ?? undefined);
-import { getCustomHandler, canPlay, drawCards, sellCard, gainCp, resolveEffect, discardCard } from "./cards";
-import { stacksOf, stripStatus, setHeroLookup } from "./status";
+import { getCustomHandler, canPlay, drawCards, sellCard, gainCp, resolveEffect, discardCard, tickTurnBuffs } from "./cards";
+import { stacksOf, stripStatus, setHeroLookup, getStatusDef } from "./status";
 import { buildDeck } from "./cards";
 import {
   enterPhase, performRoll, beginOffensivePick, commitOffensiveAbility,
@@ -57,6 +57,7 @@ export function applyAction(state: GameState, action: Action): ApplyResult {
     case "select-defense":  events.push(...selectDefense(next, action.abilityIndex)); break;
     case "spend-bank":      events.push(...resolveBankSpend(next, action.amount)); break;
     case "decline-bank-spend": events.push(...resolveBankSpend(next, 0)); break;
+    case "status-holder-action": events.push(...resolveStatusHolderAction(next, action.status, action.actionIndex)); break;
     case "concede":         events.push(...endMatch(next, other(action.player))); break;
   }
 
@@ -135,6 +136,9 @@ function makeHeroSnapshot(player: PlayerId, heroId: HeroId, state: GameState): H
     abilityModifiers: [],
     tokenOverrides: [],
     symbolBends: [],
+    pipelineBuffs: [],
+    triggerBuffs: [],
+    comboOverrides: [],
     lastStripped: {},
     masterySlots: {},
     consumedOncePerMatchCards: [],
@@ -257,6 +261,10 @@ function endTurn(state: GameState): GameEvent[] {
 
 function passTurn(state: GameState): GameEvent[] {
   if (state.winner) return [];
+  // §15.5: tick turn-bounded persistent buffs (end-of-self-turn /
+  // next-turn-of-self / end-of-any-turn) BEFORE swapping the active
+  // player so the outgoing player is still the "ending" player.
+  const turnEvents = tickTurnBuffs(state, state.activePlayer);
   state.activePlayer = other(state.activePlayer);
   state.turn += 1;
   // Reset roll attempts and dice locks for incoming player.
@@ -271,6 +279,7 @@ function passTurn(state: GameState): GameEvent[] {
   state.players.p1.forcedFaceValue = undefined;
   state.players.p2.forcedFaceValue = undefined;
   const events: GameEvent[] = [
+    ...turnEvents,
     { t: "turn-started", player: state.activePlayer, turn: state.turn },
   ];
   events.push(...enterPhase(state, "upkeep"));
@@ -470,6 +479,91 @@ function respondToStatusRemoval(state: GameState, cardId: import("./types").Card
   return events;
 }
 
+/** §15.2: resolve a player-initiated "atonement"-style status removal.
+ *  Validates that the active player carries the named status, the active
+ *  phase matches the action's `phase`, the cost is affordable, and the
+ *  per-turn limit (if any) hasn't been hit. Pays the cost, fires
+ *  `status-removal-by-holder-action`, strips the stacks (which emits
+ *  `status-removed`), and resolves any `additionalEffect`. */
+function resolveStatusHolderAction(
+  state: GameState,
+  statusId: import("./types").StatusId,
+  actionIndex = 0,
+): GameEvent[] {
+  const holder = state.players[state.activePlayer];
+  const inst = holder.statuses.find(s => s.id === statusId);
+  if (!inst) return [];
+  const def = getStatusDef(statusId);
+  const action = def?.holderRemovalActions?.[actionIndex];
+  if (!def || !action) return [];
+
+  // Phase gate: `main-phase` shorthand matches both main-pre and main-post.
+  const phaseOk =
+    action.phase === state.phase
+    || (action.phase === "main-phase" && (state.phase === "main-pre" || state.phase === "main-post"));
+  if (!phaseOk) return [];
+
+  // Per-turn limit — reuse the existing once-per-turn list with a synthetic
+  // key so it persists across the same set of cleared-on-passTurn slots.
+  const onceKey = `__holderAction:${statusId}:${actionIndex}`;
+  if (action.oncePerTurn && holder.consumedOncePerTurnCards.includes(onceKey)) return [];
+
+  // Pay the cost.
+  if (action.cost.resource === "cp") {
+    if (holder.cp < action.cost.amount) return [];
+  } else if (action.cost.resource === "hp") {
+    if (holder.hp <= action.cost.amount) return [];
+  } else if (action.cost.resource === "discard-card") {
+    if (holder.hand.length < action.cost.amount) return [];
+  }
+
+  const events: GameEvent[] = [];
+  if (action.cost.resource === "cp") {
+    events.push(...gainCp(holder, -action.cost.amount));
+  } else if (action.cost.resource === "hp") {
+    holder.hp -= action.cost.amount;
+    events.push({ t: "hp-changed", player: holder.player, delta: -action.cost.amount, total: holder.hp });
+  } else if (action.cost.resource === "discard-card") {
+    // Auto-discard the leftmost N cards in hand (UI overlay can pre-reorder).
+    for (let i = 0; i < action.cost.amount && holder.hand.length > 0; i++) {
+      const card = holder.hand.shift()!;
+      holder.discard.push(card);
+      events.push({ t: "card-discarded", player: holder.player, cardId: card.id });
+    }
+  }
+
+  // Strip the configured stacks. "all" → full strip; numeric → up to N.
+  const before = inst.stacks;
+  const stripCount = action.effect.stacksRemoved === "all" ? before : Math.min(before, action.effect.stacksRemoved);
+  const stripResult = action.effect.stacksRemoved === "all"
+    ? stripStatus(holder, statusId)
+    : { events: [] as GameEvent[], pendingDamage: 0 };
+  if (action.effect.stacksRemoved !== "all") {
+    inst.stacks -= stripCount;
+    if (inst.stacks <= 0) {
+      holder.statuses = holder.statuses.filter(s => s.id !== statusId);
+      events.push({ t: "status-removed", status: statusId, holder: holder.player, reason: "stripped" });
+    }
+  }
+  events.push({
+    t: "status-removal-by-holder-action",
+    holder: holder.player,
+    status: statusId,
+    actionName: action.ui.actionName,
+    stacksRemoved: stripCount,
+  });
+  events.push(...stripResult.events);
+
+  // Optional ride-along effect — resolved with the holder as caster.
+  if (action.effect.additionalEffect) {
+    const opp = state.players[other(holder.player)];
+    events.push(...resolveEffect(action.effect.additionalEffect, { state, caster: holder, opponent: opp }));
+  }
+
+  if (action.oncePerTurn) holder.consumedOncePerTurnCards.push(onceKey);
+  return events;
+}
+
 function respondToCounter(state: GameState, accept: boolean): GameEvent[] {
   const pending = state.pendingCounter;
   if (!pending) return [];
@@ -523,6 +617,9 @@ function clonePlayer(p: HeroSnapshot | undefined): HeroSnapshot {
     abilityModifiers: p.abilityModifiers.map(m => ({ ...m, modifications: m.modifications.map(x => ({ ...x })) })),
     tokenOverrides: p.tokenOverrides.map(o => ({ ...o, modifications: o.modifications.map(x => ({ ...x })) })),
     symbolBends: p.symbolBends.map(b => ({ ...b })),
+    pipelineBuffs: p.pipelineBuffs?.map(b => ({ ...b, pipelineModifier: { ...b.pipelineModifier, cap: b.pipelineModifier.cap ? { ...b.pipelineModifier.cap } : undefined }, discardOn: b.discardOn ? { ...b.discardOn } : undefined })) ?? [],
+    triggerBuffs: p.triggerBuffs?.map(b => ({ ...b, triggerModifier: { ...b.triggerModifier }, discardOn: b.discardOn ? { ...b.discardOn } : undefined })) ?? [],
+    comboOverrides: p.comboOverrides?.map(c => ({ ...c, expires: { ...c.expires } })) ?? [],
     lastStripped: { ...p.lastStripped },
     masterySlots: { ...p.masterySlots },
     consumedOncePerMatchCards: p.consumedOncePerMatchCards.slice(),

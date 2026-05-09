@@ -36,6 +36,7 @@ import {
   classifyCrit,
   rollUnlocked,
   bentFaces,
+  effectiveCombo,
 } from "./dice";
 import { nextInt } from "./rng";
 
@@ -248,7 +249,8 @@ export function beginOffensivePick(state: GameState): GameEvent[] {
   }> = [];
   for (let i = 0; i < hero.abilityLadder.length; i++) {
     const a = hero.abilityLadder[i];
-    if (!comboMatchesFaces(a.combo, faces)) continue;
+    const combo = effectiveCombo(active, a);
+    if (!comboMatchesFaces(combo, faces)) continue;
     matches.push({
       abilityIndex: i,
       abilityName: a.name,
@@ -526,9 +528,27 @@ export function resolveDefenseChoice(state: GameState, abilityIndex: number | nu
     // Generic CP-gain triggers tied to successful defense.
     if (landed && reduction >= 1) {
       for (const trig of defHero.resourceIdentity.cpGainTriggers) {
-        if (trig.on === "successfulDefense") events.push(...gainCp(defender, trig.gain));
+        if (trig.on !== "successfulDefense") continue;
+        // §15.4: triggerModifier may rewrite this trigger's `gain` /
+        // `perStack` on a per-fire basis. The condition (e.g.
+        // defense-tier-min) is evaluated with the firing defense's tier.
+        const adjusted = applyTriggerModifiersToTrigger(
+          state, defender, state.players[pa.attacker], trig, matchedTier,
+        );
+        const gain = adjusted.perStack ? adjusted.gain : adjusted.gain;
+        events.push(...gainCp(defender, gain));
       }
     }
+  }
+  // §15.3: incoming-damage pipeline buffs add to the final reduction the
+  // defender receives. We treat the aggregated negative adjustment as
+  // bonus reduction (e.g. Sanctuary's -2 incoming damage adds 2 to the
+  // reduction for any defendable damage type).
+  {
+    const baseline = pa.incomingAmount;
+    const adjusted = aggregatePipelineModifiers(state.players[pa.defender], "incoming-damage", baseline);
+    const extraReduction = Math.max(0, baseline - adjusted);
+    if (extraReduction > 0) reduction += extraReduction;
   }
 
   // Apply the attack effects with the computed reduction.
@@ -661,14 +681,23 @@ function resolveDefensiveEffect(
 ): { reduction: number; events: GameEvent[] } {
   switch (effect.kind) {
     case "reduce-damage": {
-      // Negation supersedes graded reduction. Mastery mods can flip
-      // `negate-attack` on/off via `reduce-damage-negate-attack`.
+      // Resolution mode (mutually exclusive — multiplier > negate > flat amount).
+      // §15.1: when `multiplier` is set, the reduction equals
+      // incoming − round(incoming × multiplier); rounding defaults to ceil.
+      // Mastery mods can flip `negate-attack` on/off via
+      // `reduce-damage-negate-attack`.
       const negate = applyDefensiveBooleanModifier(
         ctx.defender, ctx.abilityName ?? "", "reduce-damage-negate-attack",
         effect.negate_attack === true, ctx.firingFaces,
       );
       let amount: number;
-      if (negate) {
+      if (effect.multiplier != null) {
+        const rounding = effect.rounding ?? "ceil";
+        const finalDamage = rounding === "ceil"
+          ? Math.ceil(ctx.incomingAmount * effect.multiplier)
+          : Math.floor(ctx.incomingAmount * effect.multiplier);
+        amount = Math.max(0, ctx.incomingAmount - finalDamage);
+      } else if (negate) {
         amount = ctx.incomingAmount;
       } else {
         amount = applyDefensiveNumericModifier(ctx.defender, ctx.abilityName ?? "", "reduce-damage-amount", effect.amount, ctx.firingFaces);
@@ -877,7 +906,9 @@ function resolveAbilityEffect(state: GameState, effect: import("./types").Abilit
     return resolveEffect(patched, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
   }
   // Patch remove-status with `removed-status-stacks` modifier.
-  if (effect.kind === "remove-status") {
+  // §15.7: `stacks` may be `"all"` — masteries that try to bump the stack
+  // count are no-ops in that case (already removing everything).
+  if (effect.kind === "remove-status" && typeof effect.stacks === "number") {
     const stacks = applyNumericModifier(ctx.caster, ctx.abilityName ?? "", ctx.abilityTier ?? 0, "removed-status-stacks", effect.stacks, ctx.firingFaces);
     if (stacks !== effect.stacks) {
       return resolveEffect({ ...effect, stacks }, { state, caster: ctx.caster, opponent: ctx.opponent, isAbility: true });
@@ -1225,6 +1256,59 @@ function applyModifiersToHeal(
   return { ...effect, amount, conditional_bonus };
 }
 
+
+/** §15.4: rewrite a `cpGainTrigger` entry through the holder's active
+ *  triggerBuffs that target it. Returns a fresh object with the (possibly
+ *  modified) `gain` / `perStack`. Buffs whose `condition` is set are only
+ *  applied when the StateCheck holds at this resolution moment.
+ *
+ *  `firingTier` is the defending ability's tier (when applicable) — feeds
+ *  the `defense-tier-min` StateCheck. */
+export function applyTriggerModifiersToTrigger(
+  state: GameState,
+  caster: HeroSnapshot,
+  opponent: HeroSnapshot,
+  trig: import("./types").PassiveTrigger,
+  firingTier?: import("./types").AbilityTier,
+): { gain: number; perStack: boolean } {
+  let gain = trig.gain;
+  let perStack = trig.perStack ?? false;
+  for (const buff of caster.triggerBuffs) {
+    const tm = buff.triggerModifier;
+    if (tm.triggerEvent !== trig.on) continue;
+    if (tm.condition && !checkState(state, caster, opponent, tm.condition, undefined, firingTier)) continue;
+    const applyOp = (current: number) => {
+      if (tm.operation === "set")      return tm.value;
+      if (tm.operation === "add")      return current + tm.value;
+      if (tm.operation === "multiply") return Math.ceil(current * tm.value);
+      return current;
+    };
+    if (tm.targetField === "gain")      gain = applyOp(gain);
+    else if (tm.targetField === "perStack") perStack = applyOp(perStack ? 1 : 0) > 0;
+  }
+  return { gain, perStack };
+}
+
+/** §15.3: aggregate the holder's active pipelineBuffs that target the named
+ *  pipeline stage. `add` ops are summed; `multiply` ops are composed
+ *  multiplicatively against `base`. Returns the adjusted value (clamped to
+ *  any per-buff cap). Used in damage.ts integration via the helpers below. */
+export function aggregatePipelineModifiers(
+  holder: HeroSnapshot,
+  target: "incoming-damage" | "outgoing-damage" | "status-tick-damage",
+  base: number,
+): number {
+  let result = base;
+  for (const buff of holder.pipelineBuffs) {
+    const pm = buff.pipelineModifier;
+    if (pm.target !== target) continue;
+    if (pm.operation === "add")      result += pm.value;
+    else if (pm.operation === "multiply") result = result * pm.value;
+    if (pm.cap?.max != null) result = Math.min(result, pm.cap.max);
+    if (pm.cap?.min != null) result = Math.max(result, pm.cap.min);
+  }
+  return result;
+}
 
 /** Sum per-stack passive modifiers from active statuses on the caster matching
  *  the trigger / field. Frost-bite contributes -1 dmg per stack on

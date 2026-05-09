@@ -258,6 +258,24 @@ incoming amount
 | `collateral` | Yes | Yes | Same as normal but flagged as side-effect (e.g. Burn-tick chained damage). |
 | `ultimate` | Yes | Yes | Same as normal but reserved for Tier 4; reactive cards may be locked out. |
 
+### `reduce-damage` resolution modes (§15.1)
+
+`reduce-damage` exposes three mutually exclusive resolution modes — exactly one must be set:
+
+- `amount: N` — flat reduction. Original behaviour.
+- `negate_attack: true` — reduce incoming to 0 (per Pyromancer §14.2).
+- `multiplier: f` — fractional reduction. `final damage = round(incoming × f)`; the reduction itself is `incoming − final`. Round mode controlled by `rounding`: `"ceil"` (default — rounds in the attacker's favour, i.e. more damage gets through) or `"floor"` (rounds in the defender's favour). Pairs cleanly with Aegis-of-Dawn-style ultimate counters: a 14-dmg ultimate becomes 7, an 18-dmg career-moment becomes 9.
+
+Card-context resolution (Instants firing into a `pendingAttack`) and defensive-ladder resolution share the same branching logic — see `cards.ts resolveEffect: case "reduce-damage"` and `phases.ts resolveDefensiveEffect: case "reduce-damage"`. **Clarification B:** when an Instant resolves `reduce-damage` mid-attack, the engine reads `pendingAttack.incomingAmount` and queues the computed reduction on `pendingAttack.injectedReduction`; the defensive resolver picks it up in `resolveDefenseChoice`. Aegis of Dawn (`opponent-fires-ability tier:4`) therefore modifies the queued in-flight damage before HP is touched.
+
+### Card-applied pipeline modifiers (§15.3)
+
+`persistent-buff.pipelineModifier` lets cards inject a continuous adjustment into the damage pipeline without backing it with a phantom signature token. Sanctuary's "until your next turn, all incoming damage reduced by 2" registers on the caster's `pipelineBuffs[]`; `phases.ts aggregatePipelineModifiers(holder, target, base)` walks those buffs at defensive resolution and folds the adjusted delta into the final reduction. `target` selects the pipeline stage: `incoming-damage`, `outgoing-damage`, or `status-tick-damage`. `operation` is `add` (sum) or `multiply` (compose), with optional `cap: { min?, max? }` per-buff clamping.
+
+### Card-applied trigger modifiers (§15.4)
+
+`persistent-buff.triggerModifier` lets cards rewrite a `cpGainTriggers[]` entry's `gain` or `perStack` field on a per-fire basis. Vow of Service's "Tier 2+ defenses gain +2 Radiance instead of +1" registers as `triggerEvent: "successfulDefense"`, `operation: "set"`, `value: 2`, `targetField: "gain"`, `condition: { kind: "defense-tier-min", tier: 2 }`. The dispatcher (`phases.ts applyTriggerModifiersToTrigger`) consults `triggerBuffs[]` whenever the matching trigger fires; the gating `condition` (a `StateCheck`) is evaluated at fire time with the firing-ability tier passed through.
+
 ### Healing
 
 `heal(target, amount)` clamps to `hpCap` (start + 10). Emits `heal-applied` + `hp-changed` + low-HP-exit if applicable. The `heal` effect itself accepts an optional `conditional_bonus` (same shape as the damage-side version) so heals can scale with banked passives, opponent state, or stripped stacks.
@@ -326,6 +344,7 @@ Heroes can register their own status definitions on top of the universal pool. T
 | `passiveModifier` | Continuous, non-tick effect while stacks > 0. `scope: "holder" \| "applier"`, `trigger: "on-offensive-ability" \| "on-defensive-roll" \| "on-card-played" \| "always"`, `field: "damage" \| "defensive-dice-count" \| "card-cost"`, `valuePerStack`, optional `cap: { min?, max? }`. Aggregated by `phases.ts aggregatePassiveModifiers` when computing damage. |
 | `detonation` | Threshold trigger. `threshold`, `triggerTiming: "on-application-overflow" \| "on-holder-upkeep-at-threshold" \| "on-event"`, `effect: AbilityEffect`, `resetsStacksTo` (default 0). Wired in `status.ts applyStatus` — emits `status-detonated`, marks `signatureState["__pendingDetonation:<id>"]` so the engine can chain the detonation effect. |
 | `stateThresholdEffects[]` | Array of `{ threshold, effect, duration }`. `effect` is one of `block-card-kind`, `block-ability-tier`, or `modify-roll-dice-count`. Read by `cards.ts canPlay` to gate plays while the holder is at threshold. |
+| `holderRemovalActions[]` (§15.2) | Array of `{ phase, cost, effect, oncePerTurn?, ui }`. Player-initiated paid removal — the holder spends `cost.resource` (`cp` / `hp` / `discard-card`) during the named `phase` (`main-pre`, `main-post`, or `main-phase` shorthand) to strip stacks. `effect.stacksRemoved` is `"all"` or a numeric count; `effect.additionalEffect` rides along (e.g. atone heals 1 HP per stripped stack). Engine resolves via `Action: { kind: "status-holder-action"; status; actionIndex? }` and emits `status-removal-by-holder-action`. The classic example is Verdict's atonement ("spend 2 CP during your Main Phase to remove all Verdict stacks"). |
 
 `stripStatus` records the stacks-removed count on `holder.lastStripped[status]` so downstream conditional bonuses (e.g. "+1 dmg per stack stripped") can read it in the same resolution.
 
@@ -387,7 +406,7 @@ Legacy kinds `upgrade`, `main-action`, `roll-action`, `status` are still in the 
 - `reduce-damage` — defensive ladder only; carries optional `conditional_bonus` (per-unit bonus reduction)
 - `heal` (target self or opponent) — carries optional `conditional_bonus` (per-unit bonus heal)
 - `apply-status` — carries optional `conditional_bonus` (per-unit bonus stacks)
-- `remove-status`
+- `remove-status` — `status` accepts a specific StatusId or one of the wildcard categories `any-debuff` / `any-buff` / `any-status` (legacy `any-positive` aliases `any-buff`); `stacks` accepts `"all"` for full strips; optional `selection: "player-choice" | "highest-stack" | "lowest-stack" | "longest-active"` resolves multi-status wildcards (§15.7).
 - `gain-cp` / `draw` (intentionally not eligible for `conditional_bonus`)
 - `compound` (sequence of sub-effects)
 
@@ -398,8 +417,13 @@ Legacy kinds `upgrade`, `main-action`, `roll-action`, `status` are still in the 
 
 **Persistence**
 - `ability-upgrade` — push an `ActiveAbilityModifier` onto the caster; applied during `phases.ts resolveAbilityEffect` whenever the firing ability matches the modifier's scope
-- `persistent-buff` — same as above plus a `discardOn` trigger that removes the modifier on a qualifying event
-- `passive-counter-modifier` — direct `signatureState[passiveKey]` manipulation
+- `persistent-buff` — pick exactly one of three modifier shapes:
+  - `modifier` (existing) — `AbilityUpgradeMod` applied to abilities matching `scope` (or to the named token's mechanical fields when `target` is a StatusId).
+  - `pipelineModifier` (§15.3) — adjusts the damage pipeline directly (`incoming-damage` / `outgoing-damage` / `status-tick-damage`).
+  - `triggerModifier` (§15.4) — rewrites a `cpGainTriggers[]` entry's `gain` / `perStack` when it fires, optionally gated by a `StateCheck`.
+  - All three honour `discardOn`. The `discardOn` taxonomy is `damage-taken-from-tier` / `status-removed` / `match-ends` / `end-of-self-turn` / `next-turn-of-self` / `end-of-any-turn` (§15.5). The turn-bounded variants are evaluated by `cards.ts tickTurnBuffs` from `engine.ts passTurn`.
+- `passive-counter-modifier` — direct `signatureState[passiveKey]` manipulation. Optional `conditional` `StateCheck` gates whether the modifier fires (§15.8) — used by combo-gated Mastery effects like Cathedral Light's "+1 Radiance on 4+ sun." **Clarification A:** `operation: "add"` accepts negative values for spend-style conversions (Dawnsong burns 2 Radiance for +4 CP). The result clamps to ≥ 0; there is no separate `"subtract"` operation.
+- `combo-override` (§15.6) — relax the combo requirement on selected abilities for `this-turn` / `this-roll` / until a status applies/removes. Distinct from `face-symbol-bend` (which rewrites symbols on dice); this rewrites the *combo* the engine matches against. Sunburst's "Dawnblade and Sun Strike auto-fire on any sword this turn" expresses with `scope: ability-ids ["Dawnblade", "Sun Strike"]`, `override: { kind: "symbol-count", symbol: "lightbearer:sword", count: 1 }`, `duration: "this-turn"`. The picker (`beginOffensivePick`), the ladder evaluator (`evaluateLadder`), and reachability all consult `dice.ts effectiveCombo` so the override is honoured everywhere a combo is checked.
 
 **Bonus dice**
 - `bonus-dice-damage` — roll N extra hero faces; deal damage by `sum-of-faces` / `highest-face` / `count-symbol`; optional `thresholdBonus` chains a follow-up effect
@@ -455,7 +479,10 @@ Anything outside these well-known fields is hero-specific and dispatched via `ph
 
 `HeroSnapshot` carries transient state for the new primitives:
 
-- `abilityModifiers: ActiveAbilityModifier[]` — masteries + persistent buffs in flight
+- `abilityModifiers: ActiveAbilityModifier[]` — masteries + persistent buffs in flight (`creatorPlayer` + `creatorTurnsElapsed` drive the §15.5 turn-bounded discards)
+- `pipelineBuffs: ActivePipelineBuff[]` (§15.3) — card-applied damage-pipeline modifiers
+- `triggerBuffs: ActiveTriggerBuff[]` (§15.4) — card-applied resource-trigger modifiers
+- `comboOverrides: ActiveComboOverride[]` (§15.6) — active combo-relaxation overrides
 - `symbolBends: ActiveSymbolBend[]` — active face-symbol bends
 - `lastStripped: Record<StatusId, number>` — count of stacks stripped in the most-recent strip event (consumed by conditional bonuses)
 - `masterySlots: { 1?, 2?, 3?, defensive? }` — locks the per-tier mastery slot once played
@@ -488,6 +515,7 @@ type Action =
   | { kind: "select-defense"; abilityIndex: number | null }             // defender picks during pendingAttack
   | { kind: "spend-bank"; amount }                            // resolve pendingBankSpend (Radiance, etc.)
   | { kind: "decline-bank-spend" }
+  | { kind: "status-holder-action"; status; actionIndex? }   // §15.2 — pay cost to strip status stacks
   | { kind: "concede"; player };
 ```
 
@@ -534,6 +562,7 @@ Every `applyAction` returns a new `state` and a `GameEvent[]`. Events are declar
 - `ability-modifier-added`, `ability-modifier-removed` — Mastery / persistent-buff lifecycle
 - `symbol-bend-applied`, `symbol-bend-expired` — face-symbol-bend lifecycle
 - `bank-spend-prompt`, `bank-spent` — bankable-passive spend flow
+- `status-removal-by-holder-action` — holder paid the cost on a token's `holderRemovalActions[]` entry to strip stacks (§15.2)
 - `hero-state` (idle/hit/defended/low-hp-enter/low-hp-exit/victorious/defeated)
 - `cp-changed`, `counter-prompt`, `counter-resolved`
 

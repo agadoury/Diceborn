@@ -258,6 +258,9 @@ function LadderDemo() {
       consumedOncePerMatchCards: [],
       consumedOncePerTurnCards: [],
       tokenOverrides: [],
+      pipelineBuffs: [],
+      triggerBuffs: [],
+      comboOverrides: [],
     };
   }, [hero, dice, attemptsRemaining]);
 
