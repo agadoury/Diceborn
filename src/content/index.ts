@@ -1,16 +1,19 @@
 /**
  * Diceborn — content registry. Pure exports; no logic.
  *
- * Heroes are registered via the HEROES record. Currently empty —
- * hero content is provided fresh; previous specific heroes were
- * removed at the user's request.
+ * Heroes are registered via the HEROES record. Each hero module is
+ * responsible for registering its own signature status tokens at
+ * import time (see `heroes/berserker.ts` for the pattern).
  */
 
 import type { Card, HeroDefinition, HeroId } from "../game/types";
 import { GENERIC_CARDS } from "./cards/generic";
+import { BERSERKER } from "./heroes/berserker";
+import { PYROMANCER } from "./heroes/pyromancer";
 
 export const HEROES: Partial<Record<HeroId, HeroDefinition>> = {
-  // Hero registrations land here as content is provided.
+  [BERSERKER.id]: BERSERKER,
+  [PYROMANCER.id]: PYROMANCER,
 };
 
 export function getHero(id: HeroId): HeroDefinition {

@@ -108,10 +108,17 @@ function decideOffensiveRoll(state: GameState, ai: PlayerId): Action {
     // First, we must have rolled at least once already
     // (rollAttemptsRemaining < ROLL_ATTEMPTS means at least one attempt used).
     if (me.rollAttemptsRemaining < ROLL_ATTEMPTS) {
-      const targetTier = pickTargetTier(state, ai);
+      // If any ability is currently firing, pin the target to the highest
+      // firing tier. This avoids the lock/reachability oscillation where
+      // pickTargetTier flip-flops between tiers as we toggle locks.
+      const symbols = symbolsOnDice(me.dice);
+      let firingTier = -1;
+      for (let i = 0; i < hero.abilityLadder.length; i++) {
+        if (comboMatches(hero.abilityLadder[i].combo, symbols)) firingTier = i;
+      }
+      const targetTier = firingTier >= 0 ? firingTier : pickTargetTier(state, ai);
       if (targetTier >= 0) {
         const ability = hero.abilityLadder[targetTier];
-        const symbols = symbolsOnDice(me.dice);
         const keep = pickKeepMask(ability.combo, symbols);
         // If lock states differ from keep mask, toggle one die.
         for (let i = 0; i < me.dice.length; i++) {
@@ -121,18 +128,8 @@ function decideOffensiveRoll(state: GameState, ai: PlayerId): Action {
           }
         }
       }
-      // Locks already optimal — roll again or commit.
-      const locksMatch = locksAreOptimal(state, ai);
-      if (!locksMatch && me.rollAttemptsRemaining > 0) {
-        // Still mismatch but everything's already toggled — roll.
-        return { kind: "roll-dice" };
-      }
-      // Already firing tier 3 or 4? Don't burn a reroll; advance.
-      const symbols = symbolsOnDice(me.dice);
-      let firingTier = -1;
-      for (let i = 0; i < hero.abilityLadder.length; i++) {
-        if (comboMatches(hero.abilityLadder[i].combo, symbols)) firingTier = i;
-      }
+      // Locks match the keep mask. Already firing tier 2+? Commit; otherwise
+      // burn the remaining attempt to fish for an upgrade.
       if (firingTier >= 2) return { kind: "advance-phase" };
       return { kind: "roll-dice" };
     }
@@ -176,6 +173,8 @@ function pickTargetTier(state: GameState, ai: PlayerId): number {
   return best;
 }
 
+/** Unused after pinning the target to the highest firing tier — kept for
+ *  reference/follow-up if we revive the oscillating eval path. */
 function locksAreOptimal(state: GameState, ai: PlayerId): boolean {
   const me = state.players[ai];
   const hero = getHero(me.hero);
@@ -189,6 +188,7 @@ function locksAreOptimal(state: GameState, ai: PlayerId): boolean {
   }
   return true;
 }
+void locksAreOptimal;
 
 // ── Main post-roll: play follow-up cards, then end turn ─────────────────────
 function decideMainPost(state: GameState, ai: PlayerId): Action {

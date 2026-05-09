@@ -143,6 +143,8 @@ function mockSnapshot(): HeroSnapshot {
     signatureState: {},
     ladderState: [] as LadderRowState[],
     isLowHp: false, nextAbilityBonusDamage: 0,
-    abilityModifiers: [], symbolBends: [], lastStripped: {}, masterySlots: {},
+    abilityModifiers: [], tokenOverrides: [], symbolBends: [], lastStripped: {}, masterySlots: {},
+    consumedOncePerMatchCards: [],
+    consumedOncePerTurnCards: [],
   };
 }

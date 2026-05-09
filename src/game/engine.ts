@@ -24,9 +24,13 @@ import type {
 import {
   STARTING_HP, STARTING_CP, STARTING_HAND, ROLL_ATTEMPTS, HP_CAP_BONUS,
 } from "./types";
-import { getHero, getDeckCards } from "../content";
+import { getHero, getDeckCards, HEROES } from "../content";
+
+// Wire the status engine's applier-hero lookup once. status.ts can't import
+// the content registry directly (cycle), so we hand it a lookup function.
+setHeroLookup((id) => HEROES[id] ?? undefined);
 import { getCustomHandler, canPlay, drawCards, sellCard, gainCp, resolveEffect, discardCard } from "./cards";
-import { stacksOf } from "./status";
+import { stacksOf, stripStatus, setHeroLookup } from "./status";
 import { buildDeck } from "./cards";
 import {
   enterPhase, performRoll, beginOffensivePick, commitOffensiveAbility,
@@ -44,10 +48,11 @@ export function applyAction(state: GameState, action: Action): ApplyResult {
     case "advance-phase":   events.push(...advancePhase(next)); break;
     case "toggle-die-lock": events.push(...toggleDieLock(next, action.die)); break;
     case "roll-dice":       events.push(...rollAction(next)); break;
-    case "play-card":       events.push(...playCard(next, action.card, action.targetDie, action.targetPlayer)); break;
+    case "play-card":       events.push(...playCard(next, action.card, action.targetDie, action.targetPlayer, action.targetFaceValue)); break;
     case "sell-card":       events.push(...sellCardAction(next, action.card)); break;
     case "end-turn":        events.push(...endTurn(next)); break;
     case "respond-to-counter": events.push(...respondToCounter(next, action.accept)); break;
+    case "respond-to-status-removal": events.push(...respondToStatusRemoval(next, action.cardId)); break;
     case "select-offensive-ability": events.push(...selectOffensiveAbility(next, action.abilityIndex)); break;
     case "select-defense":  events.push(...selectDefense(next, action.abilityIndex)); break;
     case "spend-bank":      events.push(...resolveBankSpend(next, action.amount)); break;
@@ -128,9 +133,12 @@ function makeHeroSnapshot(player: PlayerId, heroId: HeroId, state: GameState): H
     isLowHp: false,
     nextAbilityBonusDamage: 0,
     abilityModifiers: [],
+    tokenOverrides: [],
     symbolBends: [],
     lastStripped: {},
     masterySlots: {},
+    consumedOncePerMatchCards: [],
+    consumedOncePerTurnCards: [],
   };
 }
 
@@ -255,6 +263,13 @@ function passTurn(state: GameState): GameEvent[] {
   const incoming = state.players[state.activePlayer];
   incoming.rollAttemptsRemaining = ROLL_ATTEMPTS;
   for (const d of incoming.dice) d.locked = false;
+  // Per-turn card-consumption list resets when the *outgoing* player's turn
+  // ends. We clear both sides so each player starts their own turn fresh.
+  state.players.p1.consumedOncePerTurnCards = [];
+  state.players.p2.consumedOncePerTurnCards = [];
+  // Forced face-value overrides (Last Stand) are also turn-scoped.
+  state.players.p1.forcedFaceValue = undefined;
+  state.players.p2.forcedFaceValue = undefined;
   const events: GameEvent[] = [
     { t: "turn-started", player: state.activePlayer, turn: state.turn },
   ];
@@ -265,38 +280,55 @@ function passTurn(state: GameState): GameEvent[] {
 }
 
 // ── Card play / sell / counter ──────────────────────────────────────────────
-function playCard(state: GameState, cardId: string, targetDie?: number, _targetPlayer?: PlayerId): GameEvent[] {
-  const active = state.players[state.activePlayer];
-  const opponent = state.players[other(state.activePlayer)];
-  const card = active.hand.find(c => c.id === cardId);
+function playCard(state: GameState, cardId: string, targetDie?: number, _targetPlayer?: PlayerId, targetFaceValue?: 1|2|3|4|5|6): GameEvent[] {
+  // Search both hands so off-turn Instants (Phoenix Veil, Counterstrike,
+  // Final Heat) are reachable. Card holder, not active player, is the caster.
+  let casterId: PlayerId = state.activePlayer;
+  let card = state.players[casterId].hand.find(c => c.id === cardId);
+  if (!card) {
+    const otherId = other(casterId);
+    const found = state.players[otherId].hand.find(c => c.id === cardId);
+    if (found) {
+      // Off-turn play is only permitted for Instants — every other card kind
+      // is phase-gated and `canPlay` will reject it.
+      if (found.kind !== "instant") return [];
+      casterId = otherId;
+      card = found;
+    }
+  }
   if (!card) return [];
-  if (!canPlay(state, active, opponent, card)) return [];
+  const caster = state.players[casterId];
+  const opponent = state.players[other(casterId)];
+  if (!canPlay(state, caster, opponent, card)) return [];
 
   // Pay cost
   const events: GameEvent[] = [];
-  events.push(...gainCp(active, -card.cost));
+  events.push(...gainCp(caster, -card.cost));
   // Move card to discard FIRST so handlers that read hand don't double-resolve.
-  active.hand = active.hand.filter(c => c.id !== cardId);
-  active.discard.push(card);
+  caster.hand = caster.hand.filter(c => c.id !== cardId);
+  caster.discard.push(card);
   // Mastery cards occupy a Hero Upgrade slot for the rest of the match.
   if (card.kind === "mastery" && card.masteryTier != null && (card.occupiesSlot ?? true)) {
-    active.masterySlots[card.masteryTier as 1 | 2 | 3 | "defensive"] = card.id;
+    caster.masterySlots[card.masteryTier as 1 | 2 | 3 | "defensive"] = card.id;
   }
-  events.push({ t: "card-played", player: active.player, cardId, target: targetDie != null ? { die: targetDie } : undefined });
+  // Once-per-match / once-per-turn consumption.
+  if (card.oncePerMatch) caster.consumedOncePerMatchCards.push(card.id);
+  if (card.oncePerTurn) caster.consumedOncePerTurnCards.push(card.id);
+  events.push({ t: "card-played", player: caster.player, cardId, target: targetDie != null ? { die: targetDie } : undefined });
 
   // Resolve effect
   if (card.effect.kind === "custom") {
     const handler = getCustomHandler(card.effect.id);
-    if (handler) events.push(...handler({ state, caster: active, opponent, targetDie }));
+    if (handler) events.push(...handler({ state, caster, opponent, targetDie }));
   } else {
-    events.push(...resolveEffect(card.effect, { state, caster: active, opponent, targetDie }));
+    events.push(...resolveEffect(card.effect, { state, caster, opponent, targetDie, targetFaceValue }));
   }
 
   // Re-emit ladder state (cards may have changed dice / upgrades / damage bonus).
-  events.push(...emitLadderState(state, getHero(active.hero), active));
+  events.push(...emitLadderState(state, getHero(caster.hero), caster));
 
   // Lethality check
-  if (opponent.hp <= 0) events.push(...endMatch(state, active.player));
+  if (opponent.hp <= 0) events.push(...endMatch(state, caster.player));
   return events;
 }
 
@@ -374,6 +406,70 @@ function resolveBankSpend(state: GameState, amount: number): GameEvent[] {
   return events;
 }
 
+/** Resolve a `pendingStatusRemoval` prompt. When `cardId` names an Instant
+ *  with a matching `opponent-attempts-remove-status` trigger, the engine
+ *  pays its cost, resolves it, and finalises the queued removal — dropping
+ *  the strip if the resolved effect set `prevented`, or completing it
+ *  otherwise. `cardId === null` declines: removal completes normally. */
+function respondToStatusRemoval(state: GameState, cardId: import("./types").CardId | null): GameEvent[] {
+  const psr = state.pendingStatusRemoval;
+  if (!psr) return [];
+  const events: GameEvent[] = [];
+  const holder = state.players[psr.holder];
+
+  if (cardId != null) {
+    const card = holder.hand.find(c => c.id === cardId);
+    const trigger = card?.trigger;
+    const valid =
+      !!card
+      && card.kind === "instant"
+      && trigger?.kind === "opponent-attempts-remove-status"
+      && trigger.status === psr.status
+      && holder.cp >= card.cost;
+    if (valid && card) {
+      events.push(...gainCp(holder, -card.cost));
+      holder.hand = holder.hand.filter(c => c.id !== cardId);
+      holder.discard.push(card);
+      events.push({ t: "card-played", player: holder.player, cardId });
+      const opponent = state.players[other(holder.player)];
+      if (card.effect.kind === "custom") {
+        const handler = getCustomHandler(card.effect.id);
+        if (handler) events.push(...handler({ state, caster: holder, opponent }));
+      } else {
+        events.push(...resolveEffect(card.effect, { state, caster: holder, opponent }));
+      }
+    }
+  }
+
+  // Finalise.
+  const prevented = psr.prevented === true;
+  if (!prevented) {
+    const holderSnap = state.players[psr.holder];
+    const stripped = holderSnap.statuses.find(s => s.id === psr.status);
+    const stripCount = stripped?.stacks ?? 0;
+    const originalApplier = stripped?.appliedBy;
+    const r = stripStatus(holderSnap, psr.status);
+    events.push(...r.events);
+    if (originalApplier && originalApplier !== psr.applier && stripCount > 0) {
+      const applierSnap = state.players[originalApplier];
+      const heroDef = getHero(applierSnap.hero);
+      for (const trig of heroDef.resourceIdentity.cpGainTriggers) {
+        if (trig.on !== "opponentRemovedSelfStatus") continue;
+        if (trig.status && trig.status !== psr.status) continue;
+        const gain = trig.perStack ? trig.gain * stripCount : trig.gain;
+        events.push(...gainCp(applierSnap, gain));
+      }
+    }
+  }
+  events.push({
+    t: "status-remove-attempted",
+    holder: psr.holder, applier: psr.applier, status: psr.status,
+    stacks: psr.stacks, prevented,
+  });
+  state.pendingStatusRemoval = undefined;
+  return events;
+}
+
 function respondToCounter(state: GameState, accept: boolean): GameEvent[] {
   const pending = state.pendingCounter;
   if (!pending) return [];
@@ -408,6 +504,7 @@ function cloneState(state: GameState): GameState {
     pendingOffensiveChoice: state.pendingOffensiveChoice ? { ...state.pendingOffensiveChoice, matches: state.pendingOffensiveChoice.matches.slice() } : undefined,
     pendingAttack: state.pendingAttack ? { ...state.pendingAttack } : undefined,
     pendingBankSpend: state.pendingBankSpend ? { ...state.pendingBankSpend } : undefined,
+    pendingStatusRemoval: state.pendingStatusRemoval ? { ...state.pendingStatusRemoval } : undefined,
   };
 }
 function clonePlayer(p: HeroSnapshot | undefined): HeroSnapshot {
@@ -424,9 +521,12 @@ function clonePlayer(p: HeroSnapshot | undefined): HeroSnapshot {
     signatureState: { ...p.signatureState },
     ladderState: [...p.ladderState] as HeroSnapshot["ladderState"],
     abilityModifiers: p.abilityModifiers.map(m => ({ ...m, modifications: m.modifications.map(x => ({ ...x })) })),
+    tokenOverrides: p.tokenOverrides.map(o => ({ ...o, modifications: o.modifications.map(x => ({ ...x })) })),
     symbolBends: p.symbolBends.map(b => ({ ...b })),
     lastStripped: { ...p.lastStripped },
     masterySlots: { ...p.masterySlots },
+    consumedOncePerMatchCards: p.consumedOncePerMatchCards.slice(),
+    consumedOncePerTurnCards: p.consumedOncePerTurnCards.slice(),
   };
 }
 
