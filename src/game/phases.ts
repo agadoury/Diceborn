@@ -372,11 +372,13 @@ export function commitOffensiveAbility(state: GameState, abilityIndex: number): 
     defendable,
   });
 
-  if (!defendable) {
-    events.push(...applyAttackEffects(state, abilityIndex, faces, damageBonus, critFlat, critMul, isCritical, /*defensiveReduction*/ 0, critTriggered));
-    return events;
-  }
-
+  // ALWAYS halt on pendingAttack — even for non-defendable types
+  // (undefendable / pure / ultimate). The defender may still want to
+  // play an Instant (Aegis of Dawn halves T4 ultimates; Phoenix Veil
+  // negates undefendable attacks). The defender's `select-defense`
+  // resolves with abilityIndex: null for non-defendable types, and the
+  // engine applies the queued damage with any `injectedReduction` from
+  // resolved Instants.
   state.pendingAttack = {
     attacker: active.player,
     defender: opponent.player,
@@ -1379,11 +1381,15 @@ const FRENZY_TICK_PENDING = "__frenzyTickPending";
 
 /** Set on a defender when they take ≥1 damage from an opponent's offensive
  *  ability. Read at the defender's next Upkeep by `resolveUpkeepSignaturePassive`
- *  to grant +1 to the hero's bankable counter (capped per-turn). */
+ *  to grant +1 to the hero's bankable counter (capped per-turn).
+ *  Both the Berserker (Frenzy) and the Lightbearer (Radiance) build their
+ *  bank from being hit, so the same flag handles both — the upkeep
+ *  dispatcher branches on the hero's `signatureMechanic.implementation.kind`. */
 export function noteOffensiveDamageTaken(defender: HeroSnapshot, amount: number): void {
   if (amount <= 0) return;
   const heroDef = getHero(defender.hero);
-  if (heroDef.signatureMechanic.implementation.kind !== "frenzy") return;
+  const kind = heroDef.signatureMechanic.implementation.kind;
+  if (kind !== "frenzy" && kind !== "lightbearer-radiance") return;
   defender.signatureState[FRENZY_TICK_PENDING] = 1;
 }
 
@@ -1395,11 +1401,13 @@ function resolveUpkeepSignaturePassive(active: HeroSnapshot): GameEvent[] {
   const events: GameEvent[] = [];
   const heroDef = getHero(active.hero);
   const impl = heroDef.signatureMechanic.implementation;
-  if (impl.kind !== "frenzy") return events;
+  // Both Frenzy and Radiance grant +1 to their bankable counter when the
+  // holder took offensive damage on their previous turn.
+  if (impl.kind !== "frenzy" && impl.kind !== "lightbearer-radiance") return events;
   const flagged = (active.signatureState[FRENZY_TICK_PENDING] ?? 0) > 0;
   if (!flagged) return events;
   delete active.signatureState[FRENZY_TICK_PENDING];
-  const key = impl.passiveKey ?? "frenzy";
+  const key = impl.passiveKey ?? (impl.kind === "frenzy" ? "frenzy" : "radiance");
   const cap = impl.bankCap ?? Infinity;
   const before = active.signatureState[key] ?? 0;
   const after = Math.min(cap, before + 1);

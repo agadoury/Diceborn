@@ -48,7 +48,7 @@ export function applyAction(state: GameState, action: Action): ApplyResult {
     case "advance-phase":   events.push(...advancePhase(next)); break;
     case "toggle-die-lock": events.push(...toggleDieLock(next, action.die)); break;
     case "roll-dice":       events.push(...rollAction(next)); break;
-    case "play-card":       events.push(...playCard(next, action.card, action.targetDie, action.targetPlayer, action.targetFaceValue)); break;
+    case "play-card":       events.push(...playCard(next, action.card, action.targetDie, action.targetPlayer, action.targetFaceValue, action.casterPlayer)); break;
     case "sell-card":       events.push(...sellCardAction(next, action.card)); break;
     case "end-turn":        events.push(...endTurn(next)); break;
     case "respond-to-counter": events.push(...respondToCounter(next, action.accept)); break;
@@ -289,23 +289,29 @@ function passTurn(state: GameState): GameEvent[] {
 }
 
 // ── Card play / sell / counter ──────────────────────────────────────────────
-function playCard(state: GameState, cardId: string, targetDie?: number, _targetPlayer?: PlayerId, targetFaceValue?: 1|2|3|4|5|6): GameEvent[] {
+function playCard(state: GameState, cardId: string, targetDie?: number, _targetPlayer?: PlayerId, targetFaceValue?: 1|2|3|4|5|6, casterPlayer?: PlayerId): GameEvent[] {
   // Search both hands so off-turn Instants (Phoenix Veil, Counterstrike,
   // Final Heat) are reachable. Card holder, not active player, is the caster.
-  let casterId: PlayerId = state.activePlayer;
-  let card = state.players[casterId].hand.find(c => c.id === cardId);
-  if (!card) {
-    const otherId = other(casterId);
-    const found = state.players[otherId].hand.find(c => c.id === cardId);
+  // When `casterPlayer` is supplied we prefer that hand FIRST — required
+  // when both players hold the same card (mirror matches) so the off-turn
+  // responder doesn't accidentally consume the active player's copy.
+  const tryOrder: PlayerId[] = casterPlayer
+    ? [casterPlayer, other(casterPlayer)]
+    : [state.activePlayer, other(state.activePlayer)];
+  let casterId: PlayerId | undefined;
+  let card: import("./types").Card | undefined;
+  for (const pid of tryOrder) {
+    const found = state.players[pid].hand.find(c => c.id === cardId);
     if (found) {
       // Off-turn play is only permitted for Instants — every other card kind
       // is phase-gated and `canPlay` will reject it.
-      if (found.kind !== "instant") return [];
-      casterId = otherId;
+      if (pid !== state.activePlayer && found.kind !== "instant") continue;
+      casterId = pid;
       card = found;
+      break;
     }
   }
-  if (!card) return [];
+  if (!card || !casterId) return [];
   const caster = state.players[casterId];
   const opponent = state.players[other(casterId)];
   if (!canPlay(state, caster, opponent, card)) return [];
@@ -371,6 +377,37 @@ function selectOffensiveAbility(state: GameState, abilityIndex: number | null): 
 
   state.pendingOffensiveChoice = undefined;
   events.push(...enterPhase(state, "defensive-roll"));
+  // §Lightbearer: bankable spend prompt at offensive-resolution. If the
+  // attacker has tokens AND their hero declares an `offensive-resolution`
+  // spend option, halt for `spend-bank` (or `decline-bank-spend`) before
+  // committing. The resolved spend writes its bonus into the attacker's
+  // `nextAbilityBonusDamage` (damage-bonus mode) and applies any
+  // heal-self effect; `commitOffensiveAbility` then resumes via
+  // `pendingOffensiveCommit` on the spend-bank action.
+  const attacker = state.players[state.activePlayer];
+  const attackerHero = getHero(attacker.hero);
+  const offensiveSpendKey = attackerHero.signatureMechanic.implementation.passiveKey;
+  const offensiveSpendOpts = (attackerHero.signatureMechanic.implementation.spendOptions ?? [])
+    .filter(o => o.context === "offensive-resolution");
+  const banked = offensiveSpendKey ? (attacker.signatureState[offensiveSpendKey] ?? 0) : 0;
+  if (offensiveSpendKey && offensiveSpendOpts.length > 0 && banked > 0) {
+    state.pendingOffensiveCommit = { attacker: state.activePlayer, abilityIndex: abilityIndex! };
+    state.pendingBankSpend = {
+      holder: state.activePlayer,
+      passiveKey: offensiveSpendKey,
+      available: banked,
+      context: "offensive-resolution",
+      optionIndex: 0,
+    };
+    events.push({
+      t: "bank-spend-prompt",
+      holder: state.activePlayer,
+      passiveKey: offensiveSpendKey,
+      available: banked,
+      context: "offensive-resolution",
+    });
+    return events;
+  }
   events.push(...commitOffensiveAbility(state, abilityIndex!));
   if (state.pendingAttack) return events;          // halted — wait for select-defense
   if (state.winner) return events;
@@ -407,11 +444,49 @@ function resolveBankSpend(state: GameState, amount: number): GameEvent[] {
     holder.signatureState[pbs.passiveKey] = (holder.signatureState[pbs.passiveKey] ?? 0) - spend;
     events.push({ t: "bank-spent", holder: pbs.holder, passiveKey: pbs.passiveKey, amount: spend });
     events.push({ t: "passive-counter-changed", player: pbs.holder, passiveKey: pbs.passiveKey, delta: -spend, total: holder.signatureState[pbs.passiveKey] });
+
+    // Apply ALL matching spend options for this context (Lightbearer's
+    // offensive-resolution offers both damage-bonus AND heal-self per
+    // token; the engine fans both out). Damage-bonus accumulates onto
+    // `nextAbilityBonusDamage` so `commitOffensiveAbility`'s damage-leaf
+    // resolution picks it up. Heal-self resolves immediately.
+    const heroDef = getHero(holder.hero);
+    const opts = (heroDef.signatureMechanic.implementation.spendOptions ?? [])
+      .filter(o => o.context === pbs.context);
+    for (const opt of opts) {
+      const eff = opt.effect as { kind: string; perUnit?: number };
+      const perUnit = eff.perUnit ?? 0;
+      const total = perUnit * spend;
+      if (total <= 0) continue;
+      if (eff.kind === "damage-bonus") {
+        holder.nextAbilityBonusDamage += total;
+      } else if (eff.kind === "heal-self") {
+        const before = holder.hp;
+        holder.hp = Math.min(holder.hpCap, before + total);
+        const delta = holder.hp - before;
+        if (delta > 0) {
+          events.push({ t: "heal-applied", player: holder.player, amount: delta });
+          events.push({ t: "hp-changed", player: holder.player, delta, total: holder.hp });
+        }
+      } else if (eff.kind === "reduce-incoming") {
+        // Defensive-context reduction is added to the pending attack's
+        // injectedReduction so the defense resolver picks it up.
+        if (state.pendingAttack) {
+          state.pendingAttack.injectedReduction = (state.pendingAttack.injectedReduction ?? 0) + total;
+        }
+      }
+    }
   }
   state.pendingBankSpend = undefined;
-  // Stash the spent count on signatureState under a transient key so the
-  // attack/defense resolver can apply the spend's effect on resume.
   holder.signatureState["__lastSpend"] = spend;
+
+  // Resume any halted offensive commit. The engine paused before firing
+  // the ability so the spend bonus could be folded into its damage leaf.
+  const poc = state.pendingOffensiveCommit;
+  if (poc && poc.attacker === pbs.holder) {
+    state.pendingOffensiveCommit = undefined;
+    events.push(...commitOffensiveAbility(state, poc.abilityIndex));
+  }
   return events;
 }
 
@@ -599,6 +674,7 @@ function cloneState(state: GameState): GameState {
     pendingAttack: state.pendingAttack ? { ...state.pendingAttack } : undefined,
     pendingBankSpend: state.pendingBankSpend ? { ...state.pendingBankSpend } : undefined,
     pendingStatusRemoval: state.pendingStatusRemoval ? { ...state.pendingStatusRemoval } : undefined,
+    pendingOffensiveCommit: state.pendingOffensiveCommit ? { ...state.pendingOffensiveCommit } : undefined,
   };
 }
 function clonePlayer(p: HeroSnapshot | undefined): HeroSnapshot {

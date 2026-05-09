@@ -655,8 +655,11 @@ The split exists so that the engine reducer never touches presentation state, an
 - Damage delta vs. opponent (favoring lethal)
 - Token swing (applying high-value debuffs / clearing high-value buffs)
 - CP economy (don't dump CP if next turn could use it)
-- Lock decisions (which dice to lock between rolls; weighted by combo proximity)
-- Card play timing (main-phase vs. roll-phase windows)
+- Lock decisions (monotonic: lock dice the keep mask wants locked, never unlock mid-attempt — prevents `pickTargetTier` lock-toggle oscillation)
+- Card play timing (main-phase vs. roll-phase windows): plays affordable masteries first (defensive → T3 → T2 → T1), then atonement (§15.2), then hero-specific signature plays via a per-card priority table
+- Bankable signature spend (`pendingBankSpend`): spends up to 4 tokens on offensive resolution; spends `ceil(incoming/2)` defensively
+- Instants: while a `pendingAttack` targets the AI, plays any matching Instant whose trigger qualifies before responding with `select-defense` (sets `casterPlayer` explicitly so off-turn copies don't get confused with the attacker's own copy in mirror matches)
+- Holder-paid status removal: when the AI carries a status with `holderRemovalActions[]` and the cost is affordable AND stacks meet the smallest threshold, dispatches the action (e.g. atones Verdict for 2 CP)
 
 Three difficulty bands are exposed but only Medium is currently calibrated. Easy is intentionally noisy; Hard is unfinished. The AI runs on the same engine as the player — no shortcuts, no privileged information, same `applyAction` calls.
 

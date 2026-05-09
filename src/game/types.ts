@@ -808,6 +808,15 @@ export interface GameState {
      *  number of tokens the player commits). */
     optionIndex: number;
   };
+  /** Halted offensive-commit awaiting a `spend-bank` decision (Lightbearer's
+   *  Radiance offers a spend option at offensive-resolution). When the
+   *  player resolves the spend, the engine resumes by calling
+   *  `commitOffensiveAbility` with this ability index. Cleared once the
+   *  ability fires. */
+  pendingOffensiveCommit?: {
+    attacker: PlayerId;
+    abilityIndex: number;
+  };
   log: LogEntry[];
   winner?: PlayerId | "draw";
 }
@@ -821,6 +830,13 @@ export type Action =
   | { kind: "toggle-die-lock"; die: 0 | 1 | 2 | 3 | 4 }
   | { kind: "roll-dice" }
   | { kind: "play-card"; card: CardId; targetDie?: 0 | 1 | 2 | 3 | 4; targetPlayer?: PlayerId;
+      /** Explicit caster id. Required when both players hold the same
+       *  card (mirror matches) and the engine needs to know which copy
+       *  to consume — without it, `playCard` defaults to
+       *  `state.activePlayer`, which is wrong for off-turn Instant
+       *  responses. UI / AI drivers should set this whenever the
+       *  intended caster differs from the active player. */
+      casterPlayer?: PlayerId;
       /** Used by `set-die-face` effects whose target declares
        *  `{ kind: "face" }` without a faceValue — the UI surfaces a 1–6
        *  picker and forwards the choice here. */
