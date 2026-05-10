@@ -31,6 +31,7 @@ import { Banner } from "./Banner";
 import { ActionLog } from "./ActionLog";
 import { InstantPromptLayer } from "./InstantPrompt";
 import { DefenseSelectLayer } from "./DefenseSelect";
+import { DefenseStatusPanel } from "./DefenseStatusPanel";
 import { AttackSelectLayer } from "./AttackSelect";
 import { useGameStore } from "@/store/gameStore";
 import { getHero } from "@/content";
@@ -51,6 +52,7 @@ export function Choreographer({ children }: Props) {
       <InstantPromptLayer />
       <AttackSelectLayer />
       <DefenseSelectLayer />
+      <DefenseStatusPanel />
     </ScreenShake>
   );
 }
