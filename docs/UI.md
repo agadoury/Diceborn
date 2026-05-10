@@ -53,7 +53,7 @@ Defined in `src/main.tsx` and routed with `react-router-dom`.
 | `/` | `MainMenu` | Stacked CTAs: Vs AI (recommended), Hot-Seat, How to play, Settings, plus dev links. |
 | `/heroes?mode=...` | `HeroSelect` | Pick hero(es). `mode=vs-ai` picks one hero; `mode=hot-seat` picks p1 then p2 with a curtain transition. Shows the live hero registry — empty-state if no heroes are registered. |
 | `/play?mode=...&p1=...&p2=...` | `MatchScreen` | Full match UI. See [§3](#3-match-screen-layout). |
-| `/how-to-play` | `HowToPlay` | Static rules walkthrough as numbered cards. **Currently stale** — see [§13](#13-known-gaps). |
+| `/how-to-play` | `HowToPlay` | Static rules walkthrough as numbered cards — 7 sections covering goal, turn flow, rolling + ladder, picking what to fire, defending, cards/decks, and status tokens. |
 | `/settings` | `Settings` | Audio mute, reduced motion, haptics. Persists to `localStorage`. |
 | `/dev/tokens` | `DevTokens` | Design-tokens showcase. |
 | `/dev/components` | `DevComponents` | Component storybook + dice playground + choreographer test bench. |
@@ -453,7 +453,6 @@ Settings screen has a master mute. Choreographer gates audio output via `audio.p
 
 Things that are **stale or placeholder** and should be addressed before ship:
 
-- **`/how-to-play` is out of date.** Mentions "5 phases" (8), "2 attempts" (3), and an old auto-resolving defensive flow. Needs a rewrite to match the current rules (manual offensive roll, defender picks then engine auto-rolls). See `src/components/screens/HowToPlay.tsx`.
 - **AbilityCinematic / AttackEffect** can fall back to a generic name + accent if a not-yet-registered hero ships — the three current heroes (Berserker, Pyromancer, Lightbearer) have full theming.
 - **Status detonation event is emitted but the configured `effect` isn't auto-resolved** at the call site yet — see ENGINE_AND_MECHANICS.md known-follow-ups for the queue mechanism.
 - **Bankable spend prompts** (`pendingBankSpend`) — engine support + UI overlay are wired and dispatchable, but the auto-open from `applyAttackEffects` / `resolveDefenseChoice` based on hero `spendOptions` isn't yet auto-triggered.
