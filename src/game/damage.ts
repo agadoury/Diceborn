@@ -1,5 +1,5 @@
 /**
- * Diceborn — damage pipeline.
+ * Pact of Heroes — damage pipeline.
  *
  * Order of operations on incoming damage:
  *   1. Pure damage:         skips Shield + Protect. Directly subtracts HP.

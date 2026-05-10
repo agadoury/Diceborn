@@ -1,5 +1,5 @@
 /**
- * Diceborn — status engine.
+ * Pact of Heroes — status engine.
  *
  * Generic application/tick/removal/stack-limit machinery + the 5 universal
  * token definitions (Burn, Stun, Protect, Shield, Regen) and the Barbarian's

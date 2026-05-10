@@ -1,5 +1,5 @@
 /**
- * Diceborn — Choreographer store.
+ * Pact of Heroes — Choreographer store.
  *
  * Owns the event queue + the transient visual side-effects (screen shake,
  * hit-stop, damage numbers, ability cinematic). Components subscribe to

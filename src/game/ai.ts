@@ -1,5 +1,5 @@
 /**
- * Diceborn — heuristic AI (Medium for MVP).
+ * Pact of Heroes — heuristic AI (Medium for MVP).
  *
  * The AI consumes the same `evaluateLadder` the player UI uses, so it can
  * never have asymmetric information about reachability. Decisions are

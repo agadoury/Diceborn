@@ -1,5 +1,5 @@
 /**
- * Diceborn — The Berserker.
+ * Pact of Heroes — The Berserker.
  *
  * Rush archetype, complexity 1. Frost-touched northern warrior — twin axes,
  * dire-wolf pelt, frost-blue aura. Identity is the Frenzy passive: every wound

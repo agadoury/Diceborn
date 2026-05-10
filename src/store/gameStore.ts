@@ -1,5 +1,5 @@
 /**
- * Diceborn — game store. Thin Zustand wrapper around the pure engine.
+ * Pact of Heroes — game store. Thin Zustand wrapper around the pure engine.
  *
  * Every dispatch:
  *   1. Calls applyAction(state, action) → { state, events }.

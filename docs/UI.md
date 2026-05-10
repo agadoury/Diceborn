@@ -1,6 +1,6 @@
-# Diceborn — UI / UX Reference
+# Pact of Heroes — UI / UX Reference
 
-This document maps the player-facing surface of Diceborn to the components that render it: how the screen is laid out, what reacts to what, where touch targets live, what plays when, and where the design tokens come from.
+This document maps the player-facing surface of Pact of Heroes to the components that render it: how the screen is laid out, what reacts to what, where touch targets live, what plays when, and where the design tokens come from.
 
 It is meant for someone who wants to:
 - understand the match screen at a glance,
@@ -380,7 +380,7 @@ Mobile interactions are tap-driven. Hover states still exist for desktop but no 
 
 ### Haptics
 
-`src/hooks/useHaptics.ts` wraps the Vibration API with a feature-detect + a localStorage toggle (`diceborn:haptics`). iOS Safari ignores the API and silently no-ops; Android Chrome honours it. Patterns:
+`src/hooks/useHaptics.ts` wraps the Vibration API with a feature-detect + a localStorage toggle (`pact-of-heroes:haptics`). iOS Safari ignores the API and silently no-ops; Android Chrome honours it. Patterns:
 
 | Pattern | Duration |
 |---|---|
@@ -398,13 +398,13 @@ Settings screen has a haptics toggle that disables the entire system.
 Two layers:
 
 1. **Token-level.** `tokens.css @media (prefers-reduced-motion: reduce)` cuts long durations dramatically.
-2. **Choreographer-level.** `Choreographer.tsx readReduced()` returns `true` if the localStorage flag (`diceborn:reduced-motion`) is set or the OS media query matches. When `true`, `playEvent` clamps each beat to ≤220ms so the timing still resolves but everything plays fast. Cinematics still run — the player must see what happened — just briefly.
+2. **Choreographer-level.** `Choreographer.tsx readReduced()` returns `true` if the localStorage flag (`pact-of-heroes:reduced-motion`) is set or the OS media query matches. When `true`, `playEvent` clamps each beat to ≤220ms so the timing still resolves but everything plays fast. Cinematics still run — the player must see what happened — just briefly.
 
 Players can override the OS preference in `/settings`.
 
 ### Keyboard
 
-Every interactive button is a real `<button>`. Tab order follows DOM order. There's no global keyboard shortcut layer beyond standard browser focus management — Diceborn is touch-first.
+Every interactive button is a real `<button>`. Tab order follows DOM order. There's no global keyboard shortcut layer beyond standard browser focus management — Pact of Heroes is touch-first.
 
 ---
 

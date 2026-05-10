@@ -25,7 +25,7 @@ export default function MainMenu() {
       </nav>
 
       <footer className="text-muted text-sm text-center pb-2">
-        Diceborn — fan project. Step 1 scaffold.
+        Pact of Heroes — fan project. Step 1 scaffold.
       </footer>
     </main>
   );

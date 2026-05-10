@@ -1,5 +1,5 @@
 /**
- * Diceborn — engine type contract.
+ * Pact of Heroes — engine type contract.
  *
  * Pure TypeScript. No React, no DOM. Runs in Node.
  * Every state mutation flows through `applyAction(state, action) => { state, events }`

@@ -1,5 +1,5 @@
 /**
- * Diceborn — The Lightbearer.
+ * Pact of Heroes — The Lightbearer.
  *
  * Survival archetype, complexity 2. Sun-priest who treats prayer and
  * warfare as the same discipline — banks Radiance from being hit and

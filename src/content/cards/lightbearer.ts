@@ -1,5 +1,5 @@
 /**
- * Diceborn — Lightbearer cards.
+ * Pact of Heroes — Lightbearer cards.
  *
  * Hero-specific card pool. Loaded by the content registry via
  * `getDeckCards("lightbearer")`. Cards live here (not on `HeroDefinition`)

@@ -9,7 +9,7 @@
 | **Signature quote** | "The wound is the door." |
 | **Source** | [`src/content/heroes/berserker.ts`](../../src/content/heroes/berserker.ts) |
 
-The Berserker is Diceborn's first registered hero and the canonical example
+The Berserker is Pact of Heroes' first registered hero and the canonical example
 of the Rush archetype. Reliable bread-and-butter Cleave at ~98% landing,
 rare burst spikes via 4-of-a-kind / straight / 5-of-a-kind, and a wound-fed
 Frenzy passive that turns every hit he takes into +1 damage on every

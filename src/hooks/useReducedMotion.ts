@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const LS_KEY = "diceborn:reduced-motion";
+const LS_KEY = "pact-of-heroes:reduced-motion";
 
 /**
  * Live-updating reduced-motion subscription. Honors:

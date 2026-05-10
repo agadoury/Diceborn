@@ -1,13 +1,13 @@
 /**
- * Diceborn — placeholder audio.
+ * Pact of Heroes — placeholder audio.
  *
  * Step 3 ships synthesized WebAudio tones for the dice playground. Step 4
  * brings Howler + the audio sprite. Same public API on either side, so
  * components don't change.
  *
  * iOS Safari requires a user gesture to start the audio context. The
- * `diceborn:audio-unlock` event in main.tsx fires on the first interaction;
- * we resume the context then.
+ * `pact-of-heroes:audio-unlock` event in main.tsx fires on the first
+ * interaction; we resume the context then.
  */
 
 export type Sfx =
@@ -51,7 +51,7 @@ function ensureCtx(): AudioContext {
 }
 
 if (typeof window !== "undefined") {
-  window.addEventListener("diceborn:audio-unlock", () => {
+  window.addEventListener("pact-of-heroes:audio-unlock", () => {
     unlocked = true;
     const c = ensureCtx();
     if (c.state === "suspended") void c.resume();

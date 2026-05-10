@@ -1,5 +1,5 @@
 /**
- * Diceborn — card registry.
+ * Pact of Heroes — card registry.
  *
  * Cards live OUTSIDE `HeroDefinition` so the upcoming deck-builder feature
  * can swap a hero's card list without mutating hero data. Hero modules own

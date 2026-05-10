@@ -15,14 +15,14 @@ export default function Settings() {
   const [hapticsOn, setHapticsOn, hapticsSupported] = useHaptics();
   const [reducedOverride, setReducedOverride] = useState<"system" | "off" | "on">(() => {
     if (typeof localStorage === "undefined") return "system";
-    return (localStorage.getItem("diceborn:reduced-motion") as "system" | "off" | "on" | null) ?? "system";
+    return (localStorage.getItem("pact-of-heroes:reduced-motion") as "system" | "off" | "on" | null) ?? "system";
   });
 
   function setReduced(v: "system" | "off" | "on") {
     setReducedOverride(v);
     try {
-      if (v === "system") localStorage.removeItem("diceborn:reduced-motion");
-      else                localStorage.setItem("diceborn:reduced-motion", v);
+      if (v === "system") localStorage.removeItem("pact-of-heroes:reduced-motion");
+      else                localStorage.setItem("pact-of-heroes:reduced-motion", v);
     } catch { /* */ }
   }
 

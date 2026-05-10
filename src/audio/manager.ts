@@ -13,9 +13,9 @@ import { sfx, setMuted as setSfxMuted, setSfxVolume, isUnlocked, type Sfx } from
 
 export type { Sfx };
 
-const LS_MUTED = "diceborn:audio:muted";
-const LS_SFX   = "diceborn:audio:sfx";
-const LS_MUSIC = "diceborn:audio:music";
+const LS_MUTED = "pact-of-heroes:audio:muted";
+const LS_SFX   = "pact-of-heroes:audio:sfx";
+const LS_MUSIC = "pact-of-heroes:audio:music";
 
 interface AudioState {
   muted: boolean;

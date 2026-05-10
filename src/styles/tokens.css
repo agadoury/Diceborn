@@ -1,5 +1,5 @@
 /* ──────────────────────────────────────────────────────────────────────────
-   Diceborn — design tokens.
+   Pact of Heroes — design tokens.
    Single source of truth for colors, motion, spacing, type. Tailwind reads
    these via tailwind.config.ts; raw CSS reads them via var(--c-*).
    ────────────────────────────────────────────────────────────────────────── */

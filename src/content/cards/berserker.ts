@@ -1,5 +1,5 @@
 /**
- * Diceborn — Berserker cards.
+ * Pact of Heroes — Berserker cards.
  *
  * Hero-specific card pool. Loaded by the content registry via
  * `getDeckCards(BERSERKER.id)`. Cards live here (not on `HeroDefinition`)
