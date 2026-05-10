@@ -343,36 +343,19 @@ attacker, so Glacial Counter's Frost-bite lands on whoever just hit him.
 
 ---
 
-## 9. Cards (12)
+## 9. Cards
 
-### Dice manipulation (3)
+The full per-card listing for the Berserker — IDs, costs, kinds,
+categories, slots, once-per-match flags, and rules text — lives in
+**[`../cards/berserker.md`](../cards/berserker.md)**.
 
-| ID | Cost | Kind | Effect | Notes |
-|---|---|---|---|---|
-| `berserker/iron-focus` | 1 | roll-phase | `set-die-face count 1, filter any, target {kind face}` | `oncePerTurn` — player picks face value at play time |
-| `berserker/berserker-rage` | 2 | roll-phase | `reroll-dice filter all, ignoresLock, on_attempt not-final` | Cannot be used on the final attempt |
-| `berserker/pelt-of-the-wolf` | 1 | main-phase | `face-symbol-bend fur → axe, this-turn` | Fur counts as axe for combo purposes |
+For the deck-building system as a whole (composition rules, the
+builder UI, persistence, the validator), see
+[`../DECK_BUILDING.md`](../DECK_BUILDING.md).
 
-### Tiered masteries (4)
-
-| ID | Cost | MasteryTier | Upgrades | Effect summary |
-|---|---|---|---|---|
-| `berserker/cleave-mastery` | 2 | 1 | Cleave | scaling-damage-base 4 → 5 (so 5/7/9). Damage type → undefendable when `combo-symbol-count axe ≥ 4`. |
-| `berserker/northern-storm` | 3 | 2 | Glacier Strike, Winter Storm | Glacier Strike: damage 5 → 7, heal 1 → 2 when 2+ axe. Winter Storm: damage 9 → 11 when `combo-straight length 4`. |
-| `berserker/bloodbound` | 3 | 3 | Blood Harvest, Frostfang | Blood Harvest (when 2+ howl): bonus-dice-threshold 14 → 10, heal-conditional-bonus 2 → 3 per Frenzy. Frostfang (when 4+ howl): base damage 6 → 9, applied-status-stacks 2 → 3 Frost-bite. |
-| `berserker/wolfborn` | 3 | defensive | Wolfhide, Bloodoath, Glacial Counter | Wolfhide: reduce-damage-amount 4 → 5 when 1+ fur. Bloodoath: heal-amount 4 → 5 (3 fur) → 6 (4 fur). Glacial Counter (when 1+ howl): reduce-damage-amount 5 → 7, applied-status-stacks 1 → 2. |
-
-All masteries are `permanent: true` and occupy a Hero Upgrade slot.
-
-### Signature plays (5)
-
-| ID | Cost | Kind | Effect | Notes |
-|---|---|---|---|---|
-| `berserker/war-cry` | 3 | main-phase | `passive-counter-modifier frenzy add 3 respectsCap` | +3 Frenzy regardless of HP threshold |
-| `berserker/hunters-mark` | 1 | main-phase | `apply-status berserker:frostbite stacks 2 target opponent` | Direct application, no roll required |
-| `berserker/ancestral-spirits` | 2 | main-phase | compound of three `persistent-buff` (T1, T2, T3) — base-damage +1, `discardOn damage-taken-from-tier 4` | T4 abilities intentionally excluded; the buff breaks when a T4 lands on the Berserker |
-| `berserker/last-stand` | 4 | roll-phase | compound of `set-die-face count 5 lockAfter` + `force-face-value duration this-turn` | `playCondition self-hp ≤ 10`, `oncePerMatch`. Player picks face value at play time. The `force-face-value` override survives any reroll until end of turn. |
-| `berserker/counterstrike` | 2 | instant | `compound`: +2 Frenzy + 1 Frost-bite to attacker | Trigger `self-takes-damage from offensive-ability`, `oncePerMatch` |
+The Berserker ships 14 cards total: 3 dice-manip, 6 ladder-upgrade
+Masteries (3 T1 + 1 T2 + 1 T3 + 1 Defensive — multiple options at T1
+gives the deck-builder a real fork), and 5 signature plays.
 
 ---
 

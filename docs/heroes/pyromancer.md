@@ -268,34 +268,20 @@ choice is a UI follow-up).
 
 ---
 
-## 9. Cards (12)
+## 9. Cards
 
-### Dice manipulation (3)
+The full per-card listing for the Pyromancer — IDs, costs, kinds,
+categories, slots, once-per-match flags, and rules text — lives in
+**[`../cards/pyromancer.md`](../cards/pyromancer.md)**.
 
-| ID | Cost | Kind | Effect | Notes |
-|---|---|---|---|---|
-| `pyromancer/ember-channel` | 1 | roll-phase | `set-die-face count 1, filter specific-symbol ash, target symbol ember` | Convert one ash die to ember. |
-| `pyromancer/pyromantic-surge` | 1 | roll-phase | `reroll-dice filter not-showing-symbols [ruin, ash]` | Reroll everything that isn't kept. |
-| `pyromancer/forge` | 2 | roll-phase | `set-die-face count 1, filter any, target symbol ruin` | Force-spawn a ruin face. |
+For the deck-building system as a whole (composition rules, the
+builder UI, persistence, the validator), see
+[`../DECK_BUILDING.md`](../DECK_BUILDING.md).
 
-### Tiered masteries (4)
-
-| ID | Cost | MasteryTier | Effect summary |
-|---|---|---|---|
-| `pyromancer/ember-strike-mastery` | 2 | 1 | Ember Strike scaling-damage-base 3 → 4 (so 4/6/8). Cinder stacks 1 → 2. |
-| `pyromancer/volcanic-awakening` | 4 | 2 | Buffs all 3 T2 abilities (some intentional Firestorm/Obsidian-Burst overlap on damage gating per spec). |
-| `pyromancer/crater-heart` | 3 | 3 | Magma Heart 8 → 10 / Cinder 2 → 3. Pyro Lance 9 → 11 + stamps a fresh `conditional_bonus` for +2 dmg per Cinder when opponent has 3+. |
-| `pyromancer/mountains-patience` | 3 | defensive | Magma Shield reduce 3 → 4 + apply-to-attacker stacks 1 → 2. Disperse adds 2 Cinder on success (`applied-status-stacks-on-success`). Ash Mirror reduce 5 → 7 + strip stacks 1 → 2. |
-
-### Signature plays (5)
-
-| ID | Cost | Kind | Effect | Notes |
-|---|---|---|---|---|
-| `pyromancer/char` | 2 | main-phase | `apply-status pyromancer:cinder stacks 3 target opponent` | Direct Cinder application; no roll, no ASHFALL bonus. |
-| `pyromancer/crater-wind` | 3 | main-phase | `persistent-buff target pyromancer:cinder, modifier { field "detonation-amount", set 12 }, discardOn match-ends` | Bumps detonation amount via `tokenOverrides`. |
-| `pyromancer/phoenix-veil` | 4 | instant | compound `[reduce-damage negate_attack, apply-status cinder stacks 0 + conditional_bonus source damage-prevented-amount]` | Reflects 1 Cinder per damage prevented. `playCondition: incoming-attack-damage-type is-not ultimate`. `oncePerMatch`. |
-| `pyromancer/final-heat` | 3 | instant | `damage 0 pure + conditional_bonus source stripped-stack-count, sourceStatus pyromancer:cinder, bonusPerUnit 2` | Trigger `opponent-removes-status` (post-strip, per spec). 2 pure dmg per stack stripped. |
-| `pyromancer/phoenix-stir` | 3 | main-phase | `heal 5 + conditional_bonus +3 if opponent has 3+ Cinder` | `oncePerMatch`. |
+The Pyromancer ships 13 cards total: 3 dice-manip, 5 ladder-upgrade
+Masteries (2 T1 / 1 T2 / 1 T3 / 1 Defensive — the two T1 options
+fork the build between sustain Cinder pressure and Phoenix-Form
+self-heal), and 5 signature plays.
 
 ---
 
