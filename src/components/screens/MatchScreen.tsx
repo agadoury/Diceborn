@@ -112,7 +112,7 @@ export default function MatchScreen() {
   }, [state, mode, aiPlayer, inputUnlocked, dispatch]);
 
   // Hooks that depend on `state` MUST be called before any early return —
-  // Rules of Hooks. Both safely handle null state internally.
+  // Rules of Hooks. All safely handle null state internally.
   const rollKey = useDiceRollKey(viewer);
   const summary = useMemo(() => {
     if (!state || !state.winner) return null;
@@ -122,6 +122,13 @@ export default function MatchScreen() {
       startingHp: STARTING_HP,
     });
   }, [state, matchLog]);
+  // Click-to-fire from the ladder is a two-step interaction: the click stashes
+  // the chosen ability index and surfaces a confirm modal; the confirm button
+  // dispatches advance-phase + select-offensive-ability. Cancel just clears.
+  const [pendingLadderFire, setPendingLadderFire] = useState<number | null>(null);
+  useEffect(() => {
+    if (state?.phase !== "offensive-roll" && pendingLadderFire != null) setPendingLadderFire(null);
+  }, [state?.phase, pendingLadderFire]);
 
   if (!state) return null;
 
@@ -157,13 +164,6 @@ export default function MatchScreen() {
     if (!live || live.phase !== "offensive-roll") return;
     dispatch({ kind: "toggle-die-lock", die: idx as 0|1|2|3|4 });
   }
-  // Click-to-fire from the ladder is a two-step interaction: the click stashes
-  // the chosen ability index and surfaces a confirm modal; the confirm button
-  // dispatches advance-phase + select-offensive-ability. Cancel just clears.
-  const [pendingLadderFire, setPendingLadderFire] = useState<number | null>(null);
-  useEffect(() => {
-    if (state?.phase !== "offensive-roll" && pendingLadderFire != null) setPendingLadderFire(null);
-  }, [state?.phase, pendingLadderFire]);
   function requestFireFromLadder(abilityIndex: number) {
     const live = useGameStore.getState().state;
     if (!live || live.phase !== "offensive-roll") return;
