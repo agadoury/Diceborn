@@ -275,24 +275,12 @@ export default function MatchScreen() {
             opacity: state.phase === "offensive-roll" || state.phase === "defensive-roll" ? 1 : 0.45,
           }}
         >
-          {(() => {
-            // While a defense is in flight (engine has `pendingAttack`), show
-            // the defender's tray so the player sees their dice tumble.
-            const defenseInFlight = !!state.pendingAttack;
-            const defenderId = state.pendingAttack?.defender;
-            const trayPlayerId = defenseInFlight && defenderId ? defenderId : state.activePlayer;
-            const trayHero = getHero(state.players[trayPlayerId].hero);
-            const canLock = state.activePlayer === viewer && !defenseInFlight;
-            return (
-              <DiceTray
-                dice={state.players[trayPlayerId].dice}
-                accent={trayHero.accentColor}
-                rollKey={rollKey}
-                onToggleLock={canLock ? toggleLock : undefined}
-                centerStage={state.phase === "offensive-roll" || defenseInFlight}
-              />
-            );
-          })()}
+          <DefenseTray
+            state={state}
+            viewer={viewer}
+            rollKey={rollKey}
+            onToggleLock={toggleLock}
+          />
         </div>
         {/* Match-end result — full ResultScreen overlay rendered below. */}
       </div>
@@ -451,6 +439,55 @@ function DesktopSideLadder({
 
 function readHero(s: string | null, valid: HeroId[]): HeroId | null {
   return s && valid.includes(s as HeroId) ? (s as HeroId) : null;
+}
+
+/** Shows the defender's dice tray during a defensive flow.
+ *
+ * `pendingAttack` is cleared by the engine the instant select-defense
+ * resolves — but the choreographer is still about to play out the defense
+ * events afterwards. So we keep the tray pointed at the defender as long
+ * as either pendingAttack is set OR a defense-* event is queued/playing.
+ */
+function DefenseTray({
+  state, viewer, rollKey, onToggleLock,
+}: {
+  state: import("@/game/types").GameState;
+  viewer: PlayerId;
+  rollKey: number;
+  onToggleLock: (idx: number) => void;
+}) {
+  const queue   = useChoreoStore(s => s.queue);
+  const playing = useChoreoStore(s => s.playing);
+  // Look at the playing event + remaining queue for any defense markers.
+  const defenseEvent = (() => {
+    if (playing && isDefenseEvent(playing)) return playing;
+    return queue.find(isDefenseEvent);
+  })();
+  const defenseInFlight = !!state.pendingAttack || !!defenseEvent;
+  const defenderId =
+    state.pendingAttack?.defender ??
+    (defenseEvent && getDefenderId(defenseEvent));
+  const trayPlayerId = defenseInFlight && defenderId ? defenderId : state.activePlayer;
+  const trayHero = getHero(state.players[trayPlayerId].hero);
+  const canLock = state.activePlayer === viewer && !defenseInFlight;
+  return (
+    <DiceTray
+      dice={state.players[trayPlayerId].dice}
+      accent={trayHero.accentColor}
+      rollKey={rollKey}
+      onToggleLock={canLock ? onToggleLock : undefined}
+      centerStage={state.phase === "offensive-roll" || defenseInFlight}
+    />
+  );
+}
+
+function isDefenseEvent(ev: import("@/game/types").GameEvent): boolean {
+  return ev.t === "defense-intended" || ev.t === "defense-dice-rolled" || ev.t === "defense-resolved";
+}
+function getDefenderId(ev: import("@/game/types").GameEvent): PlayerId | undefined {
+  if (ev.t === "defense-intended") return ev.defender;
+  if (ev.t === "defense-dice-rolled" || ev.t === "defense-resolved") return ev.player;
+  return undefined;
 }
 
 /**

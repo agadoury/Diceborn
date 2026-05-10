@@ -245,7 +245,7 @@ function SkullIcon() {
   );
 }
 
-function ComboStrip({ combo }: { combo: DiceCombo }) {
+export function ComboStrip({ combo }: { combo: DiceCombo }) {
   const items = renderCombo(combo);
   return (
     <span className="flex items-center gap-1 shrink-0">
