@@ -317,9 +317,9 @@ function SymbolChip({ symbol, count }: { symbol: SymbolId; count: number }) {
       style={{ color: tint }}
       title={symbol}
     >
-      <span className="w-4 h-4 sm:w-5 sm:h-5 inline-block">
+      <svg viewBox="0 0 100 100" className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" aria-hidden>
         {Glyph ? <Glyph /> : null}
-      </span>
+      </svg>
       {count > 1 && (
         <span className="absolute -mb-3 -mr-3 text-[9px] font-num font-bold text-ink">×{count}</span>
       )}
