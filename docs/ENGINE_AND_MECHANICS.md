@@ -57,8 +57,14 @@ Reduce the opponent's HP to 0. Heroes start at 30 HP, can be healed up to 40 HP 
 ┌─────────────────────────────────────────────────────────────────┐
 │ Active player's turn (one full pass through all 8 phases)        │
 │                                                                  │
-│   Upkeep → Income → Main-pre → Offensive Roll → Defensive Roll   │
-│         → Main-post → Discard                                    │
+│   Upkeep → Income → Main-pre → Offensive Roll → (defender's      │
+│         pause: pendingAttack → defender picks defense → engine   │
+│         auto-rolls + applies damage) → Main-post → Discard       │
+│                                                                  │
+│ The phase named `defensive-roll` is the *defender's* pause       │
+│ window during the attacker's turn — not a symmetric phase the    │
+│ active player goes through. The active player's turn never       │
+│ stops in `defensive-roll` on its own behalf.                     │
 └─────────────────────────────────────────────────────────────────┘
                              │
                              ▼
@@ -81,7 +87,7 @@ Each turn moves through 8 phases in fixed order. The transitions happen in `src/
 | `income` | Active player draws 1 card and gains 1 CP (clamped to cap of 15). The first player skips their first income. | No |
 | `main-pre` | Pre-roll window. Player can play `main-phase` cards, sell cards, or hit ROLL to advance. | **Yes — must tap ROLL** |
 | `offensive-roll` | Active player rolls dice (up to 3 attempts; can lock/unlock between rolls; can play `roll-phase` cards). When the player ends their roll, engine emits `offensive-pick-prompt` listing every matched ability and halts via `state.pendingOffensiveChoice`. The player **picks** which ability to fire (or passes) via `select-offensive-ability`. | **Yes — lock dice, play cards, then pick which attack to fire** |
-| `defensive-roll` | **Interactive.** Engine emits `attack-intended` and halts via `state.pendingAttack`. The defender picks one defense from their `defensiveLadder` (or "take it"); engine rolls the chosen defense's dice count once (no rerolls), evaluates, applies any reduction, then resolves the original ability's damage. Both players may play `roll-phase` and `instant` cards during this window. | **Yes — defender picks a defense via `select-defense`** (or the AI driver does so off-turn) |
+| `defensive-roll` | **Interactive (defender's pause window).** Engine emits `attack-intended` and halts via `state.pendingAttack`. The defender picks one defense from their `defensiveLadder` (or "take it"); the engine rolls the chosen defense's dice count once **inside the same dispatch** (no rerolls, no separate roll action, no `pendingDefenseRoll`), evaluates, applies any reduction, then resolves the original ability's damage. Both players may play `roll-phase` and `instant` cards during this window. The phase is a *defender* state during the attacker's turn — the active player never enters it on their own behalf. | **Yes — defender picks a defense via `select-defense`** (or the AI driver does so off-turn) |
 | `main-post` | Post-resolution window. Player can play `main-phase` cards, sell cards. Ends turn manually. | **Yes — must tap END TURN** |
 | `discard` | Auto-sell every card over hand cap (6) for +1 CP each, swap active player, transition into the new active player's `upkeep`. | No |
 
@@ -196,10 +202,24 @@ A Tier 4 ability can declare a more-restrictive variant — `criticalCondition: 
 Optional `defensiveLadder?: AbilityDef[]`. Unlike the offensive ladder, the defender **picks** which defense to attempt — there is no auto-picker. After the active player's offensive ability is locked in, the engine emits `attack-intended` and halts on `state.pendingAttack`. The defender then dispatches `select-defense { abilityIndex }`:
 
 1. **Pick** one defense from their ladder (or `null` = take the hit undefended).
-2. The engine rolls the chosen defense's `defenseDiceCount` dice **once** — no rerolls, no locking.
-3. `evaluateDefense(combo, dice)` checks whether the combo lands on the rolled dice.
+2. The engine — in the **same dispatch** — rolls the chosen defense's `defenseDiceCount` dice **once** (no rerolls, no locking, no separate roll action).
+3. `comboMatchesFaces(combo, rolledFaces)` checks whether the combo lands on the rolled dice.
 4. If it lands, the defense's effect resolves (`reduce-damage` reduces the incoming hit; `heal` self-heals; `apply-status` applies a token to the attacker).
 5. The original offensive ability's damage applies with the computed reduction.
+
+**Event trace.** A single `select-defense` dispatch produces this event sequence (plus any sub-effects from the defensive ability):
+
+```
+defense-intended       ← which defense was chosen + diceCount + abilityName
+defense-dice-rolled    ← descriptors for the rolled dice
+defense-resolved       ← landed/missed + final reduction + matched ability name
+damage-dealt           ← residual damage applies through `applyAttackEffects`
+hp-changed             ← defender's HP delta
+```
+
+The choreographer plays them out as a paced sequence (banner → tumble → match/miss banner → damage). `state.pendingAttack` is cleared at the end of the dispatch, *before* the choreographer plays anything — so any UI logic that needs to know "a defense is in flight" must also inspect the queued/playing event types, not just `pendingAttack` (see `MatchScreen.DefenseTray` + `DefenseStatusPanel`).
+
+**There is no manual ROLL action for defense.** An earlier iteration split `select-defense` and `roll-defense-dice` into two dispatches with a `pendingDefenseRoll` halt; that has been collapsed back into a single inline resolve.
 
 Each `AbilityDef` in the defensive ladder may declare `defenseDiceCount: 2 | 3 | 4 | 5` (default 3) — fewer dice = quick parry, more dice = full brace.
 
@@ -626,7 +646,9 @@ For `undefendable` / `pure` / `ultimate` damage, the flow short-circuits — `at
 
 ### Why a module-level subscriber, not useEffect
 
-The queue drainer subscribes to `choreoStore` at module level (`useChoreoStore.subscribe(() => pump())`), not inside a React `useEffect`. React 18 StrictMode double-invokes effects, which would cancel the pump's own timer mid-flight and deadlock the queue. The module-level subscription survives across re-renders and StrictMode invocations.
+The choreographer queue drainer (`pump`) subscribes to `choreoStore` at module level (`useChoreoStore.subscribe(() => pump())`), not inside a React `useEffect`. React 18 StrictMode double-invokes effects, which would cancel the pump's own timer mid-flight and deadlock the queue. The module-level subscription survives across re-renders and StrictMode invocations.
+
+The **AI driver** (`MatchScreen.tsx`) follows the same pattern in spirit — it installs a one-shot `useEffect` per match-screen mount that registers store subscriptions on `useGameStore` and `useChoreoStore`, runs a 600ms-tick scheduler, and a 500ms safety-net `setInterval`. The store subscriptions themselves are the live wires; the surrounding `useEffect` exists only to clean them up on unmount. Either way, the actual reactivity is store-subscription-driven, not React-dep-array-driven.
 
 ### Beat durations
 

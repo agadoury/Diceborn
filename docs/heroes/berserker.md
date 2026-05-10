@@ -82,8 +82,9 @@ turn** (capped at +1 stack per turn even if hit multiple times).
 
 **Exclusions.**
 - Damage from status ticks (Frost-bite, Burn) does **not** trigger Frenzy.
-- Self-damage from his own abilities (Avalanche's `self_cost`) does **not**
-  trigger Frenzy.
+- Self-damage from a hero's own abilities (via `self_cost`) does **not**
+  trigger Frenzy. (No live Berserker ability currently uses `self_cost`,
+  but the engine still respects this rule if one is added.)
 
 **Effect per stack.** +1 damage to all offensive abilities. Applied at
 resolution time via the engine's passive-counter aggregation
@@ -159,11 +160,12 @@ actual damage to the opponent.
 
 ## 7. Offensive ladder
 
+Canonical shape: 1× T1 + 3× T2 + 2× T3 + 1× T4. The T4 is always gated
+on `5× face-6` (here: 5 howl), making it a career-moment ultimate.
 Tier-band bands (target landing rate) per the engine's tuning bands —
-T1 75–95%, T2 45–70%, T3 20–45%, T4-Standard 8–25%, T4 career-moment
-1–5%. Ranges below come from the original spec; the simulator's
-`simulateLandingRate` uses a simpler lock model and reports lower
-numbers in some cases.
+T1 75–95%, T2 45–80%, T3 20–45%, T4 career-moment 0.5–2%. Ranges below
+come from the original spec; the simulator's `simulateLandingRate` uses
+a simpler lock model and reports different numbers in some cases.
 
 ### T1 · Cleave
 
@@ -214,6 +216,22 @@ then a heavy slash crosses the panel as the impact lands. Audio:
 wind-whoosh layered with multiple frost impacts and final heavy hit,
 ~1.8s total.
 
+### T2 · Avalanche
+
+| Field | Value |
+|---|---|
+| Combo | `straight: length 3` |
+| Damage type | normal |
+| Effect | 6 dmg + 1 Frost-bite |
+| Target landing | 55–80% |
+| ShortText | "6 dmg + 1 Frost-bite" |
+
+**Cinematic.** Smaller-scale snow imagery — a short cascade of snow and
+ice tumbles across the upper portion of the opponent's panel and lands
+as a single heavy thud. Audio: brief avalanche-rumble + heavy impact,
+~1.6s total. (Demoted from a former T4 career-moment; the smaller
+straight-3 gate keeps it on-tier with the other T2s.)
+
 ### T3 · Blood Harvest
 
 | Field | Value |
@@ -251,33 +269,14 @@ opponent's panel that pulses for the duration of the Stun (visible Stun
 token slam-in). Audio: sharp exhale (no words) + dual axe-strike + Stun
 chime, ~2.0s total.
 
-### T4 · Avalanche (standard)
-
-| Field | Value |
-|---|---|
-| Combo | `straight: length 5` |
-| Damage type | normal |
-| Effect | 13 dmg with `self_cost: 3` (unblockable HP loss to caster), apply 3 Frost-bite |
-| Target landing | 8–25% (validated 18.9%) |
-| ShortText | "13 dmg + 3 Frost-bite, 3 self-dmg" |
-| Bark | (long primal shout, wordless) |
-
-**Cinematic.** Mountain-snow imagery — a wave of snow and ice cascades
-across the opponent's panel from the top down. Multiple impact points
-deal the 13 damage in rapid succession (4-4-5 split). Berserker
-self-damage visualizes as a brief recoil of his portrait with a small
-red flash on his own HP bar. Audio: avalanche-rumble + multiple impact
-thuds + a guttural primal shout (wordless) + final self-damage thud,
-~3.8s total.
-
 ### T4 · Wolf's Howl (career-moment)
 
 | Field | Value |
 |---|---|
-| Combo | `n-of-a-kind: count 5` (all five face value 6 = the howl face) |
+| Combo | `symbol-count: berserker:howl, count 5` (all 5 dice on face 6) |
 | Damage type | ultimate |
 | Effect | apply Stun, 14 ultimate damage, apply 4 Frost-bite, +2 Frenzy (respects cap) |
-| Target landing | 1–5% (validated 1.4%) |
+| Target landing | 0.5–2% (rare-roll career-moment ultimate) |
 | ShortText | "Stun + 14 ult + 4 Frost-bite + 2 Frenzy" |
 | Bark | "FOR THE PACK!" (his voice, layered with subtle wolf-pack chorus) |
 
@@ -385,7 +384,8 @@ All masteries are `permanent: true` and occupy a Hero Upgrade slot.
 | Ambient bed | Low wind with snow-rustle + distant intermittent wolf-howl every 30–40s. Subtle and atmospheric. |
 | Bark — on roll | (low wordless growl) |
 | Bark — T3 lands | "Yes." (single quiet word, satisfied) |
-| Bark — T4 fires | "FOR THE PACK!" (Wolf's Howl) — the audio peak of his entire kit. For Avalanche: long primal wordless shout. |
+| Bark — T4 fires | "FOR THE PACK!" (Wolf's Howl) — the audio peak of his entire kit. |
+| Bark — T2 Avalanche lands | (short primal wordless shout) — paired with the smaller-snow tumble cinematic. |
 | Bark — taking lethal hit | (silent — defiant, no words, just the sound of axes hitting snow as he falls) |
 | Bark — victory | (long wolf-howl, triumphant — held note) |
 | Bark — defeat | (silent — he falls without a sound) |
@@ -433,10 +433,13 @@ the match feels predetermined.
 ```
 THE BERSERKER · RUSH · COMPLEXITY 1
 Dice: 3 axe / 2 fur / 1 howl
-Win condition: Comeback fantasy via Frenzy stacks; close with Avalanche or the rare Wolf's Howl.
+Win condition: Comeback fantasy via Frenzy stacks; close with the rare Wolf's Howl.
 Signature: Frenzy — wounds become +1 dmg per stack (max 6).
-Tier 1: Cleave (3 axes, 4/6/8 + Frost-bite, 98%)        Tier 2: Glacier Strike / Winter Storm (49–56%)
-Tier 3: Blood Harvest / Frostfang (10–31%)              Tier 4: Avalanche / Wolf's Howl (1.4–19%)
+Ladder shape (canonical): 1× T1 + 3× T2 + 2× T3 + 1× T4.
+Tier 1: Cleave (3 axes, 4/6/8 + Frost-bite, ~98%)
+Tier 2: Glacier Strike / Winter Storm / Avalanche (45–80%)
+Tier 3: Blood Harvest / Frostfang (20–45%)
+Tier 4: Wolf's Howl (5 howl = all 5 dice on face 6, 0.5–2%)
 Token: Frost-bite (debuff, max 4 — ticks 1 dmg/upkeep + holder's offense −1/stack)
 Standout cards: War Cry, Counterstrike, Last Stand
 "The wound is the door."
