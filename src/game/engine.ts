@@ -127,12 +127,7 @@ function makeHeroSnapshot(player: PlayerId, heroId: HeroId, state: GameState, sa
     statuses: [],
     upgrades: { 1: 0, 2: 0, 3: 0, 4: 0 },
     signatureState: {},
-    ladderState: [
-      { kind: "out-of-reach", tier: 1 },
-      { kind: "out-of-reach", tier: 2 },
-      { kind: "out-of-reach", tier: 3 },
-      { kind: "out-of-reach", tier: 4 },
-    ],
+    ladderState: hero.abilityLadder.map(a => ({ kind: "out-of-reach", tier: a.tier })),
     isLowHp: false,
     nextAbilityBonusDamage: 0,
     abilityModifiers: [],
