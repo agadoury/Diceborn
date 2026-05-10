@@ -97,10 +97,10 @@ export default function HeroSelect() {
         </span>
       </header>
 
-      <div className="relative z-10 grid grid-cols-1 lg:grid-cols-[260px_1fr_360px] gap-4 lg:gap-6 max-w-6xl mx-auto">
+      <div className="relative z-10 grid grid-cols-1 lg:grid-cols-[280px_1fr_360px] gap-4 lg:gap-6 max-w-6xl mx-auto">
         {/* Left rail: hero grid */}
         <div className="lg:col-start-1">
-          <div className="flex lg:grid lg:grid-cols-2 gap-2 sm:gap-3 overflow-x-auto pb-2 lg:pb-0 -mx-2 px-2 lg:mx-0 lg:px-0">
+          <div className="flex lg:flex-col gap-2 sm:gap-3 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 -mx-2 px-2 lg:mx-0 lg:px-0">
             {ALL_HEROES.map(id => HEROES[id] && (
               <HeroCard
                 key={id}
@@ -153,17 +153,20 @@ function HeroCard({ hero, selected, onSelect }: { hero: HeroDefinition; selected
     <button
       type="button"
       onClick={onSelect}
-      className={`relative shrink-0 w-[110px] sm:w-auto aspect-square surface rounded-card grid place-items-center
+      className={`relative shrink-0 w-[110px] aspect-square lg:w-full lg:aspect-auto lg:h-24 surface rounded-card
+                  grid place-items-center lg:grid-cols-[64px_1fr] lg:place-items-center lg:px-4 lg:gap-3
                   transition-all duration-200 ease-out-quart
-                  ${selected ? "scale-105" : "opacity-90 hover:opacity-100"}`}
+                  ${selected ? "scale-105 lg:scale-[1.02]" : "opacity-90 hover:opacity-100"}`}
       style={selected ? {
         boxShadow: `0 0 0 2px ${hero.accentColor}, 0 0 24px ${hero.accentColor}aa`,
       } : undefined}
       aria-pressed={selected}
     >
-      <HeroPortrait hero={hero.id} accent={hero.accentColor} size={64} active />
-      <div className="absolute bottom-1 left-2 right-2 text-center">
-        <div className="text-[10px] sm:text-xs font-display tracking-widest"
+      <div className="lg:col-start-1 lg:justify-self-start">
+        <HeroPortrait hero={hero.id} accent={hero.accentColor} size={64} active />
+      </div>
+      <div className="absolute bottom-1 left-2 right-2 text-center lg:static lg:col-start-2 lg:text-left lg:justify-self-stretch lg:min-w-0">
+        <div className="text-[10px] sm:text-xs lg:text-sm font-display tracking-widest lg:truncate"
              style={{ color: hero.accentColor }}>
           {hero.name}
         </div>
