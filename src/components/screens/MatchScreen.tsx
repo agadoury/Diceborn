@@ -91,50 +91,55 @@ export default function MatchScreen() {
     setCurtain(false);
   }
 
-  // AI driver — fires whenever the AI has an action to take. That includes
-  // its own turn, *and* off-turn responses where it's the defender of a
-  // pending attack or the holder of a pending counter prompt.
-  const aiCooldownRef = useRef<number | null>(null);
+  // AI driver — installed once per match-screen mount. Subscribes directly to
+  // the game and choreo stores so it reacts immediately to dispatches and
+  // queue drains without depending on React effect timing. Polls every 500ms
+  // as a safety net in case a store change races the subscribe.
   useEffect(() => {
-    if (!state || mode !== "vs-ai" || !aiPlayer) return;
-    if (state.winner) return;
-    if (!inputUnlocked) return;
-
-    const aiIsDefender = !!(state.pendingAttack && state.pendingAttack.defender === aiPlayer);
-    const aiHasPendingCounter = !!(state.pendingCounter && state.pendingCounter.holder === aiPlayer);
-    const aiCanAct =
-      state.activePlayer === aiPlayer || aiIsDefender || aiHasPendingCounter;
-    if (!aiCanAct) return;
-    // On the AI's own turn, if the human is the defender of a pending
-    // attack the engine is paused waiting for the human's select-defense.
-    // Don't fire — nextAiAction would fall through to advance-phase / end-turn
-    // and blow past the pause.
-    if (
-      state.activePlayer === aiPlayer &&
-      state.pendingAttack &&
-      state.pendingAttack.defender !== aiPlayer
-    ) return;
-
-    if (aiCooldownRef.current) window.clearTimeout(aiCooldownRef.current);
-    aiCooldownRef.current = window.setTimeout(() => {
-      // Read state fresh inside the timeout to avoid stale snapshots.
-      const live = useGameStore.getState().state;
+    if (mode !== "vs-ai" || !aiPlayer) return;
+    let timer: number | null = null;
+    let stopped = false;
+    function tick() {
+      if (stopped) return;
+      const gs = useGameStore.getState();
+      const live = gs.state;
       if (!live || live.winner) return;
-      const stillCanAct =
-        live.activePlayer === aiPlayer ||
-        (live.pendingAttack && live.pendingAttack.defender === aiPlayer) ||
-        (live.pendingCounter && live.pendingCounter.holder === aiPlayer);
-      if (!stillCanAct) return;
+      const choreo = useChoreoStore.getState();
+      const inputReady = choreo.queue.length === 0 && !choreo.playing && !choreo.cinematic;
+      if (!inputReady) return;
+      const aiIsDefender = !!(live.pendingAttack && live.pendingAttack.defender === aiPlayer);
+      const aiHasPendingCounter = !!(live.pendingCounter && live.pendingCounter.holder === aiPlayer);
+      const aiCanAct =
+        live.activePlayer === aiPlayer || aiIsDefender || aiHasPendingCounter;
+      if (!aiCanAct) return;
+      // AI is the attacker waiting for the human to defend — don't fire,
+      // nextAiAction would advance-phase past the pause.
       if (
         live.activePlayer === aiPlayer &&
         live.pendingAttack &&
         live.pendingAttack.defender !== aiPlayer
       ) return;
-      const action = nextAiAction(live, aiPlayer);
-      dispatch(action);
-    }, 900);   // breathe between AI actions so the player can read what just happened
-    return () => { if (aiCooldownRef.current) window.clearTimeout(aiCooldownRef.current); };
-  }, [state, mode, aiPlayer, inputUnlocked, dispatch]);
+      gs.dispatch(nextAiAction(live, aiPlayer));
+    }
+    function schedule() {
+      if (timer != null || stopped) return;
+      timer = window.setTimeout(() => { timer = null; tick(); }, 600);
+    }
+    const unsubGame = useGameStore.subscribe(() => schedule());
+    const unsubChoreo = useChoreoStore.subscribe(() => schedule());
+    // Safety-net poller: the subscribe targets cover the common cases, but a
+    // 500ms tick guarantees we never miss a transition (e.g. a queue drain
+    // that landed between subscribe registrations).
+    const poller = window.setInterval(() => schedule(), 500);
+    schedule();   // kick once on mount
+    return () => {
+      stopped = true;
+      unsubGame();
+      unsubChoreo();
+      if (timer != null) window.clearTimeout(timer);
+      window.clearInterval(poller);
+    };
+  }, [mode, aiPlayer]);
 
   // Hooks that depend on `state` MUST be called before any early return —
   // Rules of Hooks. All safely handle null state internally.
