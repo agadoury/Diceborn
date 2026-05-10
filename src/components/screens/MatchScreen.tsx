@@ -98,6 +98,12 @@ export default function MatchScreen() {
     if (state.activePlayer !== aiPlayer) return;
     if (state.winner) return;
     if (!inputUnlocked) return;
+    // When the AI is the attacker and the human is the defender, the engine
+    // is paused on `pendingAttack` waiting for the human's select-defense.
+    // The AI driver must NOT fire here — otherwise nextAiAction falls through
+    // to advance-phase / end-turn, blowing past the pause and flipping the
+    // turn before the defense resolves.
+    if (state.pendingAttack && state.pendingAttack.defender !== aiPlayer) return;
 
     if (aiCooldownRef.current) window.clearTimeout(aiCooldownRef.current);
     aiCooldownRef.current = window.setTimeout(() => {
