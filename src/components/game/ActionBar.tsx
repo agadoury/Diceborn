@@ -3,7 +3,9 @@
  *
  * Phase-driven primary action:
  *   main-pre        → ROLL  (advances to offensive-roll, performs first roll)
- *   offensive-roll  → if attempts > 0 → REROLL, else CONFIRM
+ *   offensive-roll  → CONFIRM (primary); REROLL (N left) shown as secondary
+ *                     while attempts remain so the player can fire the
+ *                     current dice without burning rerolls.
  *   main-post       → END TURN
  *   discard         → (auto-advance)
  *
@@ -37,6 +39,7 @@ export function ActionBar({
   let primaryLabel = "WAITING";
   let primaryAction: () => void = () => {};
   let primaryEnabled = false;
+  let secondary: { label: string; action: () => void } | null = null;
 
   if (isViewerActive) {
     if (phase === "main-pre") {
@@ -44,14 +47,12 @@ export function ActionBar({
       primaryAction = onRoll;
       primaryEnabled = enabled;
     } else if (phase === "offensive-roll") {
-      if (active.rollAttemptsRemaining > 0) {
-        primaryLabel = `REROLL (${active.rollAttemptsRemaining} left)`;
-        primaryAction = onRoll;
-      } else {
-        primaryLabel = "CONFIRM";
-        primaryAction = onAdvancePhase;
-      }
+      primaryLabel = "CONFIRM";
+      primaryAction = onAdvancePhase;
       primaryEnabled = enabled;
+      if (active.rollAttemptsRemaining > 0) {
+        secondary = { label: `REROLL (${active.rollAttemptsRemaining} left)`, action: onRoll };
+      }
     } else if (phase === "main-post") {
       primaryLabel = "END TURN";
       primaryAction = onEndTurn;
@@ -83,6 +84,18 @@ export function ActionBar({
           >
             ☰
           </button>
+        )}
+        {secondary && (
+          <Button
+            size="md"
+            variant="secondary"
+            disabled={!primaryEnabled}
+            onClick={secondary.action}
+            sound={null}
+            className="shrink-0"
+          >
+            {secondary.label}
+          </Button>
         )}
         <div className="flex-1">
           <Button
