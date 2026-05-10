@@ -16,7 +16,8 @@
 import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/cn";
-import type { AbilityDef, DiceCombo, HeroDefinition, LadderRowState, SymbolId } from "@/game/types";
+import type { AbilityDef, DiceCombo, HeroDefinition, HeroSnapshot, LadderRowState, SymbolId } from "@/game/types";
+import { resolveAbilityFor } from "@/game/cards";
 import { FACE_GLYPHS, FACE_TINT } from "./dieFaces";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { sfx } from "@/audio/sfx";
@@ -27,9 +28,13 @@ interface AbilityLadderProps {
   className?: string;
   /** Set false on the opponent's ladder to suppress some treatments. */
   isOpponentView?: boolean;
+  /** When provided, ladder rows are resolved through ladder-upgrade
+   *  modifiers (replace + append + repeat) so an upgrade in flight surfaces
+   *  the new combo / name / effect on the UI. */
+  snapshot?: HeroSnapshot;
 }
 
-export function AbilityLadder({ hero, rows, className, isOpponentView = false }: AbilityLadderProps) {
+export function AbilityLadder({ hero, rows, className, isOpponentView = false, snapshot }: AbilityLadderProps) {
   // Track which row is currently FIRING for sting playback on transition.
   const prevFiringRef = useRef<number>(-1);
   const prevLethalRef = useRef<Set<number>>(new Set());
@@ -52,12 +57,18 @@ export function AbilityLadder({ hero, rows, className, isOpponentView = false }:
     prevLethalRef.current = newLethal;
   }, [rows]);
 
+  // Resolve through ladder-upgrade pipeline when a snapshot is supplied.
+  // Without it (e.g. dev-tools previews), fall back to base abilities with no replacement marker.
+  const resolvedAbilities = snapshot
+    ? hero.abilityLadder.map(a => resolveAbilityFor(snapshot, a, "offensive"))
+    : hero.abilityLadder.map(a => ({ ...a, isReplaced: false as boolean }));
+
   // Group abilities by tier and render T4 → T1. Within a tier, order by
   // base damage descending so the most-impactful row sits at the top.
   const grouped = ([4, 3, 2, 1] as const).map(tier => ({
     tier,
-    items: hero.abilityLadder
-      .map((ability, idx) => ({ ability, idx, state: rows[idx] }))
+    items: resolvedAbilities
+      .map((ability, idx) => ({ ability, idx, state: rows[idx], isReplaced: ability.isReplaced }))
       .filter(x => x.ability.tier === tier)
       .sort((a, b) => effectMaxDamage(b.ability.effect) - effectMaxDamage(a.ability.effect)),
   })).filter(g => g.items.length > 0);
@@ -76,13 +87,14 @@ export function AbilityLadder({ hero, rows, className, isOpponentView = false }:
             <span className="flex-1 h-px bg-white/5" />
             <span>{tierName(group.tier)}</span>
           </div>
-          {group.items.map(({ ability, idx, state }) => (
+          {group.items.map(({ ability, idx, state, isReplaced }) => (
             <Row
               key={idx}
               ability={ability}
               state={state}
               accent={hero.accentColor}
               isOpponentView={isOpponentView}
+              isReplaced={isReplaced}
             />
           ))}
         </div>
@@ -110,8 +122,8 @@ function effectMaxDamage(effect: import("@/game/types").AbilityEffect): number {
 }
 
 function Row({
-  ability, state, accent, isOpponentView,
-}: { ability: AbilityDef; state: LadderRowState; accent: string; isOpponentView: boolean }) {
+  ability, state, accent, isOpponentView, isReplaced,
+}: { ability: AbilityDef; state: LadderRowState; accent: string; isOpponentView: boolean; isReplaced?: boolean }) {
   const isUlt = ability.tier === 4;
   const lethal = state.kind !== "out-of-reach" && (state as { lethal?: boolean }).lethal;
   const stateKind = state.kind;
@@ -187,6 +199,11 @@ function Row({
           <div className={cn("font-display tracking-wider truncate", isUlt ? "text-base sm:text-lg" : "text-sm")}
                style={{ color: accent }}>
             {ability.name}
+            {isReplaced && (
+              <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-widest bg-arena-0/70 text-ink ring-1 ring-white/15 align-middle">
+                UPGRADED
+              </span>
+            )}
             {badge}
             {lethal && <LethalTag />}
           </div>

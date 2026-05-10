@@ -21,6 +21,7 @@ import type {
 } from "./types";
 import { nextInt } from "./rng";
 import { stacksOf } from "./status";
+import { resolveAbilityFor } from "./cards";
 
 // ── Symbol tallying ──────────────────────────────────────────────────────────
 export function symbolsOnDice(dice: ReadonlyArray<Die>): SymbolId[] {
@@ -299,10 +300,17 @@ export function evaluateLadder(
 ): LadderRowState[] {
   // Use face-aware combo evaluation so n-of-a-kind and straight work.
   const faces = active.dice.map(d => d.faces[d.current]);
+  // Resolve each ladder slot through the ladder-upgrade pipeline so
+  // replacements / appended effects / repeats reflect on the live UI and
+  // reachability sampler. Field-tweak modifications continue to be applied
+  // at effect-resolution time inside phases.ts; this resolver only swaps
+  // the structural pieces (combo, name, etc.).
+  const resolved = hero.abilityLadder.map(a => resolveAbilityFor(active, a, "offensive"));
   const currentlyMatched: number[] = [];
-  for (let i = 0; i < hero.abilityLadder.length; i++) {
-    // §15.6: combo-overrides loosen the match requirement on selected abilities.
-    const combo = effectiveCombo(active, hero.abilityLadder[i]);
+  for (let i = 0; i < resolved.length; i++) {
+    // §15.6: combo-overrides further loosen the match requirement on top of
+    // the ladder-upgrade resolution.
+    const combo = effectiveCombo(active, resolved[i]);
     if (comboMatchesFaces(combo, faces)) currentlyMatched.push(i);
   }
 
@@ -311,7 +319,7 @@ export function evaluateLadder(
   let firingTier = -1;
   let firingDamage = -Infinity;
   for (const idx of currentlyMatched) {
-    const a = hero.abilityLadder[idx];
+    const a = resolved[idx];
     const dmg = effectDamageOnOpponent(a.effect);
     if (a.tier > firingTier || (a.tier === firingTier && dmg > firingDamage)) {
       firingIdx = idx;
@@ -320,7 +328,7 @@ export function evaluateLadder(
     }
   }
 
-  const rows: LadderRowState[] = hero.abilityLadder.map((ability, idx) => {
+  const rows: LadderRowState[] = resolved.map((ability, idx) => {
     const tier = ability.tier;
     const lethal = computeLethal(ability, active, opts);
 

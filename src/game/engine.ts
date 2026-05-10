@@ -13,6 +13,7 @@
 import type {
   Action,
   ApplyResult,
+  CardId,
   Die,
   GameEvent,
   GameState,
@@ -44,7 +45,7 @@ export function applyAction(state: GameState, action: Action): ApplyResult {
   const events: GameEvent[] = [];
 
   switch (action.kind) {
-    case "start-match":     events.push(...startMatch(next, action.seed, action.p1, action.p2, action.coinFlipWinner)); break;
+    case "start-match":     events.push(...startMatch(next, action.seed, action.p1, action.p2, action.coinFlipWinner, action.p1Deck, action.p2Deck)); break;
     case "advance-phase":   events.push(...advancePhase(next)); break;
     case "toggle-die-lock": events.push(...toggleDieLock(next, action.die)); break;
     case "roll-dice":       events.push(...rollAction(next)); break;
@@ -67,6 +68,7 @@ export function applyAction(state: GameState, action: Action): ApplyResult {
 // ── start-match ─────────────────────────────────────────────────────────────
 function startMatch(
   state: GameState, seed: number, p1: HeroId, p2: HeroId, coin: PlayerId,
+  p1Deck?: ReadonlyArray<CardId>, p2Deck?: ReadonlyArray<CardId>,
 ): GameEvent[] {
   state.rngSeed = seed;
   state.rngCursor = 1;          // skip 0 so coinFlip is deterministic but consumed.
@@ -75,8 +77,8 @@ function startMatch(
   state.startPlayerSkippedFirstIncome = false;
   state.turn = 1;
   state.players = {
-    p1: makeHeroSnapshot("p1", p1, state),
-    p2: makeHeroSnapshot("p2", p2, state),
+    p1: makeHeroSnapshot("p1", p1, state, p1Deck),
+    p2: makeHeroSnapshot("p2", p2, state, p2Deck),
   };
   // Bankable signature passive: seed signatureState[passiveKey] with bankStartsAt.
   for (const pid of ["p1", "p2"] as const) {
@@ -108,9 +110,9 @@ function startMatch(
   return events;
 }
 
-function makeHeroSnapshot(player: PlayerId, heroId: HeroId, state: GameState): HeroSnapshot {
+function makeHeroSnapshot(player: PlayerId, heroId: HeroId, state: GameState, savedDeckIds?: ReadonlyArray<CardId>): HeroSnapshot {
   const hero = getHero(heroId);
-  const cards = getDeckCards(heroId);
+  const cards = getDeckCards(heroId, savedDeckIds);
   return {
     player, hero: heroId,
     hp: STARTING_HP,

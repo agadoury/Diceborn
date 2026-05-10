@@ -5,11 +5,11 @@
  * responsible for registering its own signature status tokens at import
  * time (see `heroes/berserker.ts` for the pattern). Card pools live in
  * `cards/` and are looked up by hero id at deck-build time — they are
- * NOT carried on `HeroDefinition`, so the upcoming deck-builder feature
- * can swap card lists without touching hero data.
+ * NOT carried on `HeroDefinition`, so the deck-builder feature can swap
+ * card lists without touching hero data.
  */
 
-import type { Card, HeroDefinition, HeroId } from "../game/types";
+import type { Card, CardId, HeroDefinition, HeroId } from "../game/types";
 import { GENERIC_CARDS, HERO_CARDS } from "./cards";
 import { BERSERKER } from "./heroes/berserker";
 import { PYROMANCER } from "./heroes/pyromancer";
@@ -31,14 +31,38 @@ export function getRegisteredHeroIds(): HeroId[] {
   return Object.keys(HEROES) as HeroId[];
 }
 
-/** Resolve the deck for a hero. Today this is just the hero's per-hero
- *  pool from `HERO_CARDS`. The deck-builder feature (in flight) will
- *  layer in player-selected cards / generic universals on top of this
- *  same entry point so callers don't need to change. */
-export function getDeckCards(id: HeroId): Card[] {
-  const pool = HERO_CARDS[id];
-  if (!pool) return [];
-  return pool.slice();
+/** Every card a hero can draft into a deck — hero-specific pool plus
+ *  the universal generic pool. Used by the deck-builder catalog view. */
+export function getCardCatalog(id: HeroId): Card[] {
+  const pool = HERO_CARDS[id] ?? [];
+  return [...pool, ...GENERIC_CARDS];
+}
+
+/** Build the in-match deck for a hero. When `savedDeckIds` is provided we
+ *  resolve each id via the catalog and use those cards in their stated
+ *  order (the engine still shuffles the result via `buildDeck`). When
+ *  omitted — or when any id fails to resolve — we fall back to the
+ *  hero's recommendedDeck. */
+export function getDeckCards(id: HeroId, savedDeckIds?: ReadonlyArray<CardId>): Card[] {
+  const catalog = getCardCatalog(id);
+  const byId = new Map(catalog.map(c => [c.id, c]));
+  const hero = getHero(id);
+  const deckIds = savedDeckIds ?? hero.recommendedDeck;
+  const cards: Card[] = [];
+  for (const cardId of deckIds) {
+    const card = byId.get(cardId);
+    if (!card) {
+      // Unknown id in saved deck — fall back to recommended deck wholesale
+      // rather than playing a partial/invalid hand.
+      return hero.recommendedDeck.map(rid => {
+        const c = byId.get(rid);
+        if (!c) throw new Error(`Hero "${id}" recommendedDeck references unknown card id "${rid}"`);
+        return c;
+      });
+    }
+    cards.push(card);
+  }
+  return cards;
 }
 
 export { GENERIC_CARDS };

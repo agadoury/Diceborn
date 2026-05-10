@@ -480,4 +480,15 @@ export const LIGHTBEARER: HeroDefinition = {
       },
     },
   ],
+
+  recommendedDeck: [
+    // 4 generic
+    "generic/quick-draw", "generic/focus", "generic/cleanse", "generic/bandage",
+    // 3 dice-manip (lightbearer's symbol-bend / set-face cards)
+    "lightbearer/steady-light", "lightbearer/faith", "lightbearer/resolve",
+    // 3 ladder-upgrade (T1, T2, T3 — offensive starter; cathedral-light deferred to deck-builder choice)
+    "lightbearer/dawnblade-mastery", "lightbearer/solar-devotion", "lightbearer/sunblade-mastery",
+    // 2 signature
+    "lightbearer/aegis-of-dawn", "lightbearer/sanctuary",
+  ],
 };

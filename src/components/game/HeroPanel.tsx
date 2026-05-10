@@ -100,7 +100,7 @@ export function HeroPanel({ hero, snapshot, variant, active, isOpponentView = fa
       {/* Inner ladder — mobile only. Desktop has its own side rail. */}
       {!isCompact && (
         <div className="lg:hidden">
-          <CollapsibleLadder hero={hero} rows={snapshot.ladderState} isOpponentView={isOpponentView} />
+          <CollapsibleLadder hero={hero} rows={snapshot.ladderState} isOpponentView={isOpponentView} snapshot={snapshot} />
         </div>
       )}
     </div>
@@ -108,8 +108,8 @@ export function HeroPanel({ hero, snapshot, variant, active, isOpponentView = fa
 }
 
 function CollapsibleLadder({
-  hero, rows, isOpponentView,
-}: { hero: HeroDefinition; rows: HeroSnapshot["ladderState"]; isOpponentView: boolean }) {
+  hero, rows, isOpponentView, snapshot,
+}: { hero: HeroDefinition; rows: HeroSnapshot["ladderState"]; isOpponentView: boolean; snapshot?: HeroSnapshot }) {
   const [open, setOpen] = useState(true);
   return (
     <div className="mt-2">
@@ -123,7 +123,7 @@ function CollapsibleLadder({
       </button>
       {open && (
         <div className="mt-1">
-          <AbilityLadder hero={hero} rows={rows} isOpponentView={isOpponentView} />
+          <AbilityLadder hero={hero} rows={rows} isOpponentView={isOpponentView} snapshot={snapshot} />
         </div>
       )}
     </div>

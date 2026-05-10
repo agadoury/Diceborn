@@ -12,9 +12,10 @@
  * next AI action.
  */
 import { create } from "zustand";
-import type { Action, GameEvent, GameState, HeroId, PlayerId } from "@/game/types";
+import type { Action, CardId, GameEvent, GameState, HeroId, PlayerId } from "@/game/types";
 import { applyAction, makeEmptyState } from "@/game/engine";
 import { enqueueEvents, useChoreoStore } from "./choreoStore";
+import { loadDeck } from "./deckStorage";
 
 export type MatchMode = "hot-seat" | "vs-ai";
 
@@ -29,7 +30,14 @@ interface GameStoreState {
   matchLog: GameEvent[];
 
   // Actions
-  startMatch: (opts: { p1: HeroId; p2: HeroId; mode: MatchMode; seed?: number; coin?: PlayerId }) => void;
+  startMatch: (opts: {
+    p1: HeroId; p2: HeroId; mode: MatchMode;
+    seed?: number; coin?: PlayerId;
+    /** Optional explicit decks. When omitted, each player's saved deck (if
+     *  any) is loaded from localStorage; the engine in turn falls back to the
+     *  hero's recommendedDeck when no saved deck exists. */
+    p1Deck?: ReadonlyArray<CardId>; p2Deck?: ReadonlyArray<CardId>;
+  }) => void;
   dispatch: (action: Action) => void;
   reset: () => void;
 }
@@ -41,12 +49,15 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   lastEvents: [],
   matchLog: [],
 
-  startMatch: ({ p1, p2, mode, seed, coin }) => {
+  startMatch: ({ p1, p2, mode, seed, coin, p1Deck, p2Deck }) => {
     const empty = makeEmptyState();
     const matchSeed = seed ?? (Date.now() & 0xffff);
     const winner = coin ?? (Math.random() < 0.5 ? "p1" : "p2");
+    const resolvedP1Deck = p1Deck ?? loadDeck(p1) ?? undefined;
+    const resolvedP2Deck = p2Deck ?? loadDeck(p2) ?? undefined;
     const r = applyAction(empty, {
       kind: "start-match", seed: matchSeed, p1, p2, coinFlipWinner: winner,
+      p1Deck: resolvedP1Deck, p2Deck: resolvedP2Deck,
     });
     enqueueEvents(r.events);
     set({
