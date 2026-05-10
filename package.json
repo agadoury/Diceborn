@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
-  "description": "Pact of Heroes — Hearthstone with dice. Fan-made digital adaptation in the spirit of Dice Throne.",
+  "description": "Pact of Heroes — a 1v1 dice-and-card duel. Mobile-first, installable as a PWA.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
