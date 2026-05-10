@@ -22,9 +22,12 @@ interface HeroPanelProps {
   active: boolean;        // is this the side whose turn it is?
   isOpponentView?: boolean;
   className?: string;
+  /** Forwarded to AbilityLadder so the active player can click a row to fire
+   *  during offensive-roll. */
+  onFire?: (abilityIndex: number) => void;
 }
 
-export function HeroPanel({ hero, snapshot, variant, active, isOpponentView = false, className }: HeroPanelProps) {
+export function HeroPanel({ hero, snapshot, variant, active, isOpponentView = false, className, onFire }: HeroPanelProps) {
   // Subscribe to most-recent hero-state events for portrait reactivity.
   const lastEvent = useChoreoStore(s => s.playing);
   const [portraitState, setPortraitState] = useState<HeroPortraitState>("idle");
@@ -100,7 +103,7 @@ export function HeroPanel({ hero, snapshot, variant, active, isOpponentView = fa
       {/* Inner ladder — mobile only. Desktop has its own side rail. */}
       {!isCompact && (
         <div className="lg:hidden">
-          <CollapsibleLadder hero={hero} rows={snapshot.ladderState} isOpponentView={isOpponentView} snapshot={snapshot} />
+          <CollapsibleLadder hero={hero} rows={snapshot.ladderState} isOpponentView={isOpponentView} snapshot={snapshot} onFire={onFire} />
         </div>
       )}
     </div>
@@ -108,8 +111,8 @@ export function HeroPanel({ hero, snapshot, variant, active, isOpponentView = fa
 }
 
 function CollapsibleLadder({
-  hero, rows, isOpponentView, snapshot,
-}: { hero: HeroDefinition; rows: HeroSnapshot["ladderState"]; isOpponentView: boolean; snapshot?: HeroSnapshot }) {
+  hero, rows, isOpponentView, snapshot, onFire,
+}: { hero: HeroDefinition; rows: HeroSnapshot["ladderState"]; isOpponentView: boolean; snapshot?: HeroSnapshot; onFire?: (abilityIndex: number) => void }) {
   const [open, setOpen] = useState(true);
   return (
     <div className="mt-2">
@@ -123,7 +126,7 @@ function CollapsibleLadder({
       </button>
       {open && (
         <div className="mt-1">
-          <AbilityLadder hero={hero} rows={rows} isOpponentView={isOpponentView} snapshot={snapshot} />
+          <AbilityLadder hero={hero} rows={rows} isOpponentView={isOpponentView} snapshot={snapshot} onFire={onFire} />
         </div>
       )}
     </div>

@@ -32,9 +32,14 @@ interface AbilityLadderProps {
    *  modifiers (replace + append + repeat) so an upgrade in flight surfaces
    *  the new combo / name / effect on the UI. */
   snapshot?: HeroSnapshot;
+  /** Called with the ability's ladder index when the user clicks a firing
+   *  or triggered row. Skips the picker overlay — caller is responsible for
+   *  the dispatch chain (advance-phase + select-offensive-ability). When
+   *  omitted, rows are not clickable. */
+  onFire?: (abilityIndex: number) => void;
 }
 
-export function AbilityLadder({ hero, rows, className, isOpponentView = false, snapshot }: AbilityLadderProps) {
+export function AbilityLadder({ hero, rows, className, isOpponentView = false, snapshot, onFire }: AbilityLadderProps) {
   // Track which row is currently FIRING for sting playback on transition.
   const prevFiringRef = useRef<number>(-1);
   const prevLethalRef = useRef<Set<number>>(new Set());
@@ -95,6 +100,7 @@ export function AbilityLadder({ hero, rows, className, isOpponentView = false, s
               accent={hero.accentColor}
               isOpponentView={isOpponentView}
               isReplaced={isReplaced}
+              onFire={onFire ? () => onFire(idx) : undefined}
             />
           ))}
         </div>
@@ -122,11 +128,12 @@ function effectMaxDamage(effect: import("@/game/types").AbilityEffect): number {
 }
 
 function Row({
-  ability, state, accent, isOpponentView, isReplaced,
-}: { ability: AbilityDef; state: LadderRowState; accent: string; isOpponentView: boolean; isReplaced?: boolean }) {
+  ability, state, accent, isOpponentView, isReplaced, onFire,
+}: { ability: AbilityDef; state: LadderRowState; accent: string; isOpponentView: boolean; isReplaced?: boolean; onFire?: () => void }) {
   const isUlt = ability.tier === 4;
   const lethal = state.kind !== "out-of-reach" && (state as { lethal?: boolean }).lethal;
   const stateKind = state.kind;
+  const firePrimed = !!onFire && (stateKind === "firing" || stateKind === "triggered");
 
   // Per-state visual:
   let scale = 1;
@@ -176,11 +183,17 @@ function Row({
         layout
         animate={{ scale, opacity }}
         transition={{ type: "spring", stiffness: 360, damping: 24 }}
+        role={firePrimed ? "button" : undefined}
+        tabIndex={firePrimed ? 0 : undefined}
+        onClick={firePrimed ? onFire : undefined}
+        onKeyDown={firePrimed ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onFire?.(); } } : undefined}
+        aria-label={firePrimed ? `Fire ${ability.name}` : undefined}
         className={cn(
           "surface relative flex items-center gap-3 px-3 py-2 sm:py-3",
           "rounded-card overflow-hidden",
           isUlt && "ring-1 ring-amber-300/30",
           lethal && "animate-pulse",
+          firePrimed && "cursor-pointer hover:brightness-110 active:scale-[0.98]",
         )}
         style={{
           filter: `saturate(${saturate})`,

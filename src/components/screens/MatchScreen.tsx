@@ -155,6 +155,20 @@ export default function MatchScreen() {
     if (!live || live.phase !== "offensive-roll") return;
     dispatch({ kind: "toggle-die-lock", die: idx as 0|1|2|3|4 });
   }
+  /** Click on a firing/triggered ladder row during offensive-roll: open the
+   *  picker (advance-phase) and immediately resolve to that ability. The
+   *  store applies actions synchronously, so the second dispatch sees the
+   *  pendingOffensiveChoice the first one just set. */
+  function fireFromLadder(abilityIndex: number) {
+    const live = useGameStore.getState().state;
+    if (!live || live.phase !== "offensive-roll") return;
+    dispatch({ kind: "advance-phase" });
+    const after = useGameStore.getState().state;
+    if (!after?.pendingOffensiveChoice) return;
+    if (!after.pendingOffensiveChoice.matches.some(m => m.abilityIndex === abilityIndex)) return;
+    dispatch({ kind: "select-offensive-ability", abilityIndex });
+  }
+  const ladderFire = canInput && state.phase === "offensive-roll" ? fireFromLadder : undefined;
 
   return (
     <div className="safe-pad min-h-svh bg-arena-0 text-ink relative flex flex-col
@@ -198,7 +212,7 @@ export default function MatchScreen() {
           <div className="text-[10px] uppercase tracking-widest text-muted mb-2">
             {meHero.name} ladder
           </div>
-          <DesktopSideLadder hero={meHero} rows={meSnap.ladderState} snapshot={meSnap} />
+          <DesktopSideLadder hero={meHero} rows={meSnap.ladderState} snapshot={meSnap} onFire={ladderFire} />
         </div>
       </div>
 
@@ -241,6 +255,7 @@ export default function MatchScreen() {
             snapshot={meSnap}
             variant="active"
             active={myTurn}
+            onFire={ladderFire}
           />
         </div>
 
@@ -299,14 +314,15 @@ export default function MatchScreen() {
 
 /** Desktop side rail rendering the AbilityLadder (always open, no collapse). */
 function DesktopSideLadder({
-  hero, rows, isOpponentView, snapshot,
+  hero, rows, isOpponentView, snapshot, onFire,
 }: {
   hero: import("@/game/types").HeroDefinition;
   rows: import("@/game/types").HeroSnapshot["ladderState"];
   isOpponentView?: boolean;
   snapshot?: import("@/game/types").HeroSnapshot;
+  onFire?: (abilityIndex: number) => void;
 }) {
-  return <AbilityLadder hero={hero} rows={rows} isOpponentView={isOpponentView} snapshot={snapshot} />;
+  return <AbilityLadder hero={hero} rows={rows} isOpponentView={isOpponentView} snapshot={snapshot} onFire={onFire} />;
 }
 
 function readHero(s: string | null, valid: HeroId[]): HeroId | null {
