@@ -27,5 +27,5 @@ pool.
 
 ## See also
 
-- [`../DECK_BUILDING.md`](../DECK_BUILDING.md) — deck composition rules and the 4 / 3 / 3 / 2 split.
-- [`../ENGINE_AND_MECHANICS.md`](../ENGINE_AND_MECHANICS.md) — full effect grammar.
+- [`../design/deck-building.md`](../design/deck-building.md) — deck composition rules and the 4 / 3 / 3 / 2 split.
+- [`../engine/README.md`](../engine/README.md) — full effect grammar.

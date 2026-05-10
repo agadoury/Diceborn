@@ -1,10 +1,10 @@
 # Engine: Cards, CP, and the hand
 
-> Companion to [`../ENGINE_AND_MECHANICS.md`](../ENGINE_AND_MECHANICS.md). Covers
+> Companion to [`./README.md`](./README.md). Covers
 > CP economy, hand mechanics, card kinds, deck composition validator,
 > instant trigger taxonomy, the effect resolver, the modifier evaluation
 > pipeline, and the card-file split. For deck-building rules from a
-> player perspective see [`../DECK_BUILDING.md`](../DECK_BUILDING.md);
+> player perspective see [`../design/deck-building.md`](../design/deck-building.md);
 > for combat rules see [`rules.md`](./rules.md).
 
 ## 8. Cards, CP, and the hand
@@ -38,7 +38,7 @@ Legacy kinds `upgrade`, `main-action`, `roll-action`, `status` are still in the 
 
 ### Deck composition validator
 
-`cards.ts validateDeckComposition` enforces Correction 6 §9 — exactly 12 cards, with category counts and Mastery-slot rules described in detail in [`DECK_BUILDING.md` §7](../DECK_BUILDING.md#7-validation-validatedeckcomposition). T4 Ultimates intentionally have no Mastery — power lives at the curve peak.
+`cards.ts validateDeckComposition` enforces Correction 6 §9 — exactly 12 cards, with category counts and Mastery-slot rules described in detail in [`../design/deck-building.md` §7](../design/deck-building.md#7-validation-validatedeckcomposition). T4 Ultimates intentionally have no Mastery — power lives at the curve peak.
 
 ### Instant trigger taxonomy (Correction 6 §5)
 

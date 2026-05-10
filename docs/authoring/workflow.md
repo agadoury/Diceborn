@@ -8,11 +8,11 @@ touch, the validation steps, and the doc updates required.
 
 > **Companion docs** — read these before/during your change:
 >
-> - [`HERO_REQUIREMENTS.md`](../HERO_REQUIREMENTS.md) — the *design brief*. What a hero spec must contain (uniqueness pillars, dice identity, ladders, signature mechanic, originality guideline). Read first when designing a brand-new hero.
+> - [`./hero-spec.md`](./hero-spec.md) — the *design brief*. What a hero spec must contain (uniqueness pillars, dice identity, ladders, signature mechanic, originality guideline). Read first when designing a brand-new hero.
 > - [`cheatsheet.md`](./cheatsheet.md) — field-by-field reference for the hero template.
 > - [`examples.md`](./examples.md) — worked patterns for every effect primitive (mastery cards, persistent buffs, conditional bonuses, bankable spends, wildcard removes…). Use as starting points.
 > - [`../engine/rules.md`](../engine/rules.md), [`../engine/cards.md`](../engine/cards.md) — when you need to understand a primitive or its constraints.
-> - [`../DECK_BUILDING.md`](../DECK_BUILDING.md) — the deck composition rules your card pool must support.
+> - [`../design/deck-building.md`](../design/deck-building.md) — the deck composition rules your card pool must support.
 
 ## Table of contents
 
@@ -31,8 +31,8 @@ touch, the validation steps, and the doc updates required.
 ## 1. Source of truth, in one rule
 
 > **The `.ts` files in `src/content/` are the source of truth for
-> mechanical data.** The `.md` files in `docs/heroes/` and `docs/cards/`
-> are *design intent* — lore, ability roles, cinematics, tuning
+> mechanical data.** The `.md` files in `docs/content/<hero>/` are
+> *design intent* — lore, ability roles, cinematics, tuning
 > rationale.
 
 Practical consequence: **tuning passes only touch `.ts` files.** Don't
@@ -53,8 +53,8 @@ The biggest change. Plan on a multi-PR rollout if it's complex
 
 ### 2.1 Design the hero
 
-1. Read [`HERO_REQUIREMENTS.md`](../HERO_REQUIREMENTS.md) end to end. It defines the design contract — uniqueness pillars, ladder shape (1·T1 + 3·T2 + 2·T3 + 1·T4 with `5× face-6` ultimate), tuning bands, originality guideline.
-2. Fill in the [`§7 Required output template`](../HERO_REQUIREMENTS.md#7-required-output-template) — paper or scratch markdown is fine. Run the [`§8 Self-check`](../HERO_REQUIREMENTS.md#8-self-check-before-submitting). Don't skip the self-check; it catches authoring drift.
+1. Read [`./hero-spec.md`](./hero-spec.md) end to end. It defines the design contract — uniqueness pillars, ladder shape (1·T1 + 3·T2 + 2·T3 + 1·T4 with `5× face-6` ultimate), tuning bands, originality guideline.
+2. Fill in the [`§7 Required output template`](./hero-spec.md#7-required-output-template) — paper or scratch markdown is fine. Run the [`§8 Self-check`](./hero-spec.md#8-self-check-before-submitting). Don't skip the self-check; it catches authoring drift.
 3. If you're adopting a brand-new mechanical primitive (i.e. one not in [`engine/cards.md`](../engine/cards.md) or [`examples.md`](./examples.md)), open a discussion *before* writing data. New primitives may need engine-level changes.
 
 ### 2.2 Drop the data files
@@ -100,19 +100,18 @@ If your hero needs a brand-new effect primitive or modifier shape — that's a s
 
 ### 2.4 Drop the doc files
 
-Two new files, two registry edits:
+Two new files, one registry edit:
 
 ```
-docs/heroes/<heroId>.md               # NEW — hero design page
-docs/cards/<heroId>.md                # NEW — card catalog listing
-docs/heroes/README.md                 # EDIT — add roster row
-docs/cards/README.md                  # EDIT — add index row
+docs/content/<heroId>/design.md       # NEW — hero design page (lore, ability roles, cinematics, tuning rationale)
+docs/content/<heroId>/cards.md        # NEW — card catalog listing
+docs/content/README.md                # EDIT — add a roster row
 ```
 
 For the **hero design page**, follow the existing structure in
-[`berserker.md`](../heroes/berserker.md) /
-[`pyromancer.md`](../heroes/pyromancer.md) /
-[`lightbearer.md`](../heroes/lightbearer.md). Same numbered sections (Lore →
+[`berserker/design.md`](../content/berserker/design.md) /
+[`pyromancer/design.md`](../content/pyromancer/design.md) /
+[`lightbearer/design.md`](../content/lightbearer/design.md). Same numbered sections (Lore →
 Visual identity → Dice → Signature passive → Signature token →
 Resource trigger → Offensive ladder → Defensive ladder → Cards →
 Audio identity → Tuning notes → Quick reference → Engine touchpoints).
@@ -123,7 +122,7 @@ prose, not mechanical tables** — combo / damage / effect numbers all
 live in the `.ts`. Ability cinematics + tuning rationale stay in the
 doc.
 
-For the **card listing page**, follow [`berserker.md`](../cards/berserker.md). Tables of cost / kind / rules-text are fine here (they're a snapshot for browsing); just include the snapshot-disclaimer callout at the top.
+For the **card listing page**, follow [`berserker/cards.md`](../content/berserker/cards.md). Tables of cost / kind / rules-text are fine here (they're a snapshot for browsing); just include the snapshot-disclaimer callout at the top.
 
 ### 2.5 Validate
 
@@ -154,7 +153,7 @@ Smaller change; can usually ship in one PR.
 
 ```
 src/content/cards/<heroId>.ts         # EDIT — append Card entries to the array
-docs/cards/<heroId>.md                # EDIT — add row(s) to the matching table(s)
+docs/content/<heroId>/cards.md                # EDIT — add row(s) to the matching table(s)
 ```
 
 ### 3.2 Card design constraints
@@ -200,7 +199,7 @@ Numeric or value-only changes that don't change an ability's *role*:
 src/content/heroes/<heroId>.ts        # EDIT — the data file is the source of truth
 ```
 
-**That's usually all.** No doc edits required — `docs/heroes/<heroId>.md` describes ability *roles*, not specific numbers, and roles don't change when you bump damage from 4 to 5.
+**That's usually all.** No doc edits required — `docs/content/<heroId>/design.md` describes ability *roles*, not specific numbers, and roles don't change when you bump damage from 4 to 5.
 
 ### 4.3 When *do* I update the doc?
 
@@ -235,7 +234,7 @@ Similar to Scenario 3 but on the card layer.
 
 ```
 src/content/cards/<heroId>.ts         # EDIT — the data file
-docs/cards/<heroId>.md                # EDIT IF text/cost changed — table is a snapshot
+docs/content/<heroId>/cards.md                # EDIT IF text/cost changed — table is a snapshot
 ```
 
 The card-page tables are explicitly framed as a snapshot of the data file; the data file wins. Update the table when you can; don't block a PR on it.
@@ -246,7 +245,7 @@ If the card appears in any `recommendedDeck` (in the hero's `heroes/<id>.ts`), u
 
 If the card was in the `validateDeckComposition` test fixtures, update those.
 
-Players may have the removed card saved in their localStorage decks. The engine handles this gracefully — see [`DECK_BUILDING.md` §8](../DECK_BUILDING.md#8-in-match-deck-behaviour). No migration needed.
+Players may have the removed card saved in their localStorage decks. The engine handles this gracefully — see [`../design/deck-building.md` §8](../design/deck-building.md#8-in-match-deck-behaviour). No migration needed.
 
 ### 5.3 Validate
 
@@ -280,7 +279,7 @@ If any step fails, fix and re-run from step 1.
 These keep the per-hero edit cost low as the roster grows.
 
 1. **Data is the source of truth.** Hero combos / damage / effects live in `.ts`. The `.md` page describes intent — lore, role, cinematic, audio direction, tuning rationale. When data and doc disagree, data wins.
-2. **No mechanical tables in `docs/heroes/<id>.md` ladder sections.** Use prose role descriptions. The cinematic + tuning rationale belongs in the doc; the specific numbers belong in the `.ts`.
+2. **No mechanical tables in `docs/content/<id>/design.md` ladder sections.** Use prose role descriptions. The cinematic + tuning rationale belongs in the doc; the specific numbers belong in the `.ts`.
 3. **Card-page tables ARE allowed**, but framed as snapshots of the data file. Include the snapshot-disclaimer callout at the top.
 4. **Source-of-truth callouts** at the top of every per-hero / per-card page. Existing pages have the format; copy it.
 5. **Cinematic prose stays.** Cinematics are design intent — they describe what the screen does, not what numbers come out. Don't strip them when you tune.
