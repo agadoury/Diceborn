@@ -26,7 +26,7 @@ import type {
 import { ROLL_ATTEMPTS } from "./types";
 import { getHero } from "../content";
 import { tickStatusesAt, applyStatus, stacksOf, applyTokenOverrideNumeric } from "./status";
-import { drawCards, gainCp, autoDiscardOverHandCap, resolveEffect, checkState, computeConditionalBonus } from "./cards";
+import { drawCards, gainCp, autoDiscardOverHandCap, resolveEffect, checkState, computeConditionalBonus, resolveAbilityFor } from "./cards";
 import { listRegisteredStatuses, getStatusDef } from "./status";
 import { dealDamage } from "./damage";
 import {
@@ -247,7 +247,7 @@ export function beginOffensivePick(state: GameState): GameEvent[] {
     damageType: import("./types").DamageType; shortText: string;
   }> = [];
   for (let i = 0; i < hero.abilityLadder.length; i++) {
-    const a = hero.abilityLadder[i];
+    const a = resolveAbilityFor(active, hero.abilityLadder[i], "offensive");
     if (!comboMatchesFaces(a.combo, faces)) continue;
     matches.push({
       abilityIndex: i,
@@ -304,7 +304,10 @@ export function commitOffensiveAbility(state: GameState, abilityIndex: number): 
   const hero = getHero(active.hero);
 
   const faces = effectiveFiringFaces(active, hero);
-  const ability = hero.abilityLadder[abilityIndex];
+  // Resolve the ability through the ladder-upgrade pipeline (replace + append
+  // + repeat). Field-tweak modifications are still applied per-leaf inside
+  // resolveAbilityEffect via modifierMatches.
+  const ability = resolveAbilityFor(active, hero.abilityLadder[abilityIndex], "offensive");
 
   events.push({
     t: "offensive-choice-made",
@@ -438,7 +441,10 @@ export function resolveDefenseChoice(state: GameState, abilityIndex: number | nu
       landed: false,
     });
   } else {
-    const chosen = dl[abilityIndex];
+    // Resolve through the ladder-upgrade pipeline so a defensive replacement
+    // surfaces its new combo / effect / name. Field-tweak modifications
+    // continue to be applied per-leaf below by the existing modifier code.
+    const chosen = resolveAbilityFor(defender, dl[abilityIndex], "defensive");
     // Base dice count + Mastery / persistent-buff `defenseDiceCount` mods +
     // status passive modifiers (e.g. Pyromancer's defense-handicap-1 reduces
     // by 1 per stack while it sits on the defender).
@@ -567,7 +573,8 @@ function applyAttackEffects(
   const active = state.players[state.activePlayer];
   const opponent = state.players[other(state.activePlayer)];
   const hero = getHero(active.hero);
-  const ability = hero.abilityLadder[abilityIndex];
+  // Use the resolved view so replacements + appends + repeat are honored.
+  const ability = resolveAbilityFor(active, hero.abilityLadder[abilityIndex], "offensive");
 
   // Critical Ultimate damage modifiers — applied once at the top of the
   // effect resolution. damageOverride takes precedence over multiplier.
@@ -924,7 +931,11 @@ function tryOffensiveFallback(state: GameState): GameEvent[] {
   const hero = getHero(active.hero);
   const dl = hero.defensiveLadder;
   if (!dl) return events;
-  const candidates = dl.filter(d => d.offensiveFallback);
+  // Resolve each defensive entry through ladder-upgrade pipeline so a
+  // replacement upgrade in flight on a defensive slot still surfaces its
+  // (possibly overridden) `offensiveFallback` here.
+  const resolvedDefs = dl.map(d => resolveAbilityFor(active, d, "defensive"));
+  const candidates = resolvedDefs.filter(d => d.offensiveFallback);
   if (candidates.length === 0) return events;
   // Pick the first matching fallback. Roll its dice count once and check the
   // (possibly overridden) combo. If it lands, resolve the fallback effect.

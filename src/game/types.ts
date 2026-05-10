@@ -238,9 +238,21 @@ export type AbilityEffect =
   | { kind: "face-symbol-bend"; from_symbol: SymbolId; to_symbol: SymbolId;
       duration: "this-roll" | "this-turn" | { kind: "until-status"; status: StatusId; on: "applied" | "removed" } }
   /** Persistent ability modifier — match-long unless discarded. Occupies a
-   *  Hero Upgrade slot when `permanent: true`; otherwise lasts to end of turn. */
+   *  Hero Upgrade slot when `permanent: true`; otherwise lasts to end of turn.
+   *
+   *  Four composable operations:
+   *   - "transform" mode (default):
+   *      - `modifications`: field tweaks (today's Mastery model)
+   *      - `additionalEffects`: append new sub-effects (heal/status/etc on hit)
+   *      - `repeat`: run the resolved effect N times in sequence (hits twice)
+   *   - "replace" mode: `replacement` swaps the ability wholesale (different
+   *     combo, effect, name). Short-circuits the transform pipeline. */
   | { kind: "ability-upgrade"; scope: AbilityScope;
-      modifications: AbilityUpgradeMod[];
+      mode?: "transform" | "replace";
+      modifications?: AbilityUpgradeMod[];
+      additionalEffects?: AbilityEffect[];
+      repeat?: number;
+      replacement?: ReplacementAbilityDef;
       permanent: boolean }
   /** Direct manipulation of a signature passive counter (e.g. War Cry adds
    *  +3 Frenzy without the "must take damage" trigger). */
@@ -336,6 +348,23 @@ export interface AbilityDef {
     combo?: DiceCombo;
     effect: AbilityEffect;
   };
+}
+
+/** Ability shape used by ladder-upgrade cards in "replace" mode. A subset of
+ *  `AbilityDef` — just enough to fully redefine an ability slot at runtime.
+ *  No critical/T4 fields because replacements only target T1/T2/T3 + defensive.
+ *  When the replacement targets a defensive slot, `offensiveFallback` may be
+ *  declared so the swapped defense still surfaces in the fallback path. */
+export interface ReplacementAbilityDef {
+  name: string;
+  combo: DiceCombo;
+  effect: AbilityEffect;
+  shortText: string;
+  longText: string;
+  damageType: DamageType;
+  targetLandingRate?: [number, number];
+  defenseDiceCount?: 2 | 3 | 4 | 5;
+  offensiveFallback?: AbilityDef["offensiveFallback"];
 }
 
 // ── Cards ───────────────────────────────────────────────────────────────────
@@ -511,12 +540,27 @@ export interface StatusInstance {
 
 /** Persistent ability modifier in flight on a player. Either applied by a
  *  played mastery card (`permanent: true`) or by a temporary effect.
- *  `discardOn` lets the engine remove the entry on a qualifying event. */
+ *  `discardOn` lets the engine remove the entry on a qualifying event.
+ *
+ *  Carries the four operations supported by ladder upgrades — replacement
+ *  short-circuits the transform pipeline; otherwise modifications + additional
+ *  effects + repeat compose. */
 export interface ActiveAbilityModifier {
   id: string;                   // unique within the snapshot; lets discardOn target it
   source: "mastery" | "card" | "ability";
   scope: AbilityScope;
   modifications: AbilityUpgradeMod[];
+  /** Replacement-mode payload. When set, the matching ability is wholly
+   *  replaced (combo + effect + name + damage type) before the transform
+   *  pipeline runs. */
+  replacement?: ReplacementAbilityDef;
+  /** Transform-mode: append these sub-effects to the resolved ability's
+   *  effect tree. Useful for "Cleave also heals 1" / "Cleave applies stun". */
+  additionalEffects?: AbilityEffect[];
+  /** Transform-mode: run the resolved effect this many times in sequence.
+   *  Defaults to 1. `2` = "hits twice"; defensive reduction applies per hit,
+   *  status stacks accumulate, heals stack. */
+  repeat?: number;
   permanent: boolean;
   discardOn?:
     | { kind: "damage-taken-from-tier"; tier: AbilityTier }

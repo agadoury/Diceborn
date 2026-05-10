@@ -19,6 +19,7 @@ import { ROLL_ATTEMPTS } from "./types";
 import { getHero } from "../content";
 import { evaluateLadder, pickKeepMask, symbolsOnDice, comboMatches } from "./dice";
 import { stacksOf } from "./status";
+import { resolveAbilityFor } from "./cards";
 
 // ── Top-level driver: returns the next action the AI wants to take. ─────────
 export function nextAiAction(state: GameState, ai: PlayerId): Action {
@@ -112,13 +113,14 @@ function decideOffensiveRoll(state: GameState, ai: PlayerId): Action {
       // firing tier. This avoids the lock/reachability oscillation where
       // pickTargetTier flip-flops between tiers as we toggle locks.
       const symbols = symbolsOnDice(me.dice);
+      const resolved = hero.abilityLadder.map(a => resolveAbilityFor(me, a, "offensive"));
       let firingTier = -1;
-      for (let i = 0; i < hero.abilityLadder.length; i++) {
-        if (comboMatches(hero.abilityLadder[i].combo, symbols)) firingTier = i;
+      for (let i = 0; i < resolved.length; i++) {
+        if (comboMatches(resolved[i].combo, symbols)) firingTier = i;
       }
       const targetTier = firingTier >= 0 ? firingTier : pickTargetTier(state, ai);
       if (targetTier >= 0) {
-        const ability = hero.abilityLadder[targetTier];
+        const ability = resolved[targetTier];
         const keep = pickKeepMask(ability.combo, symbols);
         // If lock states differ from keep mask, toggle one die.
         for (let i = 0; i < me.dice.length; i++) {
@@ -180,7 +182,7 @@ function locksAreOptimal(state: GameState, ai: PlayerId): boolean {
   const hero = getHero(me.hero);
   const target = pickTargetTier(state, ai);
   if (target < 0) return true;
-  const ability = hero.abilityLadder[target];
+  const ability = resolveAbilityFor(me, hero.abilityLadder[target], "offensive");
   const symbols = symbolsOnDice(me.dice);
   const keep = pickKeepMask(ability.combo, symbols);
   for (let i = 0; i < me.dice.length; i++) {

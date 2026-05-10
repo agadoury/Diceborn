@@ -220,7 +220,10 @@ export function resolveEffect(effect: AbilityEffect, ctx: ResolveCtx): GameEvent
       return addAbilityModifier(ctx.caster, {
         source: "card",
         scope: effect.scope,
-        modifications: effect.modifications,
+        modifications: effect.modifications ?? [],
+        replacement: effect.replacement,
+        additionalEffects: effect.additionalEffects,
+        repeat: effect.repeat,
         permanent: effect.permanent,
       });
     case "passive-counter-modifier":
@@ -381,6 +384,110 @@ function addAbilityModifier(
   const id = givenId ?? `mod-${_modIdCounter++}`;
   caster.abilityModifiers.push({ id, ...spec });
   return [{ t: "ability-modifier-added", player: caster.player, modifierId: id, source: spec.source }];
+}
+
+// ── Ability resolution (ladder-upgrade composition) ─────────────────────────
+/** A read-only view of an ability after the ladder-upgrade pipeline has
+ *  composed any active replacement / append / repeat operations for the
+ *  caster. Drop-in compatible with `AbilityDef` so phases.ts / dice.ts /
+ *  ai.ts can swap their `hero.abilityLadder[i]` reads for `resolveAbilityFor`
+ *  without signature churn.
+ *
+ *  Field-tweak modifications (today's Mastery system) are NOT folded into
+ *  this view — they're applied later, at effect-resolution time inside
+ *  phases.ts, by reading `caster.abilityModifiers[*].modifications`. The
+ *  resolver only swaps the structural pieces that must change before
+ *  resolution: combo, name, damageType, the post-append effect tree, and
+ *  the repeat multiplier. */
+import type { AbilityDef, AbilityScope, ReplacementAbilityDef } from "./types";
+
+export type ResolvedAbilityView = AbilityDef & {
+  /** True when a replacement modifier is in flight on this slot — UI may
+   *  decorate the ladder row to indicate the swap. */
+  isReplaced: boolean;
+};
+
+function abilityScopeMatches(scope: AbilityScope, ability: AbilityDef, context: "offensive" | "defensive"): boolean {
+  switch (scope.kind) {
+    case "ability-ids":
+      return scope.ids.some(id => id.toLowerCase() === ability.name.toLowerCase());
+    case "all-tier":
+      return ability.tier === scope.tier;
+    case "all-defenses":
+      return context === "defensive";
+  }
+}
+
+function findReplacement(
+  modifiers: ReadonlyArray<ActiveAbilityModifier>,
+  ability: AbilityDef,
+  context: "offensive" | "defensive",
+): ReplacementAbilityDef | undefined {
+  for (const m of modifiers) {
+    if (!m.replacement) continue;
+    if (abilityScopeMatches(m.scope, ability, context)) return m.replacement;
+  }
+  return undefined;
+}
+
+function collectAdditionalEffects(
+  modifiers: ReadonlyArray<ActiveAbilityModifier>,
+  ability: AbilityDef,
+  context: "offensive" | "defensive",
+): AbilityEffect[] {
+  const out: AbilityEffect[] = [];
+  for (const m of modifiers) {
+    if (!m.additionalEffects || m.additionalEffects.length === 0) continue;
+    if (abilityScopeMatches(m.scope, ability, context)) out.push(...m.additionalEffects);
+  }
+  return out;
+}
+
+function resolveRepeat(
+  modifiers: ReadonlyArray<ActiveAbilityModifier>,
+  ability: AbilityDef,
+  context: "offensive" | "defensive",
+): number {
+  let total = 1;
+  for (const m of modifiers) {
+    if (!m.repeat || m.repeat <= 1) continue;
+    if (abilityScopeMatches(m.scope, ability, context)) total *= m.repeat;
+  }
+  return total;
+}
+
+/** Resolve the live ability view a caster fires from a given ladder slot,
+ *  after walking their active ability modifiers. `context` distinguishes
+ *  offensive vs defensive ladders for `all-defenses`-scoped modifiers. */
+export function resolveAbilityFor(
+  snapshot: HeroSnapshot,
+  ability: AbilityDef,
+  context: "offensive" | "defensive" = "offensive",
+): ResolvedAbilityView {
+  const replacement = findReplacement(snapshot.abilityModifiers, ability, context);
+  const base: AbilityDef = replacement
+    ? {
+        tier: ability.tier,
+        name: replacement.name,
+        combo: replacement.combo,
+        effect: replacement.effect,
+        shortText: replacement.shortText,
+        longText: replacement.longText,
+        damageType: replacement.damageType,
+        targetLandingRate: replacement.targetLandingRate ?? ability.targetLandingRate,
+        defenseDiceCount: replacement.defenseDiceCount ?? ability.defenseDiceCount,
+        offensiveFallback: replacement.offensiveFallback ?? ability.offensiveFallback,
+        // Replacements never carry T4 critical machinery.
+      }
+    : ability;
+
+  let effect: AbilityEffect = base.effect;
+  const additions = collectAdditionalEffects(snapshot.abilityModifiers, ability, context);
+  if (additions.length > 0) effect = { kind: "compound", effects: [effect, ...additions] };
+  const repeat = resolveRepeat(snapshot.abilityModifiers, ability, context);
+  if (repeat > 1) effect = { kind: "compound", effects: Array.from({ length: repeat }, () => effect) };
+
+  return { ...base, effect, isReplaced: !!replacement };
 }
 
 /** Pick the first buff-type status currently on `holder`. Returns undefined
