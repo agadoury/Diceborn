@@ -86,16 +86,18 @@ export function ActionBar({
           </button>
         )}
         {secondary && (
-          <Button
-            size="md"
-            variant="secondary"
-            disabled={!primaryEnabled}
-            onClick={secondary.action}
-            sound={null}
-            className="shrink-0"
-          >
-            {secondary.label}
-          </Button>
+          <div className="flex-1">
+            <Button
+              size="lg"
+              variant="secondary"
+              disabled={!primaryEnabled}
+              onClick={secondary.action}
+              sound={null}
+              className="w-full"
+            >
+              {secondary.label}
+            </Button>
+          </div>
         )}
         <div className="flex-1">
           <Button
