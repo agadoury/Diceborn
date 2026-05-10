@@ -40,6 +40,7 @@ function snapshot(): HeroSnapshot {
     isLowHp: false, nextAbilityBonusDamage: 0,
     abilityModifiers: [], tokenOverrides: [], symbolBends: [], lastStripped: {},
     masterySlots: {},
+    pipelineBuffs: [], triggerBuffs: [], comboOverrides: [],
     consumedOncePerMatchCards: [],
     consumedOncePerTurnCards: [],
   };

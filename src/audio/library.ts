@@ -48,6 +48,7 @@ export function sfxForEvent(ev: GameEvent): Sfx | null {
     case "symbol-bend-expired":  return null;
     case "bank-spend-prompt":    return "ui-tap";
     case "bank-spent":           return "rage-pulse";
+    case "status-removal-by-holder-action": return "ui-tap";
     case "status-remove-prompt": return "ui-tap";
     case "status-remove-attempted": return ev.prevented ? "ui-back" : "status-shatter";
   }

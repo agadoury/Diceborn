@@ -75,10 +75,10 @@ The complete first-class effect set — designed to express every recurring patt
 |---|---|
 | `damage` | Fixed damage. Specify `amount` + damage `type`. Optional sub-fields: `self_cost`, `conditional_bonus`, `conditional_type_override` (see below). |
 | `scaling-damage` | Damage that scales with how many extra dice contribute beyond the combo's minimum. Specify `baseAmount`, `perExtra`, `maxExtra`, `type`. Same optional sub-fields as `damage`. |
-| `reduce-damage` | Defensive — reduce incoming damage by `amount` (defensive ladder only). Optional `conditional_bonus` (added to `amount`). |
+| `reduce-damage` | Defensive — reduce incoming damage. Pick exactly one resolution mode: `amount` (flat reduction), `negate_attack: true` (reduce to 0), or `multiplier: f` with `rounding?: "ceil"\|"floor"` (fractional — `final = round(incoming × f)`; default `ceil` rounds in the attacker's favour, §15.1). Optional `conditional_bonus` (added to `amount`). Card-context Instants firing into a `pendingAttack` queue the reduction onto `pendingAttack.injectedReduction` so it modifies the queued in-flight damage (Aegis of Dawn — Clarification B). |
 | `heal` | Heal a target (self or opponent) by `amount`. Optional `conditional_bonus` (added to `amount`). |
 | `apply-status` | Apply `stacks` of a status token to target (self or opponent). Optional `conditional_bonus` (added to `stacks`). |
-| `remove-status` | Strip up to `stacks` of a status from target. |
+| `remove-status` | Strip stacks from target. `status` accepts a specific StatusId or one of the wildcards `any-debuff` / `any-buff` / `any-status` (legacy `any-positive` aliases `any-buff`). `stacks` accepts `"all"` for full strips. Optional `selection: "player-choice" \| "highest-stack" \| "lowest-stack" \| "longest-active"` resolves multi-status wildcards (§15.7). |
 | `gain-cp` | Add `amount` CP to caster (clamped to 15). (No `conditional_bonus` — see note below.) |
 | `draw` | Draw `amount` cards. (No `conditional_bonus` — see note below.) |
 | `compound` | Multiple effects in sequence — `effects: [...]`. |
@@ -96,8 +96,9 @@ The complete first-class effect set — designed to express every recurring patt
 | Effect | Meaning |
 |---|---|
 | `ability-upgrade` | Modify ability properties for the rest of the match (or until end of turn). `scope` selects which abilities (`{kind:"ability-ids"}`, `{kind:"all-tier",tier:N}`, `{kind:"all-defenses"}`). `modifications: [...]` is an array of `{field, operation, value, conditional?}`. `permanent: true` occupies a Hero Upgrade slot. **Used by every Mastery card.** |
-| `persistent-buff` | Match-long buff. `id` (unique within snapshot), `modifier` (single `AbilityUpgradeMod`), `scope`. Optional `discardOn`: `{kind:"damage-taken-from-tier",tier:4}` / `{kind:"status-removed",status}` / `{kind:"match-ends"}`. Covers Ancestral Spirits / Vow of Service. |
-| `passive-counter-modifier` | Direct manipulation of a signature passive counter (e.g. War Cry adds +3 Frenzy without the "must take damage" trigger). `passiveKey`, `operation: "add"|"set"`, `value`, optional `respectsCap`. |
+| `persistent-buff` | Match-long buff. `id` (unique within snapshot), exactly one of three modifier shapes:<br>• `modifier: AbilityUpgradeMod` + `scope` (or `target: StatusId` for token-field overrides) — modifies ability output. Covers Ancestral Spirits / Crater Wind.<br>• `pipelineModifier: { target: "incoming-damage" \| "outgoing-damage" \| "status-tick-damage", operation: "add" \| "multiply", value, cap? }` — adjusts the damage pipeline directly (§15.3). Covers Sanctuary's "until your next turn, all incoming damage reduced by 2."<br>• `triggerModifier: { triggerEvent, operation: "add" \| "set" \| "multiply", value, targetField: "gain" \| "perStack", condition? }` — rewrites a `cpGainTriggers[]` entry's `gain` / `perStack` when it fires (§15.4). Covers Vow of Service's "Tier 2+ defenses gain +2 Radiance instead of +1."<br>Optional `discardOn` (any shape): `{kind:"damage-taken-from-tier",tier:4}` / `{kind:"status-removed",status}` / `{kind:"match-ends"}` / `{kind:"end-of-self-turn"}` / `{kind:"next-turn-of-self"}` / `{kind:"end-of-any-turn"}` (§15.5). |
+| `combo-override` | Temporarily replace selected abilities' combo with a looser one (§15.6). `scope: { kind: "ability-ids", ids: [...] } \| { kind: "all-tier", tier: N }`, `override: DiceCombo`, `duration: "this-turn" \| "this-roll" \| { kind: "until-status", status, on }`. Covers Sunburst's "this turn only, Dawnblade and Sun Strike auto-fire on any sword." |
+| `passive-counter-modifier` | Direct manipulation of a signature passive counter (e.g. War Cry adds +3 Frenzy without the "must take damage" trigger). `passiveKey`, `operation: "add"\|"set"`, `value`, optional `respectsCap`. Optional `conditional: StateCheck` gates whether the modifier fires (§15.8 — covers Cathedral Light's "+1 Radiance on 4+ sun"). `value` may be negative for spend-style conversions (Dawnsong burns 2 Radiance for +4 CP — Clarification A); the result clamps to ≥ 0. |
 
 #### Bonus dice primitives
 
@@ -149,6 +150,8 @@ Covers Pyro Lance "+2 dmg per Cinder when 3+", Solar Blade "+1 dmg per Verdict s
 { kind: "passive-counter-min";     passiveKey; count }
 { kind: "combo-symbol-count";      symbol; count }   // counts on the firing dice
 { kind: "combo-n-of-a-kind";       count }
+{ kind: "combo-straight";          length }
+{ kind: "defense-tier-min";        tier }              // §15.4 — true when the firing defensive ability's tier ≥ N
 ```
 
 #### Damage type semantics
@@ -185,6 +188,7 @@ You can also design **your own signature token**. The full signature-token schem
 | `passiveModifier` | **NEW.** Continuous, non-tick effect while stacks > 0. `scope: "holder"|"applier"`, `trigger: "on-offensive-ability"|"on-defensive-roll"|"on-card-played"|"always"`, `field: "damage"|"defensive-dice-count"|"card-cost"`, `valuePerStack: N`, optional `cap: { min?, max? }`. Covers Frost-bite "-1 dmg / stack on holder's offensive abilities" and Verdict's offensive damage debuff. |
 | `detonation` | **NEW.** Threshold trigger. `threshold: N`, `triggerTiming: "on-application-overflow"|"on-holder-upkeep-at-threshold"|"on-event"`, `effect: AbilityEffect`, `resetsStacksTo?: N` (default 0). Covers Cinder's "5 stacks → 8 dmg + reset". |
 | `stateThresholdEffects` | **NEW.** Array of `{ threshold, effect, duration }`. `effect` is one of: `{kind:"block-card-kind",cardKind}`, `{kind:"block-ability-tier",tier}`, `{kind:"modify-roll-dice-count",delta}`. `duration: "while-at-threshold"|"next-turn"|"this-phase"`. Covers Verdict's "3+ stacks blocks main-phase + instants on the holder's next Main Phase". |
+| `holderRemovalActions` | **§15.2.** Array of `{ phase, cost, effect, oncePerTurn?, ui }`. Player-initiated paid removal — the holder pays the cost during the named phase (`main-pre`, `main-post`, or `main-phase`) to strip stacks. `cost: { resource: "cp" \| "hp" \| "discard-card", amount }`; `effect: { stacksRemoved: "all" \| number, additionalEffect? }`; `ui: { actionName, confirmationPrompt? }`. Covers Verdict's atonement (spend 2 CP during your Main Phase to clear all Verdict stacks). |
 | `visualTreatment` | Icon, color, pulse, optional particle for the HUD chip. |
 
 Token names should be descriptive and original — pick your own phrasing rather than lifting names verbatim from another game.
@@ -641,6 +645,15 @@ damage types so the offense has answers to a strong defender.
 
 === CARDS (exactly 12) ===
 
+> **File layout note.** Cards are NOT carried on `HeroDefinition` and are
+> NOT defined inside the hero file. They live in their own per-hero card
+> module (`src/content/cards/<heroId>.ts`) and are looked up at runtime
+> via `getDeckCards(heroId)`. This separation exists so the upcoming
+> deck-builder feature can swap card lists per match without touching
+> hero data. **Always submit cards as a separate block** — the ingestion
+> tool drops them into the matching `cards/<heroId>.ts` file, not into
+> the hero module.
+
 Required composition — the validator rejects decks that don't match:
   3 dice manipulation     (set-die-face / reroll-dice / face-symbol-bend)
   4 tiered Masteries      (1 each: T1, T2, T3, Defensive — never T4)
@@ -744,6 +757,8 @@ So the writer knows what each field becomes when the hero is implemented:
 
 | Template field | Becomes | Used by |
 |---|---|---|
+| **HERO** block | `HeroDefinition` in `src/content/heroes/<heroId>.ts` | engine + presentation |
+| **CARDS** block | `<HERO>_CARDS: Card[]` in `src/content/cards/<heroId>.ts` (separate file) | `getDeckCards(heroId)` registry |
 | ID | `HeroId` slug | routing, save data, debug |
 | NAME | `hero.name` | hero-select, banner, action log |
 | ACCENT | `hero.accentColor` | UI theming, glows, button accents |
@@ -1016,6 +1031,156 @@ Bloodoath — when caster's offense whiffs, heal 4 + add 1 Frenzy stack:
         - { kind: "heal", amount: 4, target: "self" }
         - { kind: "passive-counter-modifier", passiveKey: "frenzy", operation: "add", value: 1 }
 ```
+
+### Fractional reduce-damage (§15.1)
+
+Aegis of Dawn — Instant, halves an opponent's Tier 4 ultimate (rounds in attacker's favour):
+
+```
+CARD: AEGIS OF DAWN
+  Kind:    instant
+  Trigger: { kind: "opponent-fires-ability", tier: 4 }
+  Effect:
+    kind:       reduce-damage
+    amount:     0                      # required placeholder; mode is set by `multiplier`
+    multiplier: 0.5
+    rounding:   "ceil"                 # 14 incoming → 7 final, reduction 7
+  oncePerMatch: true
+```
+
+### Player-initiated paid status removal (§15.2)
+
+Verdict's atonement — declared on the token, no phantom card needed:
+
+```
+SIGNATURE TOKEN: lightbearer:verdict
+  HolderRemovalActions:
+    - Phase: main-phase
+      Cost:   { resource: cp, amount: 2 }
+      Effect: { stacksRemoved: "all" }
+      UI:     { actionName: "Atone",
+                confirmationPrompt: "Spend 2 CP to remove all Verdict stacks?" }
+```
+
+The HUD chip surfaces an "Atone" button during Main-pre / Main-post; tapping it dispatches `Action: { kind: "status-holder-action", status: "lightbearer:verdict" }`. Engine emits `status-removal-by-holder-action` plus the standard `status-removed`.
+
+### Pipeline modifier (§15.3)
+
+Sanctuary — until next turn, all incoming damage reduced by 2:
+
+```
+CARD: SANCTUARY
+  Kind:   main-phase
+  Effect:
+    kind: persistent-buff
+    id:   "sanctuary"
+    pipelineModifier:
+      target:    "incoming-damage"
+      operation: "add"
+      value:     -2
+      cap:       { min: 0 }
+    discardOn: { kind: "next-turn-of-self" }
+```
+
+### Trigger modifier (§15.4)
+
+Vow of Service — until end of match, Tier 2+ defenses gain +2 Radiance instead of +1:
+
+```
+CARD: VOW OF SERVICE
+  Kind:   main-phase
+  Effect:
+    kind: persistent-buff
+    id:   "vow-of-service"
+    triggerModifier:
+      triggerEvent: "successfulDefense"
+      operation:    "set"
+      value:        2
+      targetField:  "gain"
+      condition:    { kind: "defense-tier-min", tier: 2 }
+    discardOn: { kind: "match-ends" }
+```
+
+### Combo-override (§15.6)
+
+Sunburst — this turn only, Dawnblade and Sun Strike each deal +2 damage and auto-fire on any sword:
+
+```
+CARD: SUNBURST
+  Kind:   main-phase
+  Effect:
+    kind: compound
+    effects:
+      - kind:     combo-override
+        scope:    { kind: "ability-ids", ids: ["Dawnblade", "Sun Strike"] }
+        override: { kind: "symbol-count", symbol: "lightbearer:sword", count: 1 }
+        duration: "this-turn"
+      - kind:     persistent-buff
+        id:       "sunburst-damage"
+        scope:    { kind: "ability-ids", ids: ["Dawnblade", "Sun Strike"] }
+        modifier: { field: "base-damage", operation: "add", value: 2 }
+        discardOn: { kind: "end-of-self-turn" }
+```
+
+### Wildcard remove-status (§15.7)
+
+Apostasy — remove all negative status from self:
+
+```
+Effect:
+  kind:   remove-status
+  status: "any-debuff"
+  stacks: "all"
+  target: "self"
+```
+
+Ash Mirror — strip 1 positive status from attacker, player's choice:
+
+```
+Effect:
+  kind:      remove-status
+  status:    "any-buff"
+  stacks:    1
+  target:    "opponent"
+  selection: "player-choice"
+```
+
+### Combo-gated passive-counter-modifier (§15.8)
+
+Cathedral Light Mastery — Wall of Dawn's reduction becomes 10, and on 4+ sun the defense also grants +1 Radiance:
+
+```
+Effect: ability-upgrade
+  scope: { kind: "ability-ids", ids: ["Wall of Dawn"] }
+  modifications:
+    - { field: "reduce-damage-amount", operation: "set", value: 10 }
+  permanent: true
+
+# Wall of Dawn's effect tree (declared on the AbilityDef, modified by the mastery above):
+Effect: compound
+  effects:
+    - { kind: "reduce-damage", amount: 8 }       # bumped to 10 by the mastery
+    - kind:        passive-counter-modifier
+      passiveKey:  "radiance"
+      operation:   "add"
+      value:       1
+      respectsCap: true
+      conditional: { kind: "combo-symbol-count", symbol: "lightbearer:sun", count: 4 }
+```
+
+### Spend-style passive-counter-modifier (Clarification A)
+
+Dawnsong — burn 2 Radiance for +4 CP:
+
+```
+Effect: compound
+  effects:
+    - { kind: "passive-counter-modifier", passiveKey: "radiance",
+        operation: "add", value: -2, respectsCap: true }
+    - { kind: "gain-cp", amount: 4 }
+```
+
+`operation: "add"` accepts negative values; the resulting counter clamps to ≥ 0.
 
 ### Bonus-dice damage
 
