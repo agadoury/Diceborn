@@ -15,7 +15,7 @@ export default defineConfig({
       manifest: {
         name: "Pact of Heroes",
         short_name: "Pact of Heroes",
-        description: "Pact of Heroes — Hearthstone with dice. A 1v1 dice-and-card combat game.",
+        description: "Pact of Heroes — a 1v1 dice-and-card duel. Mobile-first, installable as a PWA.",
         theme_color: "#0E0814",
         background_color: "#0E0814",
         display: "standalone",

@@ -1,12 +1,17 @@
 # Pact of Heroes
 
-Hearthstone with dice. A fan-made, single-page web adaptation in the spirit of
-Dice Throne — designed mobile-first for iPhone Safari, fully supported on
-desktop, distributed as an installable PWA.
+A 1v1 dice-and-card duel. Each player picks a hero with their own dice
+faces, ability ladder, signature passive, and card pool, then takes
+alternating turns rolling, locking, and playing cards to chase
+combos that fire abilities. Match length: 5–8 minutes; play it in a
+browser tab on mobile or desktop, or install it as a PWA.
 
-> **Status: MVP complete.** All 12 steps of the execution plan are in. Three
-> playable heroes, hot-seat + Vs AI, full juice (dice tumble, hit-stop, screen
-> shake, ability cinematics, status-token slam-ins, hero atmospherics).
+> **Status: MVP under active development.** Three playable heroes
+> (Berserker, Pyromancer, Lightbearer), hot-seat and Vs AI modes, a deck
+> builder, and the full juice layer (dice tumble, hit-stop, screen
+> shake, ability cinematics, status-token slam-ins, per-hero
+> atmospherics) are in. Expect rough edges; tuning, content, and polish
+> are all ongoing.
 
 ## Stack
 
@@ -135,5 +140,5 @@ generically so future heroes can reuse it.
 
 ## License & lore
 
-Fan project. Do not reuse Roxley / Nerd Ninjas trademarks, official hero art,
-or the "Dice Throne" wordmark. Visual language is original.
+All hero art, wordmarks, dice faces, and visual language are original to
+this project.
