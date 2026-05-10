@@ -6,6 +6,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { validateDeckComposition } from "../src/game/cards";
+import { getCardCatalog, getDeckCards, getRegisteredHeroIds } from "../src/content";
 import type { Card } from "../src/game/types";
 
 function card(
@@ -90,5 +91,29 @@ describe("validateDeckComposition", () => {
     ];
     const issues = validateDeckComposition(deck);
     expect(issues.some(i => i.includes("T4"))).toBe(true);
+  });
+});
+
+describe("hero recommendedDecks", () => {
+  it("every registered hero has a 12-card conformant recommendedDeck", () => {
+    for (const heroId of getRegisteredHeroIds()) {
+      const cards = getDeckCards(heroId);
+      expect(cards.length, `${heroId} default deck card count`).toBe(12);
+      expect(validateDeckComposition(cards), `${heroId} default deck issues`).toEqual([]);
+    }
+  });
+
+  it("getDeckCards falls back to recommendedDeck on unknown saved id", () => {
+    const heroId = getRegisteredHeroIds()[0];
+    const fallback = getDeckCards(heroId, ["nonexistent/card", "another/missing"]);
+    expect(fallback.length).toBe(12);
+    expect(validateDeckComposition(fallback)).toEqual([]);
+  });
+
+  it("getCardCatalog returns hero cards plus generic pool", () => {
+    const heroId = getRegisteredHeroIds()[0];
+    const catalog = getCardCatalog(heroId);
+    expect(catalog.some(c => c.cardCategory === "generic")).toBe(true);
+    expect(catalog.some(c => c.hero === heroId)).toBe(true);
   });
 });

@@ -41,4 +41,15 @@ export const GENERIC_CARDS: Card[] = [
     trigger: { kind: "manual" },
     effect: { kind: "remove-status", status: "burn", stacks: 99, target: "self" },
   },
+  {
+    id: "generic/bandage",
+    hero: "generic",
+    kind: "main-action",
+    cardCategory: "generic",
+    name: "Bandage",
+    cost: 2,
+    text: "Heal 2 HP.",
+    trigger: { kind: "manual" },
+    effect: { kind: "heal", amount: 2, target: "self" },
+  },
 ];

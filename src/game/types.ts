@@ -490,6 +490,10 @@ export interface HeroDefinition {
    *  Phase. Same picker logic as the offensive ladder. */
   defensiveLadder?: readonly AbilityDef[];
   cards: Card[];
+  /** Pre-built starter deck, 12 conformant cards (4/3/3/2 by cardCategory).
+   *  Used as the AI deck and as the default the deck builder offers when
+   *  the player hasn't customised. Card ids must resolve via getCardCatalog. */
+  recommendedDeck: ReadonlyArray<CardId>;
   /** Optional: applied to every successful offensive ability landed by this hero
    *  (e.g. Barbarian → Bleeding, Pyromancer → Smolder). */
   onHitApplyStatus?: { status: StatusId; stacks: number };
@@ -691,7 +695,11 @@ export interface LogEntry { turn: number; phase: Phase; text: string; t: number;
 
 // ── Actions ─────────────────────────────────────────────────────────────────
 export type Action =
-  | { kind: "start-match"; seed: number; p1: HeroId; p2: HeroId; coinFlipWinner: PlayerId }
+  | { kind: "start-match"; seed: number; p1: HeroId; p2: HeroId; coinFlipWinner: PlayerId;
+      /** Optional custom decks per player. Each array is a 12-element list of
+       *  CardIds that must resolve via getCardCatalog(heroId). When omitted,
+       *  the engine falls back to that hero's recommendedDeck. */
+      p1Deck?: ReadonlyArray<CardId>; p2Deck?: ReadonlyArray<CardId> }
   | { kind: "advance-phase" }
   | { kind: "toggle-die-lock"; die: 0 | 1 | 2 | 3 | 4 }
   | { kind: "roll-dice" }

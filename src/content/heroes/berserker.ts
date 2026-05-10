@@ -308,6 +308,17 @@ export const BERSERKER: HeroDefinition = {
     },
   ],
 
+  recommendedDeck: [
+    // 4 generic
+    "generic/quick-draw", "generic/focus", "generic/cleanse", "generic/bandage",
+    // 3 dice-manip
+    "berserker/iron-focus", "berserker/berserker-rage", "berserker/pelt-of-the-wolf",
+    // 3 ladder-upgrade (T1, T2, T3 — offensive starter; wolfborn deferred to deck-builder choice)
+    "berserker/cleave-mastery", "berserker/northern-storm", "berserker/bloodbound",
+    // 2 signature
+    "berserker/hunters-mark", "berserker/counterstrike",
+  ],
+
   cards: [
     // ── Dice manipulation ─────────────────────────────────────────────────
     {
