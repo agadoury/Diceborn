@@ -143,6 +143,22 @@ export const BERSERKER: HeroDefinition = {
       },
     },
     {
+      tier: 2,
+      name: "Avalanche",
+      damageType: "normal",
+      targetLandingRate: [0.55, 0.8],
+      combo: { kind: "straight", length: 3 },
+      shortText: "6 dmg + 1 Frost-bite",
+      longText: "Small straight (3 in a row); 6 damage + 1 Frost-bite.",
+      effect: {
+        kind: "compound",
+        effects: [
+          { kind: "damage", amount: 6, type: "normal" },
+          { kind: "apply-status", status: "berserker:frostbite", stacks: 1, target: "opponent" },
+        ],
+      },
+    },
+    {
       tier: 3,
       name: "Blood Harvest",
       damageType: "normal",
@@ -205,34 +221,14 @@ export const BERSERKER: HeroDefinition = {
     },
     {
       tier: 4,
-      name: "Avalanche",
-      damageType: "normal",
-      targetLandingRate: [0.08, 0.25],
-      ultimateBand: "standard",
-      combo: { kind: "straight", length: 5 },
-      shortText: "13 dmg + 3 Frost-bite, 3 self-dmg",
-      longText:
-        "Large straight (5 in a row); 13 damage + 3 Frost-bite, you take 3 self-damage.",
-      effect: {
-        kind: "compound",
-        effects: [
-          { kind: "damage", amount: 13, type: "normal", self_cost: 3 },
-          { kind: "apply-status", status: "berserker:frostbite", stacks: 3, target: "opponent" },
-        ],
-      },
-      criticalCinematic:
-        "Avalanche of snow cascades down the opponent's panel; multiple impact thuds + a guttural primal shout.",
-    },
-    {
-      tier: 4,
       name: "Wolf's Howl",
       damageType: "ultimate",
-      targetLandingRate: [0.01, 0.05],
+      targetLandingRate: [0.005, 0.02],
       ultimateBand: "career-moment",
-      combo: { kind: "n-of-a-kind", count: 5 },
+      combo: { kind: "symbol-count", symbol: "berserker:howl", count: 5 },
       shortText: "Stun + 14 ult + 4 Frost-bite + 2 Frenzy",
       longText:
-        "5 of a kind; Stun, 14 ultimate damage, 4 Frost-bite, +2 Frenzy.",
+        "5 howl (all 5 dice on face 6); Stun, 14 ultimate damage, 4 Frost-bite, +2 Frenzy.",
       effect: {
         kind: "compound",
         effects: [

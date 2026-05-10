@@ -201,9 +201,6 @@ function Row({
           transition: "box-shadow 200ms cubic-bezier(.22,1,.36,1), filter 200ms",
         }}
       >
-        {/* Tier badge */}
-        <TierBadge tier={ability.tier} />
-
         {/* Combo strip — inline face icons */}
         <ComboStrip combo={ability.combo} />
 
@@ -224,18 +221,6 @@ function Row({
         </div>
       </motion.div>
     </Tooltip>
-  );
-}
-
-function TierBadge({ tier }: { tier: 1 | 2 | 3 | 4 }) {
-  const palette = ["", "bg-white text-arena-0", "bg-amber-700 text-amber-50", "bg-zinc-300 text-arena-0", "bg-amber-400 text-arena-0"];
-  return (
-    <span className={cn(
-      "shrink-0 grid place-items-center w-7 h-7 sm:w-8 sm:h-8 rounded-full font-display font-bold text-xs sm:text-sm",
-      palette[tier],
-    )}>
-      {tier}
-    </span>
   );
 }
 
