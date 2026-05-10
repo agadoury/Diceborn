@@ -608,8 +608,17 @@ function applyAttackEffects(
   critTriggered: boolean,
 ): GameEvent[] {
   const events: GameEvent[] = [];
-  const active = state.players[state.activePlayer];
-  const opponent = state.players[other(state.activePlayer)];
+  // Source attacker/defender from `pendingAttack` rather than `state.activePlayer`.
+  // `applyAttackEffects` runs after the defender's select-defense, by which
+  // point activePlayer must still equal `pa.attacker` for the engine's flow
+  // to be coherent — but if anything ever advances past pendingAttack (an
+  // AI-driver bug, a stray advance-phase, etc.) the activePlayer would be
+  // wrong and the damage would land on the wrong hero. Pinning to pa.attacker
+  // keeps the resolver correct under all scheduling.
+  const pa = state.pendingAttack;
+  const attackerId = pa ? pa.attacker : state.activePlayer;
+  const active = state.players[attackerId];
+  const opponent = state.players[other(attackerId)];
   const hero = getHero(active.hero);
   // Use the resolved view so replacements + appends + repeat are honored.
   const ability = resolveAbilityFor(active, hero.abilityLadder[abilityIndex], "offensive");
