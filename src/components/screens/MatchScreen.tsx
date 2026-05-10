@@ -185,7 +185,7 @@ export default function MatchScreen() {
 
   return (
     <div className="safe-pad min-h-svh bg-arena-0 text-ink relative flex flex-col
-                    lg:grid lg:grid-cols-[260px_1fr_260px] lg:grid-rows-[auto_1fr_auto] lg:gap-3 lg:p-6">
+                    lg:grid lg:grid-cols-[340px_1fr_340px] lg:grid-rows-[auto_1fr_auto] lg:gap-4 lg:p-6">
       {/* Living arena background — atmospherics for the active player's hero. */}
       <HeroBackground
         hero={state.players[state.activePlayer].hero}
