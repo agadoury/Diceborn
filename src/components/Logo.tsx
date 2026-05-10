@@ -10,7 +10,7 @@ export default function Logo({ className = "" }: { className?: string }) {
   return (
     <svg
       className={className}
-      viewBox="0 0 720 160"
+      viewBox="0 0 960 160"
       xmlns="http://www.w3.org/2000/svg"
       role="img"
       aria-label="Pact of Heroes"
@@ -44,7 +44,7 @@ export default function Logo({ className = "" }: { className?: string }) {
 
       {/* d20 sitting in the "O" gap of "OF". Centered within the gap
           relative to the wordmark above. */}
-      <g transform="translate(254 78)">
+      <g transform="translate(368 78)">
         <polygon
           points="0,-44 38,-22 38,22 0,44 -38,22 -38,-22"
           fill="url(#logo-d20)"
