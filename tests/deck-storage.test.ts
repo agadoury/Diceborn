@@ -70,14 +70,14 @@ describe("deckStorage round-trip", () => {
 
 describe("deckStorage resilience", () => {
   it("treats corrupted JSON as empty storage", () => {
-    localStorage.setItem("diceborn:decks:v1", "not-json{{");
+    localStorage.setItem("pact-of-heroes:decks:v1", "not-json{{");
     expect(loadDeck("berserker")).toBeNull();
     expect(loadDefaultHero()).toBeNull();
   });
 
   it("ignores entries from a different schema version", () => {
     localStorage.setItem(
-      "diceborn:decks:v1",
+      "pact-of-heroes:decks:v1",
       JSON.stringify({ version: 999, perHero: { berserker: { cardIds: ["x"], updatedAt: 0 } } }),
     );
     expect(loadDeck("berserker")).toBeNull();

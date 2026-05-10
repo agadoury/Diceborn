@@ -1,5 +1,5 @@
 /**
- * Diceborn — match-summary computation.
+ * Pact of Heroes — match-summary computation.
  *
  * Computes match stats and the §10 descriptor (CRITICAL VICTORY > CLUTCH >
  * COMEBACK > FLAWLESS > SURGEON > STOMP > GRINDER > VICTORY) from the

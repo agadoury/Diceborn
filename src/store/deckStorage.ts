@@ -1,21 +1,24 @@
 /**
- * Diceborn — deck persistence layer.
+ * Pact of Heroes — deck persistence layer.
  *
  * Pure functions (no React, no Zustand). Stores per-hero saved decks and a
  * default-hero pointer in localStorage under a single versioned key. All
  * accesses are wrapped in try/catch so SSR, Safari private mode, and
  * over-quota errors degrade gracefully to "no saved deck".
  *
- * Storage shape (key: `diceborn:decks:v1`):
+ * Storage shape (key: `pact-of-heroes:decks:v1`):
  *   {
  *     version: 1,
  *     perHero: { [heroId]: { cardIds: CardId[], updatedAt: number } },
  *     defaultHero: HeroId | null
  *   }
+ *
+ * The legacy `diceborn:decks:v1` key is migrated forward at app boot
+ * by `src/lib/migrate-storage.ts`.
  */
 import type { CardId, HeroId } from "@/game/types";
 
-const STORAGE_KEY = "diceborn:decks:v1";
+const STORAGE_KEY = "pact-of-heroes:decks:v1";
 const SCHEMA_VERSION = 1;
 
 interface PerHeroEntry { cardIds: CardId[]; updatedAt: number; }

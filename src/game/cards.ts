@@ -1,5 +1,5 @@
 /**
- * Diceborn — card resolution, deck/hand/discard plumbing.
+ * Pact of Heroes — card resolution, deck/hand/discard plumbing.
  *
  * Cards' effects are resolved by a single dispatcher on AbilityEffect.kind.
  * Hero-specific cards whose effects don't fit the generic schema declare

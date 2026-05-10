@@ -1,6 +1,6 @@
 # Deck-building
 
-This file is the source of truth for how decks work in Diceborn — what
+This file is the source of truth for how decks work in Pact of Heroes — what
 goes in a deck, how the player builds and saves one, what the engine
 does with it, and where the data lives.
 
@@ -134,7 +134,9 @@ carry `p1`/`p2`).
 
 `src/store/deckStorage.ts`. Pure functions, no React.
 
-Storage key: `diceborn:decks:v1`.
+Storage key: `pact-of-heroes:decks:v1`. (Legacy installs still
+holding the previous `diceborn:decks:v1` key are auto-migrated forward
+once at app boot via `src/lib/migrate-storage.ts`.)
 
 Shape:
 

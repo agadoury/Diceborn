@@ -1,4 +1,4 @@
-# Diceborn
+# Pact of Heroes
 
 Hearthstone with dice. A fan-made, single-page web adaptation in the spirit of
 Dice Throne — designed mobile-first for iPhone Safari, fully supported on

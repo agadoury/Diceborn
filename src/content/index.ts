@@ -1,5 +1,5 @@
 /**
- * Diceborn — content registry. Pure exports; no logic.
+ * Pact of Heroes — content registry. Pure exports; no logic.
  *
  * Heroes and cards are registered separately. Each hero module is
  * responsible for registering its own signature status tokens at import

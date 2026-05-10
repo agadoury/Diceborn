@@ -1,9 +1,9 @@
 {
-  "name": "diceborn",
+  "name": "pact-of-heroes",
   "private": true,
   "version": "0.0.1",
   "type": "module",
-  "description": "Hearthstone with dice. Fan-made digital adaptation in the spirit of Dice Throne.",
+  "description": "Pact of Heroes — Hearthstone with dice. Fan-made digital adaptation in the spirit of Dice Throne.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

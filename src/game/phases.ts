@@ -1,5 +1,5 @@
 /**
- * Diceborn — phase progression.
+ * Pact of Heroes — phase progression.
  *
  * The phase order:
  *   pre-match → upkeep → income → main-pre → offensive-roll → defensive-roll

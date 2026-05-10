@@ -1,7 +1,7 @@
 /**
- * Diceborn — dice, combo grammar, and ladder evaluator.
+ * Pact of Heroes — dice, combo grammar, and ladder evaluator.
  *
- * The combo grammar expresses every Diceborn ability requirement.
+ * The combo grammar expresses every Pact of Heroes ability requirement.
  * The ladder evaluator is the single source of truth for live-highlight
  * states (FIRING / TRIGGERED / REACHABLE / OUT-OF-REACH) plus LETHAL.
  * Both the player UI and the AI consume this — guaranteeing identical

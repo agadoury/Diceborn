@@ -1,5 +1,5 @@
 /**
- * Diceborn — The Pyromancer.
+ * Pact of Heroes — The Pyromancer.
  *
  * Burn archetype, complexity 3. Glass-cannon builder: every offensive ability
  * applies +1 Cinder (+1 if 3+ ember show) and every Cinder she lands inches

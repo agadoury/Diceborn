@@ -65,7 +65,7 @@ let subscribed = false;
 function readReduced(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    const o = localStorage.getItem("diceborn:reduced-motion");
+    const o = localStorage.getItem("pact-of-heroes:reduced-motion");
     if (o === "on")  return true;
     if (o === "off") return false;
   } catch { /* */ }

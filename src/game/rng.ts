@@ -1,5 +1,5 @@
 /**
- * Diceborn — seeded RNG.
+ * Pact of Heroes — seeded RNG.
  *
  * Mulberry32: tiny, fast, deterministic. Tests run with fixed seeds so dice
  * rolls and AI decisions reproduce exactly. The cursor advances every draw

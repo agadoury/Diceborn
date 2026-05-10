@@ -1,5 +1,5 @@
 /**
- * Diceborn — Pyromancer cards.
+ * Pact of Heroes — Pyromancer cards.
  *
  * Hero-specific card pool. Loaded by the content registry via
  * `getDeckCards(PYROMANCER.id)`. Cards live here (not on `HeroDefinition`)

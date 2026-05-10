@@ -1,5 +1,5 @@
 /**
- * Diceborn — haptics.
+ * Pact of Heroes — haptics.
  *
  * Wraps the Vibration API with a feature-detect and a small enable toggle.
  * iOS Safari ignores Vibration API entirely; Android Chrome honours it.
@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-const KEY = "diceborn:haptics";
+const KEY = "pact-of-heroes:haptics";
 
 export type HapticPattern =
   | "die-lock"      // 10ms tick

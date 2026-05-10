@@ -43,7 +43,7 @@ export default function DevTokens() {
         </Section>
 
         <Section title="Type — display (Cinzel)">
-          <p className="font-display text-d-1 tracking-widest">DICEBORN</p>
+          <p className="font-display text-d-1 tracking-widest">PACT OF HEROES</p>
           <p className="font-display text-d-2 tracking-wider">DISPLAY 02</p>
           <p className="font-display text-d-3 tracking-wider">DISPLAY 03</p>
           <p className="font-num text-num-xl">42</p>
@@ -97,8 +97,8 @@ export default function DevTokens() {
       </div>
 
       <footer className="text-muted text-xs mt-10 pt-6 border-t border-arena-1">
-        Diceborn / Step 1 / design tokens — these are the source of truth for
-        every later screen.
+        Pact of Heroes / Step 1 / design tokens — these are the source of
+        truth for every later screen.
       </footer>
     </main>
   );
@@ -188,7 +188,7 @@ function MotionDemo() {
       </div>
       <p className="text-muted text-xs">
         Tap "Trigger" to flip-flop the bars. Use this to feel the difference
-        between snap (Diceborn die-land bounce) and the standard quart curves.
+        between snap (the die-land bounce) and the standard quart curves.
       </p>
     </div>
   );

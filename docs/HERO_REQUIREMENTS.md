@@ -1,12 +1,12 @@
-# DICEBORN — Hero Creation Requirements
+# PACT OF HEROES — Hero Creation Requirements
 
-> **You are designing a hero for Diceborn — a 1v1 dice-and-card combat game.** This document is your full brief: the game's constraints, the engine's mechanical primitives, a light originality guideline, the output format, and a self-check list. Read all of it before you start designing. Output the filled-in template at the end.
+> **You are designing a hero for Pact of Heroes — a 1v1 dice-and-card combat game.** This document is your full brief: the game's constraints, the engine's mechanical primitives, a light originality guideline, the output format, and a self-check list. Read all of it before you start designing. Output the filled-in template at the end.
 
 ---
 
-## 1. Project context (what Diceborn is)
+## 1. Project context (what Pact of Heroes is)
 
-Diceborn is a digital, mobile-first 1v1 game built around custom dice and cards. Each hero rolls 5 hero-specific dice (each with 6 faces) on their offensive turn, locks any combination between rolls (up to 3 roll attempts total), and the highest-tier dice combo their hero recognises fires that ability. Cards manipulate dice, modify abilities, or play standalone effects. Match length target: 5–8 minutes, roughly 6–8 turns.
+Pact of Heroes is a digital, mobile-first 1v1 game built around custom dice and cards. Each hero rolls 5 hero-specific dice (each with 6 faces) on their offensive turn, locks any combination between rolls (up to 3 roll attempts total), and the highest-tier dice combo their hero recognises fires that ability. Cards manipulate dice, modify abilities, or play standalone effects. Match length target: 5–8 minutes, roughly 6–8 turns.
 
 The engine, choreographer, audio, UI, and screens are already built. Heroes are pure data — your spec gets converted into a `HeroDefinition` TypeScript module and dropped into the codebase.
 
@@ -405,7 +405,7 @@ These bands assume the defender PICKS one defense — the player has agency to c
 
 ## 6.5 Presentation primitives — what the renderer / choreographer / audio layer can take
 
-The mechanics above (combos, effects, statuses, cards) are the **rules engine** layer. Diceborn also has a **presentation** layer that gives each hero atmospheric weight: a tinted background, a portrait that reacts to game state, glyphs on each die face, per-ability cinematics, and audio cues. None of these are required for a hero to be playable — but a hero that fills them in feels finished.
+The mechanics above (combos, effects, statuses, cards) are the **rules engine** layer. Pact of Heroes also has a **presentation** layer that gives each hero atmospheric weight: a tinted background, a portrait that reacts to game state, glyphs on each die face, per-ability cinematics, and audio cues. None of these are required for a hero to be playable — but a hero that fills them in feels finished.
 
 | Layer | What you can specify |
 |---|---|

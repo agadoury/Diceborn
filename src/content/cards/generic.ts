@@ -1,5 +1,5 @@
 /**
- * Diceborn — generic (universal) cards.
+ * Pact of Heroes — generic (universal) cards.
  *
  * MVP set is intentionally minimal — three universal staples that every
  * hero gets. The economy lives mainly in hero-specific decks for now.

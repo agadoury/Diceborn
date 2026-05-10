@@ -1,5 +1,5 @@
 /**
- * Diceborn — engine reducer.
+ * Pact of Heroes — engine reducer.
  *
  * The single mutation point. `applyAction(state, action) => { state, events }`.
  * Cloning is shallow-by-default; we mutate the state we return, but callers

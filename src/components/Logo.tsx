@@ -1,9 +1,10 @@
 /**
- * DICEBORN wordmark — bold display lettering with a small d20 sitting
- * inside the "O". Inline SVG, no external assets, recolorable via currentColor.
+ * PACT OF HEROES wordmark — bold display lettering with a small d20
+ * standing in for the "O" of "OF". Inline SVG, no external assets,
+ * recolorable via currentColor.
  *
- * The d20 has its own gradient so it pops against the wordmark; the rest
- * of the type uses currentColor so callers can theme it.
+ * The d20 has its own gradient so it pops against the wordmark; the
+ * rest of the type uses currentColor so callers can theme it.
  */
 export default function Logo({ className = "" }: { className?: string }) {
   return (
@@ -12,7 +13,7 @@ export default function Logo({ className = "" }: { className?: string }) {
       viewBox="0 0 720 160"
       xmlns="http://www.w3.org/2000/svg"
       role="img"
-      aria-label="Diceborn"
+      aria-label="Pact of Heroes"
     >
       <defs>
         <linearGradient id="logo-d20" x1="0" y1="0" x2="0" y2="1">
@@ -25,25 +26,25 @@ export default function Logo({ className = "" }: { className?: string }) {
         </linearGradient>
       </defs>
 
-      {/* Wordmark. We render D-I-C-E-B   _   R-N as text and replace the second-to-last
-          glyph with a d20 that visually fills the role of the "O". */}
+      {/* Wordmark. We render "PACT" + (gap) + "F HEROES" and slot a d20 into
+          the gap; visually the d20 reads as the "O" of "OF". */}
       <text
         x="50%"
         y="106"
         textAnchor="middle"
         fontFamily="Cinzel, Georgia, serif"
         fontWeight={900}
-        fontSize="92"
+        fontSize="76"
         fill="url(#logo-text)"
-        letterSpacing="6"
+        letterSpacing="4"
       >
-        DICEB
-        <tspan dx="92">RN</tspan>
+        PACT
+        <tspan dx="92">F HEROES</tspan>
       </text>
 
-      {/* d20 sitting in the "O" gap.
-          Centered roughly between "B" and "R" in the title above. */}
-      <g transform="translate(437 78)">
+      {/* d20 sitting in the "O" gap of "OF". Centered within the gap
+          relative to the wordmark above. */}
+      <g transform="translate(254 78)">
         <polygon
           points="0,-44 38,-22 38,22 0,44 -38,22 -38,-22"
           fill="url(#logo-d20)"

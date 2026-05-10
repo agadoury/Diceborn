@@ -1,5 +1,5 @@
 /**
- * Diceborn — bot-vs-bot simulator + landing-rate validator.
+ * Pact of Heroes — bot-vs-bot simulator + landing-rate validator.
  *
  * Iterates over all heroes registered in src/content/index.ts. With an
  * empty registry it prints a friendly notice and exits.
@@ -106,7 +106,7 @@ function main(): void {
   const heroIds = Object.keys(HEROES) as HeroId[];
 
   if (heroIds.length === 0) {
-    console.log("\n— Diceborn simulator —");
+    console.log("\n— Pact of Heroes simulator —");
     console.log("\n  No heroes registered in src/content/index.ts.");
     console.log("  Add a hero file and register it before running matches.\n");
     return;
