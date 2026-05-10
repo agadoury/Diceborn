@@ -851,15 +851,6 @@ export interface GameState {
   };
   /** Defensive flow halt — present while waiting for defender's `select-defense`. */
   pendingAttack?: PendingAttack;
-  /** Defensive-roll halt — set after the defender picks a defense ability but
-   *  before they trigger the roll. The engine sits here until the defender
-   *  dispatches `roll-defense-dice`. Cleared once the roll resolves alongside
-   *  `pendingAttack`. Not set when the defender chose to take the hit
-   *  (abilityIndex: null) — that path resolves inline. */
-  pendingDefenseRoll?: {
-    defender: PlayerId;
-    abilityIndex: number;
-  };
   /** Bankable-passive spend prompt — set when the engine is about to resolve
    *  an effect where the player may opt to consume tokens (offensive vs.
    *  defensive spend modes are distinguished by `context`). */
@@ -923,13 +914,8 @@ export type Action =
   /** Defender's response to a `pendingAttack`. `abilityIndex` is into the
    *  defender hero's `defensiveLadder`; `null` means "take the hit
    *  undefended" (also used when the defender has no defenses available).
-   *  When non-null, the engine sets `pendingDefenseRoll` and waits for the
-   *  defender to dispatch `roll-defense-dice` — the actual roll, match check,
-   *  and damage application happen there. */
+   *  The engine rolls the defense dice inline and applies damage. */
   | { kind: "select-defense"; abilityIndex: number | null }
-  /** Trigger the defender's roll for a previously picked defense. Only valid
-   *  while `pendingDefenseRoll` is set. */
-  | { kind: "roll-defense-dice" }
   /** Spend N tokens from a bankable signature passive (Lightbearer's
    *  Radiance, etc.). Only valid while `pendingBankSpend` is set. `amount`
    *  must be ≤ available counter and respects the spend option's costPerUnit. */

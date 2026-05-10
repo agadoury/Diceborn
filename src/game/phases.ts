@@ -446,10 +446,13 @@ export function resolveDefenseChoice(state: GameState, abilityIndex: number | nu
   const defHero = getHero(defender.hero);
   const dl = defHero.defensiveLadder;
 
+  let reduction = pa.injectedReduction ?? 0;
+  let matchedTier: 1 | 2 | 3 | 4 | undefined;
+  let matchedName: string | undefined;
+  let landed = false;
+
   if (abilityIndex == null || !dl || dl.length === 0 || abilityIndex < 0 || abilityIndex >= dl.length) {
-    // Defender chose to take it (or has no defenses). No roll needed —
-    // resolve inline with whatever reduction was already injected (e.g. by
-    // an Instant) plus any pipeline buffs.
+    // Defender chose to take it (or has no defenses) — no roll.
     events.push({ t: "defense-intended", defender: defender.player, abilityIndex: null });
     events.push({
       t: "defense-resolved",
@@ -457,142 +460,96 @@ export function resolveDefenseChoice(state: GameState, abilityIndex: number | nu
       reduction: 0,
       landed: false,
     });
-    return finalizeDefense(state, pa, /*landed*/ false, /*reduction*/ pa.injectedReduction ?? 0, /*matchedTier*/ undefined, events);
-  }
-
-  // Defense ability picked — emit `defense-intended` (with abilityName +
-  // diceCount so the UI can display the upcoming roll) and halt on
-  // `pendingDefenseRoll`. The actual roll happens when the defender
-  // dispatches `roll-defense-dice` → `resolveDefenseRoll`.
-  const chosen = resolveAbilityFor(defender, dl[abilityIndex], "defensive");
-  const masteryAdjusted = applyDefensiveNumericModifier(defender, chosen.name, "defenseDiceCount", chosen.defenseDiceCount ?? 3, undefined);
-  const passiveAdj = aggregatePassiveModifiers(defender, "on-defensive-roll", "defensive-dice-count", state);
-  const diceCount = Math.max(1, Math.min(5, masteryAdjusted + passiveAdj)) as 2 | 3 | 4 | 5;
-  events.push({
-    t: "defense-intended",
-    defender: defender.player,
-    abilityIndex,
-    abilityName: chosen.name,
-    diceCount,
-  });
-  state.pendingDefenseRoll = { defender: pa.defender, abilityIndex };
-  return events;
-}
-
-/** Roll the defender's dice for the previously picked defense, check the
- *  combo, resolve the defensive effect, then apply attack damage with the
- *  computed reduction. Clears `pendingDefenseRoll` and `pendingAttack`. */
-export function resolveDefenseRoll(state: GameState): GameEvent[] {
-  const events: GameEvent[] = [];
-  const pa = state.pendingAttack;
-  const pdr = state.pendingDefenseRoll;
-  if (!pa || !pdr) return events;
-  const defender = state.players[pdr.defender];
-  const defHero = getHero(defender.hero);
-  const dl = defHero.defensiveLadder;
-  if (!dl || pdr.abilityIndex < 0 || pdr.abilityIndex >= dl.length) {
-    state.pendingDefenseRoll = undefined;
-    return events;
-  }
-  const chosen = resolveAbilityFor(defender, dl[pdr.abilityIndex], "defensive");
-  const masteryAdjusted = applyDefensiveNumericModifier(defender, chosen.name, "defenseDiceCount", chosen.defenseDiceCount ?? 3, undefined);
-  const passiveAdj = aggregatePassiveModifiers(defender, "on-defensive-roll", "defensive-dice-count", state);
-  const diceCount = Math.max(1, Math.min(5, masteryAdjusted + passiveAdj)) as 2 | 3 | 4 | 5;
-
-  // Single roll of the chosen number of dice. We reuse the defender's die
-  // shape (their hero faces) but only roll `diceCount` of them. The rest
-  // of the defender's dice array is untouched (they're not "in play" for
-  // this defense). UI fades unused slots.
-  const rolledFaces: import("./types").DieFace[] = [];
-  const rolledDescriptors: { index: number; current: number; symbol: string }[] = [];
-  const dieFaceCount = defender.dice[0]?.faces.length ?? 6;
-  for (let i = 0; i < diceCount; i++) {
-    const r = nextInt(state.rngSeed, state.rngCursor, dieFaceCount);
-    state.rngCursor = r.cursor;
-    const face = defender.dice[0]!.faces[r.value];
-    rolledFaces.push(face);
-    defender.dice[i].current = r.value;
-    defender.dice[i].locked = false;
-    rolledDescriptors.push({ index: i, current: r.value, symbol: face.symbol });
-  }
-  for (let i = diceCount; i < defender.dice.length; i++) defender.dice[i].locked = true;
-
-  events.push({
-    t: "defense-dice-rolled",
-    player: defender.player,
-    dice: rolledDescriptors,
-    abilityName: chosen.name,
-  });
-
-  let reduction = pa.injectedReduction ?? 0;
-  let landed = false;
-  let matchedTier: 1 | 2 | 3 | 4 | undefined;
-  let matchedName: string | undefined;
-
-  if (comboMatchesFaces(chosen.combo, rolledFaces)) {
-    landed = true;
-    matchedTier = chosen.tier;
-    matchedName = chosen.name;
-    const r = resolveDefensiveEffect(chosen.effect, {
-      state,
-      defender,
-      attacker: state.players[pa.attacker],
-      firingCombo: chosen.combo,
-      firingFaces: rolledFaces,
+  } else {
+    // Resolve through the ladder-upgrade pipeline so a defensive replacement
+    // surfaces its new combo / effect / name.
+    const chosen = resolveAbilityFor(defender, dl[abilityIndex], "defensive");
+    const masteryAdjusted = applyDefensiveNumericModifier(defender, chosen.name, "defenseDiceCount", chosen.defenseDiceCount ?? 3, undefined);
+    const passiveAdj = aggregatePassiveModifiers(defender, "on-defensive-roll", "defensive-dice-count", state);
+    const diceCount = Math.max(1, Math.min(5, masteryAdjusted + passiveAdj)) as 2 | 3 | 4 | 5;
+    events.push({
+      t: "defense-intended",
+      defender: defender.player,
+      abilityIndex,
       abilityName: chosen.name,
-      abilityTier: chosen.tier,
-      incomingAmount: pa.incomingAmount,
+      diceCount,
     });
-    reduction += r.reduction;
-    events.push(...r.events);
-  }
 
-  events.push({
-    t: "defense-resolved",
-    player: defender.player,
-    reduction,
-    matchedTier,
-    abilityName: matchedName,
-    landed,
-  });
-  if (reduction >= 2) {
-    events.push({ t: "hero-state", player: defender.player, state: "defended" });
-  }
-  // Decrement any `consumesOnDefensiveRoll` tokens the defender carries.
-  for (const inst of [...defender.statuses]) {
-    const def = getStatusDef(inst.id);
-    if (!def?.consumesOnDefensiveRoll) continue;
-    inst.stacks -= 1;
-    if (inst.stacks <= 0) {
-      defender.statuses = defender.statuses.filter(s => s.id !== inst.id);
-      events.push({ t: "status-removed", status: inst.id, holder: defender.player, reason: "expired" });
+    // Single roll. Reuse the defender's die shape but only roll `diceCount`
+    // of them; mirror values back into defender.dice so the UI tray can
+    // render the rolled faces.
+    const rolledFaces: import("./types").DieFace[] = [];
+    const rolledDescriptors: { index: number; current: number; symbol: string }[] = [];
+    const dieFaceCount = defender.dice[0]?.faces.length ?? 6;
+    for (let i = 0; i < diceCount; i++) {
+      const r = nextInt(state.rngSeed, state.rngCursor, dieFaceCount);
+      state.rngCursor = r.cursor;
+      const face = defender.dice[0]!.faces[r.value];
+      rolledFaces.push(face);
+      defender.dice[i].current = r.value;
+      defender.dice[i].locked = false;
+      rolledDescriptors.push({ index: i, current: r.value, symbol: face.symbol });
+    }
+    for (let i = diceCount; i < defender.dice.length; i++) defender.dice[i].locked = true;
+
+    events.push({
+      t: "defense-dice-rolled",
+      player: defender.player,
+      dice: rolledDescriptors,
+      abilityName: chosen.name,
+    });
+
+    if (comboMatchesFaces(chosen.combo, rolledFaces)) {
+      landed = true;
+      matchedTier = chosen.tier;
+      matchedName = chosen.name;
+      const r = resolveDefensiveEffect(chosen.effect, {
+        state,
+        defender,
+        attacker: state.players[pa.attacker],
+        firingCombo: chosen.combo,
+        firingFaces: rolledFaces,
+        abilityName: chosen.name,
+        abilityTier: chosen.tier,
+        incomingAmount: pa.incomingAmount,
+      });
+      reduction += r.reduction;
+      events.push(...r.events);
+    }
+
+    events.push({
+      t: "defense-resolved",
+      player: defender.player,
+      reduction,
+      matchedTier,
+      abilityName: matchedName,
+      landed,
+    });
+    if (reduction >= 2) {
+      events.push({ t: "hero-state", player: defender.player, state: "defended" });
+    }
+    // Decrement any `consumesOnDefensiveRoll` tokens the defender carries.
+    for (const inst of [...defender.statuses]) {
+      const def = getStatusDef(inst.id);
+      if (!def?.consumesOnDefensiveRoll) continue;
+      inst.stacks -= 1;
+      if (inst.stacks <= 0) {
+        defender.statuses = defender.statuses.filter(s => s.id !== inst.id);
+        events.push({ t: "status-removed", status: inst.id, holder: defender.player, reason: "expired" });
+      }
+    }
+    if (landed && reduction >= 1) {
+      for (const trig of defHero.resourceIdentity.cpGainTriggers) {
+        if (trig.on !== "successfulDefense") continue;
+        const adjusted = applyTriggerModifiersToTrigger(
+          state, defender, state.players[pa.attacker], trig, matchedTier,
+        );
+        const gain = adjusted.perStack ? adjusted.gain : adjusted.gain;
+        events.push(...gainCp(defender, gain));
+      }
     }
   }
-  if (landed && reduction >= 1) {
-    for (const trig of defHero.resourceIdentity.cpGainTriggers) {
-      if (trig.on !== "successfulDefense") continue;
-      const adjusted = applyTriggerModifiersToTrigger(
-        state, defender, state.players[pa.attacker], trig, matchedTier,
-      );
-      const gain = adjusted.perStack ? adjusted.gain : adjusted.gain;
-      events.push(...gainCp(defender, gain));
-    }
-  }
-  return finalizeDefense(state, pa, landed, reduction, matchedTier, events);
-}
-
-/** Shared post-resolution: pipeline-modifier reductions, applyAttackEffects,
- *  clear pendingAttack + pendingDefenseRoll. */
-function finalizeDefense(
-  state: GameState,
-  pa: import("./types").PendingAttack,
-  _landed: boolean,
-  reduction: number,
-  _matchedTier: 1 | 2 | 3 | 4 | undefined,
-  events: GameEvent[],
-): GameEvent[] {
-  // §15.3: incoming-damage pipeline buffs add to the final reduction the
-  // defender receives.
+  // §15.3: incoming-damage pipeline buffs add to the final reduction.
   {
     const baseline = pa.incomingAmount;
     const adjusted = aggregatePipelineModifiers(state.players[pa.defender], "incoming-damage", baseline);
@@ -611,7 +568,6 @@ function finalizeDefense(
     pa.critTriggered,
   ));
   state.pendingAttack = undefined;
-  state.pendingDefenseRoll = undefined;
   return events;
 }
 

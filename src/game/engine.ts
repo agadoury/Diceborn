@@ -35,7 +35,7 @@ import { stacksOf, stripStatus, setHeroLookup, getStatusDef } from "./status";
 import { buildDeck } from "./cards";
 import {
   enterPhase, performRoll, beginOffensivePick, commitOffensiveAbility,
-  resolveDefenseChoice, resolveDefenseRoll, emitLadderState, other, endMatch,
+  resolveDefenseChoice, emitLadderState, other, endMatch,
 } from "./phases";
 import { coinFlip } from "./rng";
 
@@ -56,7 +56,6 @@ export function applyAction(state: GameState, action: Action): ApplyResult {
     case "respond-to-status-removal": events.push(...respondToStatusRemoval(next, action.cardId)); break;
     case "select-offensive-ability": events.push(...selectOffensiveAbility(next, action.abilityIndex)); break;
     case "select-defense":  events.push(...selectDefense(next, action.abilityIndex)); break;
-    case "roll-defense-dice": events.push(...rollDefenseDice(next)); break;
     case "spend-bank":      events.push(...resolveBankSpend(next, action.amount)); break;
     case "decline-bank-spend": events.push(...resolveBankSpend(next, 0)); break;
     case "status-holder-action": events.push(...resolveStatusHolderAction(next, action.status, action.actionIndex)); break;
@@ -414,28 +413,13 @@ function selectOffensiveAbility(state: GameState, abilityIndex: number | null): 
   return events;
 }
 
-/** Defender's response to a `pendingAttack`. When abilityIndex is null
- *  (take the hit), resolves inline and proceeds to main-post. When a real
- *  ability is picked, sets `pendingDefenseRoll` and emits `defense-intended`
- *  — the engine then waits for `roll-defense-dice` before rolling and
- *  applying damage. */
+/** Defender's response to a `pendingAttack`. Rolls the defense dice
+ *  inline (or skips when abilityIndex is null), applies damage, then
+ *  proceeds to main-post. */
 function selectDefense(state: GameState, abilityIndex: number | null): GameEvent[] {
   if (!state.pendingAttack) return [];
   const events: GameEvent[] = [];
   events.push(...resolveDefenseChoice(state, abilityIndex));
-  // If the pick deferred to a manual roll, halt — `pendingDefenseRoll` is set.
-  if (state.pendingDefenseRoll) return events;
-  if (state.winner) return events;
-  events.push(...enterPhase(state, "main-post"));
-  events.push(...emitLadderState(state, getHero(state.players[state.activePlayer].hero), state.players[state.activePlayer]));
-  return events;
-}
-
-/** Resolve the defender's roll for the previously picked defense. */
-function rollDefenseDice(state: GameState): GameEvent[] {
-  if (!state.pendingDefenseRoll || !state.pendingAttack) return [];
-  const events: GameEvent[] = [];
-  events.push(...resolveDefenseRoll(state));
   if (state.winner) return events;
   events.push(...enterPhase(state, "main-post"));
   events.push(...emitLadderState(state, getHero(state.players[state.activePlayer].hero), state.players[state.activePlayer]));
@@ -685,7 +669,6 @@ function cloneState(state: GameState): GameState {
     log: state.log.slice(),
     pendingOffensiveChoice: state.pendingOffensiveChoice ? { ...state.pendingOffensiveChoice, matches: state.pendingOffensiveChoice.matches.slice() } : undefined,
     pendingAttack: state.pendingAttack ? { ...state.pendingAttack } : undefined,
-    pendingDefenseRoll: state.pendingDefenseRoll ? { ...state.pendingDefenseRoll } : undefined,
     pendingBankSpend: state.pendingBankSpend ? { ...state.pendingBankSpend } : undefined,
     pendingStatusRemoval: state.pendingStatusRemoval ? { ...state.pendingStatusRemoval } : undefined,
     pendingOffensiveCommit: state.pendingOffensiveCommit ? { ...state.pendingOffensiveCommit } : undefined,

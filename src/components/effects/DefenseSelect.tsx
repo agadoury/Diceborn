@@ -27,10 +27,7 @@ export function DefenseSelectLayer() {
   // Wait for the choreographer to finish playing the lead-up events
   // (ability-triggered, attack-intended) before showing the picker.
   const ready = useInputUnlocked();
-  // Once the defender has picked, the engine sits on `pendingDefenseRoll`
-  // until the roll is dispatched. Hide the picker so DefenseRollLayer can
-  // own the screen.
-  if (!state || !state.pendingAttack || state.pendingDefenseRoll || !ready) return null;
+  if (!state || !state.pendingAttack || !ready) return null;
 
   const pa = state.pendingAttack;
   const defenderIsAi = aiPlayer != null && aiPlayer === pa.defender;
