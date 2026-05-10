@@ -466,5 +466,7 @@ Things that are **stale or placeholder** and should be addressed before ship:
 ## See also
 
 - [`ENGINE_AND_MECHANICS.md`](./ENGINE_AND_MECHANICS.md) — game rules, engine architecture, event flow
+- [`DECK_BUILDING.md`](./DECK_BUILDING.md) — deck composition rules, builder UI, persistence
+- [`cards/`](./cards/) — per-hero card listings + the universal generic pool
 - [`HERO_REQUIREMENTS.md`](./HERO_REQUIREMENTS.md) — hero authoring brief
 - `README.md` — project overview, commands, routes, bundle stats

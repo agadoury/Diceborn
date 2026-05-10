@@ -186,12 +186,11 @@ The prompt-list ordering matches the legacy auto-pick (highest-tier highest-dama
 | Tier | Role | Target landing rate | Damage envelope |
 |---|---|---|---|
 | 1 — Basic | "I always do something" | 75–95% | 3–9 dmg (extended ceiling for Minor Crit on T1 scaling abilities) |
-| 2 — Strong | "I'm playing well" | 45–70% | 5–9 dmg |
+| 2 — Strong | "I'm playing well" | 45–80% | 5–9 dmg |
 | 3 — Signature | Big swing — earned | 20–45% | 9–13 dmg |
-| 4 — Ultimate (standard) | Once or twice per match | 8–25% | 13–15 dmg |
-| 4 — Ultimate (career-moment) | Once-per-career screenshot | 1–5% | 15–18 dmg |
+| 4 — Ultimate | Once-per-career screenshot — gated on `5× face-6` | 0.5–2% | 13–18 dmg |
 
-Tier 4 triggers a full-screen cinematic moment via the choreographer (`ultimate-fired` event). Career-moment is opted-in by setting `ultimateBand: "career-moment"` on the AbilityDef — the simulator validates against the matching landing band.
+Each hero ships **exactly one T4 Ultimate**, gated on rolling all five dice on its face-6 symbol. The Ultimate triggers a full-screen cinematic moment via the choreographer (`ultimate-fired` event). The AbilityDef tags `ultimateBand: "career-moment"`; the simulator validates against the matching landing band. (The type union still permits a legacy `"standard"` value for backward compatibility, but no shipping hero uses it — all three live T4s are `"career-moment"`.)
 
 ### Critical Ultimate (Correction 6 §12)
 
@@ -401,7 +400,7 @@ Legacy kinds `upgrade`, `main-action`, `roll-action`, `status` are still in the 
 
 ### Deck composition validator
 
-`cards.ts validateDeckComposition` enforces Correction 6 §9: exactly 12 cards, exactly 4 Masteries (one each for T1 / T2 / T3 / Defensive). T4 ultimates intentionally have no Mastery — power lives at the curve peak. The validator returns a list of issues; an empty list means the deck is conformant.
+`cards.ts validateDeckComposition` enforces Correction 6 §9 — exactly 12 cards, with category counts and Mastery-slot rules described in detail in [`DECK_BUILDING.md` §7](./DECK_BUILDING.md#7-validation-validatedeckcomposition). T4 Ultimates intentionally have no Mastery — power lives at the curve peak.
 
 ### Instant trigger taxonomy (Correction 6 §5)
 
@@ -510,7 +509,7 @@ Heroes register themselves in `src/content/index.ts` (`HEROES: Partial<Record<He
 
 ### Card files (separate from hero data)
 
-Cards are NOT carried on `HeroDefinition` — they live in their own per-hero module under `src/content/cards/<heroId>.ts` and are looked up at runtime via `getDeckCards(heroId)`. The split is structural prep for an upcoming deck-builder feature: callers go through `getDeckCards` so they don't need to change when player-selected decks land. Today the registry returns the per-hero pool as-is; generic cards live in `src/content/cards/generic.ts` but are not auto-mixed into decks (that decision belongs to the deck-builder).
+Cards are NOT carried on `HeroDefinition` — they live in their own per-hero module under `src/content/cards/<heroId>.ts` and are resolved into decks at runtime via `getCardCatalog(heroId)` + `getDeckCards(heroId, savedIds?)`. Generic universal cards live in `src/content/cards/generic.ts`. **Deck composition rules, the deck-builder UI, persistence, and per-hero card listings live in [`DECK_BUILDING.md`](./DECK_BUILDING.md) and [`docs/cards/`](./cards/)** — the engine doc just notes the structural split.
 
 Adding a hero is therefore two file drops, not one:
 
@@ -780,7 +779,10 @@ From `src/game/types.ts`:
 
 ## See also
 
-- `docs/HERO_REQUIREMENTS.md` — hero-authoring brief; what a hero submission must contain to land cleanly.
+- [`DECK_BUILDING.md`](./DECK_BUILDING.md) — deck composition, the builder UI, persistence, and the validator.
+- [`cards/`](./cards/) — per-hero card listings + the universal generic pool.
+- [`HERO_REQUIREMENTS.md`](./HERO_REQUIREMENTS.md) — hero-authoring brief; what a hero submission must contain to land cleanly.
+- [`UI.md`](./UI.md) — match-screen layout, overlays, the choreographer, design tokens.
 - `README.md` — project overview, commands, routes, bundle stats.
 - `src/game/types.ts` — the type contract; the canonical source of truth for action / event / state shapes.
 - `src/game/engine.ts` — `applyAction` reducer.

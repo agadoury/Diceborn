@@ -309,38 +309,23 @@ The "really committed" defense — biggest single-defense reduction in the kit. 
 
 ---
 
-## 9. Cards (12)
+## 9. Cards
 
-Authored in [`src/content/cards/lightbearer.ts`](../../src/content/cards/lightbearer.ts). Per the [card-file split](../ENGINE_AND_MECHANICS.md#card-files-separate-from-hero-data) cards live outside `HeroDefinition`; the registry resolves them at deck-build time.
+The full per-card listing for the Lightbearer — IDs, costs, kinds,
+categories, slots, once-per-match flags, and rules text — lives in
+**[`../cards/lightbearer.md`](../cards/lightbearer.md)**.
 
-### Dice manipulation (3)
+For the deck-building system as a whole (composition rules, the
+builder UI, persistence, the validator), see
+[`../DECK_BUILDING.md`](../DECK_BUILDING.md).
 
-| Card | Cost | Kind | Effect |
-|---|---|---|---|
-| **Steady Light** | 1 | roll-phase | `set-die-face` 1 die → sun (oncePerTurn) |
-| **Faith** | 2 | roll-phase | `reroll-dice` not showing sun or dawn |
-| **Resolve** | 1 | main-phase | `face-symbol-bend` dawn → sun, this-turn |
-
-### Tiered masteries (4)
-
-| Card | Cost | Tier | Notes |
-|---|---|---|---|
-| **Dawnblade Mastery** | 2 | T1 | scaling-damage-base 3 → 4 (Dawnblade becomes 4 / 6 / 8) |
-| **Solar Devotion** | 3 | T2 | Sun Strike: 5 → 7 dmg, Radiance gain 1 → 2; Dawn Prayer: 4 dmg + heal 2 + 1 Verdict → 5 + 3 + 2 |
-| **Sunblade Mastery** | 3 | T3 | Solar Blade: 7 → 9 ub, +2/strip; Divine Ray: 9 → 11 dmg, 2 → 3 Verdict |
-| **Cathedral Light** | 3 | Defensive | Activates Dawn-Ward / Wall of Dawn inert Radiance gains; bumps reductions on Prayer & Wall |
-
-The masteries lean hard on the new `passive-counter-gain-amount` ability-upgrade field — the Lightbearer ingestion added this field to the whitelist so masteries can rewrite the `value` on `passive-counter-modifier` leaves nested inside an ability's compound effect.
-
-### Signature plays (5)
-
-| Card | Cost | Kind | Mechanic |
-|---|---|---|---|
-| **Sanctuary** | 3 | main-phase | `persistent-buff.pipelineModifier` (§15.3) — incoming-damage −2 until next-turn-of-self |
-| **Dawnsong** | 2 | main-phase | passive-counter-modifier radiance −2, gain-cp +4 (gated by `passive-counter-min ≥ 2`) |
-| **Aegis of Dawn** | 4 | instant | `reduce-damage.multiplier 0.5, rounding ceil` (§15.1) on `opponent-fires-ability tier:4`, oncePerMatch |
-| **Vow of Service** | 3 | main-phase | `persistent-buff` ability-upgrade scoped to all defenses, sets `passive-counter-gain-amount: 2` gated by `defense-tier-min: 2` |
-| **Sunburst** | 2 | roll-phase | `combo-override` (§15.6) Dawnblade & Sun Strike → 1+ sword this-turn, plus +2 damage buff with `discardOn: end-of-self-turn`, oncePerMatch |
+The Lightbearer ships 12 cards total: 3 dice-manip, 4 ladder-upgrade
+Masteries (one per slot — T1 / T2 / T3 / Defensive), and 5 signature
+plays. The masteries lean on the `passive-counter-gain-amount`
+ability-upgrade field so they can rewrite the `value` on
+`passive-counter-modifier` leaves nested inside an ability's compound
+effect — see the engine-touchpoints section below for the full
+plumbing.
 
 ---
 
@@ -447,7 +432,9 @@ Standout cards: Sanctuary, Aegis of Dawn, Sunburst
 
 ## 15. See also
 
+- [`docs/cards/lightbearer.md`](../cards/lightbearer.md) — full card listing.
+- [`docs/DECK_BUILDING.md`](../DECK_BUILDING.md) — deck composition rules + builder UI.
 - [`docs/ENGINE_AND_MECHANICS.md`](../ENGINE_AND_MECHANICS.md) — engine architecture, especially [§7 Status system](../ENGINE_AND_MECHANICS.md#7-status-system) and the §15 extensions block in the docs section.
 - [`docs/HERO_REQUIREMENTS.md`](../HERO_REQUIREMENTS.md) — hero-authoring brief that produced this submission.
 - [`src/content/heroes/lightbearer.ts`](../../src/content/heroes/lightbearer.ts) — hero definition.
-- [`src/content/cards/lightbearer.ts`](../../src/content/cards/lightbearer.ts) — card pool.
+- [`src/content/cards/lightbearer.ts`](../../src/content/cards/lightbearer.ts) — card source.

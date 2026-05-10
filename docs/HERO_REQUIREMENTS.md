@@ -351,7 +351,7 @@ A Tier 4 ability can declare a more-restrictive variant — "Critical Ultimate" 
 | `criticalEffect.effectAdditions: AbilityEffect[]` | Extra effects on top of the base. |
 | `criticalEffect.consumeModifierBonus: N` | Override how the bankable passive is consumed (e.g. a Radiance ability could bump its bonus from +2 dmg / +1 heal to +4 dmg / +2 heal at crit). |
 | `criticalCinematic: string` | Free-form brief — what changes from the base cinematic. |
-| `ultimateBand: "standard" \| "career-moment"` | `"standard"` = 8–25% landing / 13–15 dmg; `"career-moment"` = 0.5–2% landing / 13–18 dmg. The three shipping T4s (Wolf's Howl, God's Crater, Judgment of the Sun) are all `"career-moment"` since they're all gated on `5× face-6`. The simulator validates against the matching band. |
+| `ultimateBand: "career-moment"` | The Ultimate's tuning band — 0.5–2% landing rate, 13–18 dmg envelope. All three shipping T4 Ultimates (Wolf's Howl, God's Crater, Judgment of the Sun) use this. The type union also accepts `"standard"` for legacy compatibility, but no shipping hero uses it; new heroes should set `"career-moment"` and gate the T4 on `5× face-6`. |
 
 If your T4 ability is itself a once-per-career special (e.g. requires `5× face-6`), you don't need a separate `criticalCondition` — just set `ultimateBand: "career-moment"` and the validator accepts the lower landing rate. The three shipping heroes follow this pattern: their T4s have no `criticalCondition` / `criticalEffect` blocks, only a `criticalCinematic` brief that plays every time the ability fires.
 
@@ -385,8 +385,7 @@ The three shipping heroes (Berserker, Pyromancer, Lightbearer) all follow the sa
 | **Tier 1 (Basic)** | 75–95% | **3–9 dmg** (extended ceiling for Minor Crit on T1 scaling abilities — e.g. Cleave 4/6/8) | "I always do something" |
 | **Tier 2 (Strong)** | 45–80% | 5–9 dmg | "I'm playing well" — note the upper end can stretch when one of the three T2 slots is a low-difficulty `straight-3`-class combo |
 | **Tier 3 (Signature)** | 20–45% | 9–13 dmg | Big swing — earned, not expected |
-| **Tier 4-Standard** | 8–25% | 13–15 dmg | Reserved for future heroes that want a less-rare T4. None of the three shipping heroes use this band. |
-| **Tier 4-Career-Moment** | 0.5–2% | 13–18 dmg | Once-per-career screenshot moment. Set `ultimateBand: "career-moment"`. The canonical pattern is `5× face-6`; the three shipping T4s all use it (Wolf's Howl 5×howl, God's Crater 5×ruin, Judgment of the Sun 5×zenith). |
+| **Tier 4 (Ultimate)** | 0.5–2% | 13–18 dmg | The single Ultimate — a once-per-career screenshot moment. Set `ultimateBand: "career-moment"`. The canonical pattern is `5× face-6`; the three shipping T4s use it (Wolf's Howl 5×howl, God's Crater 5×ruin, Judgment of the Sun 5×zenith). |
 
 #### Defensive ladder (player-pick model)
 
@@ -398,7 +397,7 @@ These bands assume the defender PICKS one defense — the player has agency to c
 | **Defensive T2** (medium risk-reward) | 35–55% | Bigger payoff, narrower combo |
 | **Defensive T3** (high reward, lower frequency) | 20–40% | Counter-attack defenses |
 
-**Damage scaling rationale (30 HP):** average damage per turn should land near 5 HP so matches resolve in 6–8 turns. Single hits over 18 dmg are reserved for T4-Career-Moment; T4-Standard caps at 15.
+**Damage scaling rationale (30 HP):** average damage per turn should land near 5 HP so matches resolve in 6–8 turns. Single hits at the 13–18 dmg ceiling are reserved for the T4 Ultimate.
 
 **Multi-ability per tier is fine** — heroes can have 2 abilities at the same tier with different combos, or two abilities sharing a combo with different effect profiles. The player picks which matched ability to fire from an overlay (sorted highest-tier-first / highest-damage-first by default). This makes overlapping combos a feature, not a bug — design pairs that frame a real choice.
 
@@ -595,7 +594,7 @@ Specify any number of abilities across tiers 1–4. Each on its own block.
                  motif on display, hero bark line, distinct musical sting. This is the
                  highest-budget animation slot for the hero.>
   Bark line:    "<one short line the hero says when this fires>"
-  UltimateBand: "standard" | "career-moment"      (career-moment requires a stricter combo)
+  UltimateBand: "career-moment"     (canonical — gates the T4 on `5× face-6` for a 0.5–2% landing rate)
   CriticalCondition: <optional, more-restrictive combo than the base — e.g. "5-of-a-kind ruin">
   CriticalEffect: <optional — pick one or combine:
                    { cosmeticOnly: true } |
@@ -645,29 +644,43 @@ Skips defense entirely (defender takes full hit, no roll): undefendable /
 pure / ultimate damage. Plan some of your offensive abilities to use these
 damage types so the offense has answers to a strong defender.
 
-=== CARDS (exactly 12) ===
+=== CARDS ===
 
 > **File layout note.** Cards are NOT carried on `HeroDefinition` and are
 > NOT defined inside the hero file. They live in their own per-hero card
 > module (`src/content/cards/<heroId>.ts`) and are looked up at runtime
-> via `getDeckCards(heroId)`. This separation exists so the upcoming
-> deck-builder feature can swap card lists per match without touching
-> hero data. **Always submit cards as a separate block** — the ingestion
-> tool drops them into the matching `cards/<heroId>.ts` file, not into
-> the hero module.
+> via `getCardCatalog(heroId)`. This separation lets the deck-builder
+> swap card lists per match without touching hero data. **Always submit
+> cards as a separate block** — the ingestion tool drops them into the
+> matching `cards/<heroId>.ts` file, not into the hero module.
 
-Required composition — the validator rejects decks that don't match:
-  3 dice manipulation     (set-die-face / reroll-dice / face-symbol-bend)
-  4 tiered Masteries      (1 each: T1, T2, T3, Defensive — never T4)
-  5 signature plays       (mix of main-phase / roll-phase / instant)
+The full deck-building system — composition rules (4 / 3 / 3 / 2 by
+category), validation, the builder UI, persistence, and how the engine
+resolves catalog → deck at match start — is documented in
+**[`DECK_BUILDING.md`](./DECK_BUILDING.md)**.
+
+**Hero authoring contract — what to ship in `src/content/cards/<heroId>.ts`.** The deck-builder pulls a 12-card deck from your catalog plus the 4 universal generic cards, so you only ship the *non-generic* portion of the catalog. Minimums:
+
+  3 dice-manip cards         — exact (the player puts ALL 3 in every deck)
+  ≥ 4 ladder-upgrade cards   — at least 1 Mastery per slot {T1, T2, T3,
+                                Defensive}; ship multiple per slot to
+                                give the deck-builder real choice
+  ≥ 5 signature cards        — the player picks 2 of these in their deck
+
+(T4 Ultimates intentionally have no Mastery — never ship a
+ladder-upgrade with `masteryTier: 4`. The validator rejects it.)
 
 For each card:
 
 CARD: NAME
   ID:     <id>/<card-slug>
-  Cost:   <0–5 CP>
-  Kind:   main-phase | roll-phase | instant | mastery
-  Text:   <player-facing rules text, one or two sentences>
+  Cost:         <0–5 CP>
+  Kind:         main-phase | roll-phase | instant | mastery
+  CardCategory: dice-manip | ladder-upgrade | signature
+                (Hero cards never use "generic" — that pool lives in
+                `src/content/cards/generic.ts` and is mixed in at deck-
+                build time, not authored per hero.)
+  Text:         <player-facing rules text, one or two sentences>
 
   Effect: <pick one of the canonical primitives from §4.2:
             damage | scaling-damage | heal | apply-status | remove-status |

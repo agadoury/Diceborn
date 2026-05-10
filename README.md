@@ -58,8 +58,8 @@ src/
 │   ├── ai.ts           Heuristic AI — calls evaluateLadder for shared reach
 │   └── match-summary.ts Descriptor + stats from the GameEvent log
 ├── content/     # Hero & card data files. Pure declarations — no engine code.
-│   ├── heroes/      Per-hero HeroDefinition modules (currently empty)
-│   └── cards/       Hero-specific + generic card lists (generic.ts only)
+│   ├── heroes/      Per-hero HeroDefinition modules (3: berserker, pyromancer, lightbearer)
+│   └── cards/       Hero-specific + generic card lists (per-hero + generic.ts)
 ├── store/       # Zustand: gameStore, choreoStore, uiStore.
 ├── components/  # ui/ primitives, game/ board parts, effects/, screens/.
 ├── audio/       # Synth-placeholder SFX library + Howler-ready manager facade.
@@ -110,15 +110,28 @@ Vibration API and gracefully no-ops).
 ## How to add a new hero
 
 1. Drop a new file in `src/content/heroes/<id>.ts` exporting a `HeroDefinition`
-   with all 4 uniqueness pillars.
-2. If the hero needs new dice glyphs, add them to `src/components/game/dieFaces.tsx`.
-3. If the hero has a new signature status token, register it in `src/game/status.ts`.
-4. Register the hero in `src/content/index.ts`.
-5. Validate landing rates: `npm run simulate -- --rates`.
+   with all 4 uniqueness pillars. Follow the canonical ladder shape — 1× T1
+   + 3× T2 + 2× T3 + 1× T4 (Ultimate gated on `5× face-6`).
+2. Drop the matching `src/content/cards/<id>.ts` (cards are split out from
+   hero data — see [`docs/DECK_BUILDING.md`](./docs/DECK_BUILDING.md)).
+3. If the hero needs new dice glyphs, add them to `src/components/game/dieFaces.tsx`.
+4. If the hero has a new signature status token, register it in `src/game/status.ts`.
+5. Register the hero in `src/content/index.ts` and the cards in `src/content/cards/index.ts`.
+6. Add a hero design page in `docs/heroes/<id>.md` and a card listing in `docs/cards/<id>.md`.
+7. Validate landing rates: `npm run simulate -- --rates`.
 
 The engine itself never changes when adding a hero. If the hero needs a
 genuinely new mechanic category (a new `PassiveBehavior` kind), add it
 generically so future heroes can reuse it.
+
+## Documentation
+
+- [`docs/ENGINE_AND_MECHANICS.md`](./docs/ENGINE_AND_MECHANICS.md) — game rules, engine architecture, event flow.
+- [`docs/UI.md`](./docs/UI.md) — match-screen layout, overlays, choreography, design tokens.
+- [`docs/DECK_BUILDING.md`](./docs/DECK_BUILDING.md) — deck composition, builder UI, persistence, validator.
+- [`docs/cards/`](./docs/cards/) — per-hero card listings + the universal generic pool.
+- [`docs/heroes/`](./docs/heroes/) — per-hero design notes (lore, dice, ladders, tuning).
+- [`docs/HERO_REQUIREMENTS.md`](./docs/HERO_REQUIREMENTS.md) — hero-authoring brief.
 
 ## License & lore
 
