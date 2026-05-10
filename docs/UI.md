@@ -50,8 +50,10 @@ Defined in `src/main.tsx` and routed with `react-router-dom`.
 
 | Route | Component | Purpose |
 |---|---|---|
-| `/` | `MainMenu` | Stacked CTAs: Vs AI (recommended), Hot-Seat, How to play, Settings, plus dev links. |
+| `/` | `MainMenu` | Stacked CTAs: Vs AI (recommended), Hot-Seat, Deck Builder, How to play, Settings, plus dev links. |
 | `/heroes?mode=...` | `HeroSelect` | Pick hero(es). `mode=vs-ai` picks one hero; `mode=hot-seat` picks p1 then p2 with a curtain transition. Shows the live hero registry — empty-state if no heroes are registered. |
+| `/decks` | `DeckSelect` | Standalone entry to the deck builder. Hero-portrait grid; each card shows a `SAVED` / `DEFAULT` badge. Tapping a hero forwards to `/deck-builder?hero=<id>` with no match params (standalone mode). |
+| `/deck-builder?hero=...` | `DeckBuilder` | Edit one hero's deck. Reads three entry shapes from URL params: standalone (no params → CTA "SAVE", returns to `/decks`); pre-pick (`mode=...` only → CTA "SAVE", returns to `/heroes?mode=...`); match flow (`mode + p1 + p2` → CTA "SAVE & PLAY", forwards to `/play`). |
 | `/play?mode=...&p1=...&p2=...` | `MatchScreen` | Full match UI. See [§3](#3-match-screen-layout). |
 | `/how-to-play` | `HowToPlay` | Static rules walkthrough as numbered cards — 7 sections covering goal, turn flow, rolling + ladder, picking what to fire, defending, cards/decks, and status tokens. |
 | `/settings` | `Settings` | Audio mute, reduced motion, haptics. Persists to `localStorage`. |

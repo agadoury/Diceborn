@@ -1,5 +1,5 @@
 /**
- * DeckBuilder — pre-match deck customization.
+ * DeckBuilder — deck customization.
  *
  * The player picks 12 cards from their hero's catalog along the four-axis
  * composition rule:
@@ -9,12 +9,19 @@
  *   - 2 signature
  *
  * Decks persist per-hero in localStorage via deckStorage.ts. The "Use
- * default" CTA loads the hero's recommendedDeck. Saving + Playing forwards
- * the chosen card-id list to the game store on startMatch.
+ * default" CTA loads the hero's recommendedDeck.
  *
- * URL: /deck-builder?hero=<id>&mode=<vs-ai|hot-seat>&p1=<id>&p2=<id>
- *   - hero: which hero's deck we're building (the active one)
- *   - mode + p1 + p2: forwarded to /play after save
+ * URL: /deck-builder?hero=<id>[&mode=<vs-ai|hot-seat>][&p1=<id>&p2=<id>]
+ *
+ * Three entry points decide the post-save navigation + the CTA label:
+ *   - Standalone (no `mode`, `p1`, or `p2`): launched from `/decks` via
+ *     the main-menu Deck Builder button. CTA is "SAVE"; commit returns
+ *     to `/decks` without launching a match.
+ *   - Pre-pick (`mode` set, no `p1`/`p2`): "Customize deck" tapped on
+ *     HeroSelect before committing to a match. CTA is "SAVE"; commit
+ *     returns to `/heroes?mode=...` so the player still has to pick.
+ *   - Match flow (`mode + p1 + p2` all set): HeroSelect commit-with-deck
+ *     path. CTA is "SAVE & PLAY"; commit forwards to `/play?...`.
  */
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -47,9 +54,15 @@ export default function DeckBuilder() {
   const navigate = useNavigate();
 
   const heroId = params.get("hero") as HeroId | null;
-  const mode = params.get("mode") ?? "vs-ai";
+  const rawMode = params.get("mode");
+  const mode = rawMode ?? "vs-ai";
   const p1 = params.get("p1");
   const p2 = params.get("p2");
+  // Three entry points: full match flow (HeroSelect already picked p1+p2),
+  // pre-pick customize (HeroSelect "Customize deck" before commit, mode set,
+  // no p1/p2), and standalone (DeckSelect from main menu, no params at all).
+  const entry: "play" | "pre-pick" | "standalone" =
+    p1 && p2 ? "play" : rawMode ? "pre-pick" : "standalone";
 
   if (!heroId) {
     return (
@@ -121,11 +134,16 @@ export default function DeckBuilder() {
     if (!isValid) return;
     saveDeck(heroId!, deckIds);
     sfx("victory-fanfare");
-    const target = p1 && p2
-      ? `/play?mode=${mode}&p1=${p1}&p2=${p2}`
-      : `/heroes?mode=${mode}`;
+    const target =
+      entry === "play"     ? `/play?mode=${mode}&p1=${p1}&p2=${p2}` :
+      entry === "pre-pick" ? `/heroes?mode=${mode}` :
+                             /* standalone */ "/decks";
     navigate(target);
   }
+  const commitLabel =
+    entry === "play"     ? "SAVE & PLAY" :
+    entry === "pre-pick" ? "SAVE" :
+                           "SAVE";
 
   const visibleCatalog = filter === "all"
     ? catalog
@@ -224,7 +242,7 @@ export default function DeckBuilder() {
             disabled={!isValid}
             className="min-w-[180px]"
           >
-            {isValid ? "SAVE & PLAY" : `${12 - deckIds.length} TO GO`}
+            {isValid ? commitLabel : `${12 - deckIds.length} TO GO`}
           </Button>
         </div>
       </div>
