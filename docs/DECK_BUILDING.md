@@ -109,10 +109,25 @@ For per-hero card listings see [`docs/cards/`](./cards/).
 `src/components/screens/DeckBuilder.tsx`. URL:
 
 ```
-/deck-builder?hero=<id>&mode=<vs-ai|hot-seat>[&p1=<id>&p2=<id>]
+/deck-builder?hero=<id>[&mode=<vs-ai|hot-seat>][&p1=<id>&p2=<id>]
 ```
 
-Layout:
+### Entry points
+
+The DeckBuilder reads three URL shapes that decide the post-save
+navigation and the primary CTA label:
+
+| Entry | URL shape | Reached from | Primary CTA | Save returns to |
+|---|---|---|---|---|
+| **Standalone** | `?hero=<id>` (no `mode`/`p1`/`p2`) | Main-menu **Deck Builder** → `/decks` → tap hero | `SAVE` | `/decks` (no match launched) |
+| **Pre-pick** | `?hero=<id>&mode=...` | HeroSelect's **Customize deck** before commit | `SAVE` | `/heroes?mode=...` |
+| **Match flow** | `?hero=<id>&mode=...&p1=...&p2=...` | HeroSelect's **PLAY** path with a deck open | `SAVE & PLAY` | `/play?mode=...&p1=...&p2=...` |
+
+The standalone path is the canonical "I want to manage my decks"
+entrypoint and never starts a match. The other two shapes are how
+the builder is reached during the existing match-setup flow.
+
+### Layout
 
 - **Catalog** (left/top) — every card in `getCardCatalog(hero)`. Cards
   whose category is full, or whose `masteryTier` slot is taken, render
@@ -124,11 +139,17 @@ Layout:
 - **Validation strip** at the top — live `n/required` per category,
   showing the first composition issue (if any).
 - **Sticky footer** — `Use default` (load `recommendedDeck`), `Reset`
-  (empty the deck), and the primary `SAVE & PLAY` (disabled with a
-  `N TO GO` label until composition is conformant).
+  (empty the deck), and the primary commit button. The button label
+  follows the entry-point table above; it shows `N TO GO` (disabled)
+  until the deck is composition-conformant.
 
-Saving forwards back to `/play?...` (or `/heroes` if the URL didn't
-carry `p1`/`p2`).
+### `/decks` — the standalone hero picker
+
+`src/components/screens/DeckSelect.tsx`. A hero-portrait grid; each
+card shows the hero's portrait, name, archetype + complexity, signature
+mechanic blurb, and a `SAVED` (emerald) or `DEFAULT` (muted) badge
+indicating whether the player already has a custom deck. Tapping a
+hero forwards to `/deck-builder?hero=<id>` (standalone entry).
 
 ## 6. Persistence (localStorage)
 
