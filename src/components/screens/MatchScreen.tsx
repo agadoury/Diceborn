@@ -91,26 +91,45 @@ export default function MatchScreen() {
     setCurtain(false);
   }
 
-  // AI driver — when active player is AI and inputs are unlocked, fire the next action.
+  // AI driver — fires whenever the AI has an action to take. That includes
+  // its own turn, *and* off-turn responses where it's the defender of a
+  // pending attack or the holder of a pending counter prompt.
   const aiCooldownRef = useRef<number | null>(null);
   useEffect(() => {
     if (!state || mode !== "vs-ai" || !aiPlayer) return;
-    if (state.activePlayer !== aiPlayer) return;
     if (state.winner) return;
     if (!inputUnlocked) return;
-    // When the AI is the attacker and the human is the defender, the engine
-    // is paused on `pendingAttack` waiting for the human's select-defense.
-    // The AI driver must NOT fire here — otherwise nextAiAction falls through
-    // to advance-phase / end-turn, blowing past the pause and flipping the
-    // turn before the defense resolves.
-    if (state.pendingAttack && state.pendingAttack.defender !== aiPlayer) return;
+
+    const aiIsDefender = !!(state.pendingAttack && state.pendingAttack.defender === aiPlayer);
+    const aiHasPendingCounter = !!(state.pendingCounter && state.pendingCounter.holder === aiPlayer);
+    const aiCanAct =
+      state.activePlayer === aiPlayer || aiIsDefender || aiHasPendingCounter;
+    if (!aiCanAct) return;
+    // On the AI's own turn, if the human is the defender of a pending
+    // attack the engine is paused waiting for the human's select-defense.
+    // Don't fire — nextAiAction would fall through to advance-phase / end-turn
+    // and blow past the pause.
+    if (
+      state.activePlayer === aiPlayer &&
+      state.pendingAttack &&
+      state.pendingAttack.defender !== aiPlayer
+    ) return;
 
     if (aiCooldownRef.current) window.clearTimeout(aiCooldownRef.current);
     aiCooldownRef.current = window.setTimeout(() => {
       // Read state fresh inside the timeout to avoid stale snapshots.
       const live = useGameStore.getState().state;
       if (!live || live.winner) return;
-      if (live.activePlayer !== aiPlayer) return;
+      const stillCanAct =
+        live.activePlayer === aiPlayer ||
+        (live.pendingAttack && live.pendingAttack.defender === aiPlayer) ||
+        (live.pendingCounter && live.pendingCounter.holder === aiPlayer);
+      if (!stillCanAct) return;
+      if (
+        live.activePlayer === aiPlayer &&
+        live.pendingAttack &&
+        live.pendingAttack.defender !== aiPlayer
+      ) return;
       const action = nextAiAction(live, aiPlayer);
       dispatch(action);
     }, 900);   // breathe between AI actions so the player can read what just happened
