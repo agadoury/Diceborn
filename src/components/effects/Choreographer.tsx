@@ -312,8 +312,17 @@ function playEvent(ev: GameEvent, ctx: PlayCtx): number {
       setTimeout(() => ctx.setBanner(null), 900);
       return 900;
     }
-    case "defense-intended":     return ev.abilityIndex == null ? 350 : 600;
-    case "defense-dice-rolled":  return 1100;          // tumble + settle, like dice-rolled
+    case "defense-intended": {
+      // null abilityIndex = defender chose to take the hit; brief beat only.
+      if (ev.abilityIndex == null) return 500;
+      // Show the defender's pick so the player has time to read it before
+      // the dice tumble.
+      const dice = ev.diceCount != null ? ` (${ev.diceCount}d)` : "";
+      ctx.setBanner(`${ev.defender.toUpperCase()} → ${ev.abilityName?.toUpperCase() ?? ""}${dice}`);
+      setTimeout(() => ctx.setBanner(null), 1300);
+      return 1300;
+    }
+    case "defense-dice-rolled":  return 1300;          // tumble + settle + readable pause
     case "defense-resolved":     return ev.reduction > 0 ? 1100 : 500;
 
     case "status-applied":

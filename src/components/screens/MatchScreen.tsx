@@ -275,13 +275,24 @@ export default function MatchScreen() {
             opacity: state.phase === "offensive-roll" || state.phase === "defensive-roll" ? 1 : 0.45,
           }}
         >
-          <DiceTray
-            dice={state.players[state.activePlayer].dice}
-            accent={getHero(state.players[state.activePlayer].hero).accentColor}
-            rollKey={rollKey}
-            onToggleLock={state.activePlayer === viewer ? toggleLock : undefined}
-            centerStage={state.phase === "offensive-roll"}
-          />
+          {(() => {
+            // During the defensive flow show the defender's dice tumbling on
+            // their roll, otherwise the active (attacking) player's tray.
+            const defenseInFlight = !!(state.pendingAttack || state.pendingDefenseRoll);
+            const defenderId = state.pendingAttack?.defender ?? state.pendingDefenseRoll?.defender;
+            const trayPlayerId = defenseInFlight && defenderId ? defenderId : state.activePlayer;
+            const trayHero = getHero(state.players[trayPlayerId].hero);
+            const canLock = state.activePlayer === viewer && !defenseInFlight;
+            return (
+              <DiceTray
+                dice={state.players[trayPlayerId].dice}
+                accent={trayHero.accentColor}
+                rollKey={rollKey}
+                onToggleLock={canLock ? toggleLock : undefined}
+                centerStage={state.phase === "offensive-roll" || defenseInFlight}
+              />
+            );
+          })()}
         </div>
         {/* Match-end result — full ResultScreen overlay rendered below. */}
       </div>
@@ -455,9 +466,9 @@ function useDiceRollKey(viewer: PlayerId): number {
   const playing = useChoreoStore(s => s.playing);
   const handled = useChoreoStore(s => s.totalEventsHandled);
   const lastBump = useRef(0);
-  // Bump on every `dice-rolled` event seen for either player so the active
-  // tray (which always shows the active player's dice) tumbles.
-  if (playing && playing.t === "dice-rolled") {
+  // Bump on every `dice-rolled` or `defense-dice-rolled` event so the tray
+  // tumbles for both offensive and defensive rolls.
+  if (playing && (playing.t === "dice-rolled" || playing.t === "defense-dice-rolled")) {
     void viewer;
     lastBump.current = handled + 1;
   }
