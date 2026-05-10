@@ -252,61 +252,20 @@ export const PYROMANCER: HeroDefinition = {
     },
     {
       tier: 4,
-      name: "Volcanic Rain",
-      damageType: "ultimate",
-      targetLandingRate: [0.08, 0.25],
-      ultimateBand: "standard",
-      combo: {
-        kind: "compound",
-        op: "and",
-        clauses: [
-          { kind: "symbol-count", symbol: "pyromancer:ruin", count: 2 },
-          { kind: "symbol-count", symbol: "pyromancer:ash",  count: 2 },
-        ],
-      },
-      shortText: "12 ult + 3 Cinder",
-      longText: "2 ruin + 2 ash; 12 ultimate damage + 3 Cinder.",
-      effect: {
-        kind: "compound",
-        effects: [
-          { kind: "damage", amount: 12, type: "ultimate" },
-          ASHFALL_CINDER(2),
-        ],
-      },
-      criticalCondition: {
-        kind: "compound",
-        op: "and",
-        clauses: [
-          { kind: "n-of-a-kind",  count: 2 },
-          { kind: "symbol-count", symbol: "pyromancer:ruin", count: 2 },
-        ],
-      },
-      criticalEffect: { cosmeticOnly: true },
-      criticalCinematic: "Brighter gold-fire particle treatment, sharper screen-flash, no damage change.",
-    },
-    {
-      tier: 4,
       name: "God's Crater",
       damageType: "ultimate",
-      targetLandingRate: [0.08, 0.25],
-      ultimateBand: "standard",
-      combo: { kind: "symbol-count", symbol: "pyromancer:ruin", count: 4 },
+      targetLandingRate: [0.005, 0.02],
+      ultimateBand: "career-moment",
+      combo: { kind: "symbol-count", symbol: "pyromancer:ruin", count: 5 },
       shortText: "Stun + 11 ult + force detonation",
       longText:
-        "4 ruin; Stun, 11 ultimate damage, then push Cinder to 5 — detonation fires for 8 (12 with Crater Wind).",
+        "5 ruin (all 5 dice on face 6); Stun, 11 ultimate damage, then push Cinder to 5 — detonation fires for 8 (12 with Crater Wind).",
       effect: {
         kind: "compound",
         effects: [
           { kind: "apply-status", status: "stun", stacks: 1, target: "opponent" },
           { kind: "damage", amount: 11, type: "ultimate" },
           { kind: "apply-status", status: "pyromancer:cinder", stacks: 5, target: "opponent" },
-        ],
-      },
-      criticalCondition: { kind: "symbol-count", symbol: "pyromancer:ruin", count: 5 },
-      criticalEffect: {
-        damageOverride: 22,
-        effectAdditions: [
-          { kind: "damage", amount: 4, type: "pure" },
         ],
       },
       criticalCinematic:

@@ -220,6 +220,26 @@ export const LIGHTBEARER: HeroDefinition = {
       },
     },
 
+    // ── T2 (Apostasy) — utility / cleanse, no direct damage ──────────────────
+    {
+      tier: 2,
+      name: "Apostasy",
+      damageType: "normal",
+      combo: { kind: "symbol-count", symbol: "lightbearer:dawn", count: 3 },
+      targetLandingRate: [0.4, 0.65],
+      shortText: "Heal 6 + cleanse 1 + 1 Rad",
+      longText:
+        "3 dawn (three 5s); heal 6 HP, remove 1 negative status from self, gain 1 Radiance.",
+      effect: {
+        kind: "compound",
+        effects: [
+          { kind: "heal", amount: 6, target: "self" },
+          { kind: "remove-status", status: "any-debuff", stacks: 1, target: "self" },
+          { kind: "passive-counter-modifier", passiveKey: "radiance", operation: "add", value: 1, respectsCap: true },
+        ],
+      },
+    },
+
     // ── T3 (Solar Blade) ─────────────────────────────────────────────────────
     {
       tier: 3,
@@ -290,67 +310,17 @@ export const LIGHTBEARER: HeroDefinition = {
       },
     },
 
-    // ── T4 (Apostasy) — defensive ultimate, no direct damage ─────────────────
-    {
-      tier: 4,
-      name: "Apostasy",
-      damageType: "ultimate",
-      combo: { kind: "symbol-count", symbol: "lightbearer:dawn", count: 3 },
-      targetLandingRate: [0.08, 0.4],
-      shortText: "Heal 12 + cleanse + Stun + 3 Rad",
-      longText:
-        "3 dawn (three 5s); heal 12 HP, remove all negative status from self, Stun opponent, gain 3 Radiance.",
-      ultimateBand: "standard",
-      // Cosmetic-only crit: 3 dawn faces all share faceValue 5 so they
-      // already form n-of-a-kind 3 — the criticalCondition is mathematically
-      // equivalent to the base combo, which means every Apostasy plays the
-      // brighter sunrise treatment. By design.
-      criticalCondition: {
-        kind: "compound",
-        op: "and",
-        clauses: [
-          { kind: "symbol-count", symbol: "lightbearer:dawn", count: 3 },
-          { kind: "n-of-a-kind", count: 3 },
-        ],
-      },
-      criticalEffect: { cosmeticOnly: true },
-      criticalCinematic:
-        "Brighter sunrise particle treatment with additional gold-light beams streaming horizontally across the screen, no mechanical change.",
-      effect: {
-        kind: "compound",
-        effects: [
-          { kind: "heal", amount: 12, target: "self" },
-          { kind: "remove-status", status: "any-debuff", stacks: "all", target: "self" },
-          { kind: "apply-status", status: "stun", stacks: 1, target: "opponent" },
-          { kind: "passive-counter-modifier", passiveKey: "radiance", operation: "add", value: 3, respectsCap: true },
-        ],
-      },
-    },
-
     // ── T4 (Judgment of the Sun) ─────────────────────────────────────────────
     {
       tier: 4,
       name: "Judgment of the Sun",
       damageType: "ultimate",
-      combo: {
-        kind: "compound",
-        op: "and",
-        clauses: [
-          { kind: "symbol-count", symbol: "lightbearer:zenith", count: 2 },
-          { kind: "symbol-count", symbol: "lightbearer:sword",  count: 1 },
-          { kind: "symbol-count", symbol: "lightbearer:sun",    count: 2 },
-        ],
-      },
-      targetLandingRate: [0.08, 0.3],
+      combo: { kind: "symbol-count", symbol: "lightbearer:zenith", count: 5 },
+      targetLandingRate: [0.005, 0.02],
       shortText: "14 ult + Stun + spend Rad",
       longText:
-        "2 zenith + 1 sword + 2 suns; deals 14 ultimate damage + 2 dmg per Radiance token, heals you 1 HP per Radiance token, applies Stun, then spends all Radiance.",
-      ultimateBand: "standard",
-      criticalCondition: { kind: "symbol-count", symbol: "lightbearer:zenith", count: 3 },
-      criticalEffect: {
-        damageMultiplier: 2,
-        consumeModifierBonus: 4,
-      },
+        "5 zenith (all 5 dice on face 6); deals 14 ultimate damage + 2 dmg per Radiance token, heals you 1 HP per Radiance token, applies Stun, then spends all Radiance.",
+      ultimateBand: "career-moment",
       criticalCinematic:
         "Extended slow-mo on the descending strike, screen flashes pure white instead of gold-white, voice bark gets layered choir + brass undertone, the pillar of light persists for an additional 600ms after impact before dissipating. Once-per-match cinematic stinger.",
       effect: {
