@@ -132,8 +132,15 @@ export default function HeroSelect() {
         </div>
       </div>
 
-      {/* Bottom CTA */}
-      <div className="relative z-10 mt-6 flex justify-center pb-[max(env(safe-area-inset-bottom),16px)]">
+      {/* Bottom CTAs */}
+      <div className="relative z-10 mt-6 flex flex-col sm:flex-row justify-center items-center gap-3 pb-[max(env(safe-area-inset-bottom),16px)]">
+        <Button
+          variant="ghost"
+          size="md"
+          onClick={() => navigate(`/deck-builder?hero=${currentSel}&mode=${mode}`)}
+        >
+          Customize deck
+        </Button>
         <Button
           variant="primary"
           size="lg"
