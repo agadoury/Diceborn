@@ -51,11 +51,6 @@ export function nextAiAction(state: GameState, ai: PlayerId): Action {
     const top = state.pendingOffensiveChoice.matches[0];
     return { kind: "select-offensive-ability", abilityIndex: top?.abilityIndex ?? null };
   }
-  // After picking a defense, the engine pauses on `pendingDefenseRoll` until
-  // the defender triggers the actual roll. The AI commits immediately.
-  if (state.pendingDefenseRoll && state.pendingDefenseRoll.defender === ai) {
-    return { kind: "roll-defense-dice" };
-  }
   // Off-turn: AI may need to respond to a pendingAttack against itself.
   if (state.pendingAttack && state.pendingAttack.defender === ai) {
     // Instant window — fire a matching Instant (Aegis of Dawn,
