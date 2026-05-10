@@ -266,9 +266,21 @@ export type AbilityEffect =
   | { kind: "face-symbol-bend"; from_symbol: SymbolId; to_symbol: SymbolId;
       duration: "this-roll" | "this-turn" | { kind: "until-status"; status: StatusId; on: "applied" | "removed" } }
   /** Persistent ability modifier — match-long unless discarded. Occupies a
-   *  Hero Upgrade slot when `permanent: true`; otherwise lasts to end of turn. */
+   *  Hero Upgrade slot when `permanent: true`; otherwise lasts to end of turn.
+   *
+   *  Four composable operations:
+   *   - "transform" mode (default):
+   *      - `modifications`: field tweaks (today's Mastery model)
+   *      - `additionalEffects`: append new sub-effects (heal/status/etc on hit)
+   *      - `repeat`: run the resolved effect N times in sequence (hits twice)
+   *   - "replace" mode: `replacement` swaps the ability wholesale (different
+   *     combo, effect, name). Short-circuits the transform pipeline. */
   | { kind: "ability-upgrade"; scope: AbilityScope;
-      modifications: AbilityUpgradeMod[];
+      mode?: "transform" | "replace";
+      modifications?: AbilityUpgradeMod[];
+      additionalEffects?: AbilityEffect[];
+      repeat?: number;
+      replacement?: ReplacementAbilityDef;
       permanent: boolean }
   /** Direct manipulation of a signature passive counter (e.g. War Cry adds
    *  +3 Frenzy without the "must take damage" trigger). `value` may be
@@ -389,6 +401,23 @@ export interface AbilityDef {
   };
 }
 
+/** Ability shape used by ladder-upgrade cards in "replace" mode. A subset of
+ *  `AbilityDef` — just enough to fully redefine an ability slot at runtime.
+ *  No critical/T4 fields because replacements only target T1/T2/T3 + defensive.
+ *  When the replacement targets a defensive slot, `offensiveFallback` may be
+ *  declared so the swapped defense still surfaces in the fallback path. */
+export interface ReplacementAbilityDef {
+  name: string;
+  combo: DiceCombo;
+  effect: AbilityEffect;
+  shortText: string;
+  longText: string;
+  damageType: DamageType;
+  targetLandingRate?: [number, number];
+  defenseDiceCount?: 2 | 3 | 4 | 5;
+  offensiveFallback?: AbilityDef["offensiveFallback"];
+}
+
 // ── Cards ───────────────────────────────────────────────────────────────────
 // Canonical kinds: main-phase, roll-phase, instant, mastery. The legacy
 // labels ("upgrade", "status", "main-action", "roll-action") are kept for
@@ -420,10 +449,17 @@ export type CardTrigger =
   | { kind: "on-symbol-rolled"; symbol: SymbolId | "*:ult"; by: "self" | "opponent" }
   | { kind: "on-tier-fired";    tier: AbilityTier; by: "self" | "opponent" };
 
+/** Collection-level categorization used by the deck builder + validator.
+ *  Orthogonal to `kind`: `kind` drives engine dispatch (phase gating, slot
+ *  occupation), while `cardCategory` drives deck-composition rules (4 generic /
+ *  3 dice-manip / 3 ladder-upgrade / 2 signature = 12 total). */
+export type CardCategory = "generic" | "dice-manip" | "ladder-upgrade" | "signature";
+
 export interface Card {
   id: CardId;
   hero: HeroId | "generic";
   kind: CardKind;
+  cardCategory: CardCategory;
   name: string;
   cost: number;
   text: string;
@@ -536,6 +572,10 @@ export interface HeroDefinition {
   /** Optional defensive ladder — auto-resolved during the Defensive Roll
    *  Phase. Same picker logic as the offensive ladder. */
   defensiveLadder?: readonly AbilityDef[];
+  /** Pre-built starter deck, 12 conformant cards (4/3/3/2 by cardCategory).
+   *  Used as the AI deck and as the default the deck builder offers when
+   *  the player hasn't customised. Card ids must resolve via getCardCatalog. */
+  recommendedDeck: ReadonlyArray<CardId>;
   /** Optional: applied to every successful offensive ability landed by this hero
    *  (e.g. Barbarian → Bleeding, Pyromancer → Smolder). */
   onHitApplyStatus?: { status: StatusId; stacks: number };
@@ -594,12 +634,27 @@ export interface TriggerModifier {
  *  played mastery card (`permanent: true`) or by a temporary effect.
  *  `discardOn` lets the engine remove the entry on a qualifying event.
  *  `creatorPlayer` + `creatorTurnsElapsed` (per §15.5) drive the
- *  turn-bounded discard variants — incremented when the creator's turn ends. */
+ *  turn-bounded discard variants — incremented when the creator's turn ends.
+ *
+ *  Carries the four operations supported by ladder upgrades — replacement
+ *  short-circuits the transform pipeline; otherwise modifications + additional
+ *  effects + repeat compose. */
 export interface ActiveAbilityModifier {
   id: string;                   // unique within the snapshot; lets discardOn target it
   source: "mastery" | "card" | "ability";
   scope: AbilityScope;
   modifications: AbilityUpgradeMod[];
+  /** Replacement-mode payload. When set, the matching ability is wholly
+   *  replaced (combo + effect + name + damage type) before the transform
+   *  pipeline runs. */
+  replacement?: ReplacementAbilityDef;
+  /** Transform-mode: append these sub-effects to the resolved ability's
+   *  effect tree. Useful for "Cleave also heals 1" / "Cleave applies stun". */
+  additionalEffects?: AbilityEffect[];
+  /** Transform-mode: run the resolved effect this many times in sequence.
+   *  Defaults to 1. `2` = "hits twice"; defensive reduction applies per hit,
+   *  status stacks accumulate, heals stack. */
+  repeat?: number;
   permanent: boolean;
   discardOn?: DiscardTrigger;
   /** PlayerId who created the buff. Used by turn-bounded discardOn. */
@@ -825,7 +880,11 @@ export interface LogEntry { turn: number; phase: Phase; text: string; t: number;
 
 // ── Actions ─────────────────────────────────────────────────────────────────
 export type Action =
-  | { kind: "start-match"; seed: number; p1: HeroId; p2: HeroId; coinFlipWinner: PlayerId }
+  | { kind: "start-match"; seed: number; p1: HeroId; p2: HeroId; coinFlipWinner: PlayerId;
+      /** Optional custom decks per player. Each array is a 12-element list of
+       *  CardIds that must resolve via getCardCatalog(heroId). When omitted,
+       *  the engine falls back to that hero's recommendedDeck. */
+      p1Deck?: ReadonlyArray<CardId>; p2Deck?: ReadonlyArray<CardId> }
   | { kind: "advance-phase" }
   | { kind: "toggle-die-lock"; die: 0 | 1 | 2 | 3 | 4 }
   | { kind: "roll-dice" }

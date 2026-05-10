@@ -383,4 +383,15 @@ export const PYROMANCER: HeroDefinition = {
       },
     },
   ],
+
+  recommendedDeck: [
+    // 4 generic
+    "generic/quick-draw", "generic/focus", "generic/cleanse", "generic/bandage",
+    // 3 dice-manip
+    "pyromancer/ember-channel", "pyromancer/pyromantic-surge", "pyromancer/forge",
+    // 3 ladder-upgrade (T1, T2, T3 — offensive starter; mountains-patience deferred to deck-builder choice)
+    "pyromancer/ember-strike-mastery", "pyromancer/volcanic-awakening", "pyromancer/crater-heart",
+    // 2 signature
+    "pyromancer/char", "pyromancer/phoenix-veil",
+  ],
 };

@@ -188,7 +188,7 @@ export default function MatchScreen() {
             {oppHero.name} ladder
           </div>
           {/* Re-uses AbilityLadder via HeroPanel's collapsible — but on desktop we want it always-open and standalone. */}
-          <DesktopSideLadder hero={oppHero} rows={oppSnap.ladderState} isOpponentView />
+          <DesktopSideLadder hero={oppHero} rows={oppSnap.ladderState} isOpponentView snapshot={oppSnap} />
         </div>
       </div>
 
@@ -198,7 +198,7 @@ export default function MatchScreen() {
           <div className="text-[10px] uppercase tracking-widest text-muted mb-2">
             {meHero.name} ladder
           </div>
-          <DesktopSideLadder hero={meHero} rows={meSnap.ladderState} />
+          <DesktopSideLadder hero={meHero} rows={meSnap.ladderState} snapshot={meSnap} />
         </div>
       </div>
 
@@ -299,13 +299,14 @@ export default function MatchScreen() {
 
 /** Desktop side rail rendering the AbilityLadder (always open, no collapse). */
 function DesktopSideLadder({
-  hero, rows, isOpponentView,
+  hero, rows, isOpponentView, snapshot,
 }: {
   hero: import("@/game/types").HeroDefinition;
   rows: import("@/game/types").HeroSnapshot["ladderState"];
   isOpponentView?: boolean;
+  snapshot?: import("@/game/types").HeroSnapshot;
 }) {
-  return <AbilityLadder hero={hero} rows={rows} isOpponentView={isOpponentView} />;
+  return <AbilityLadder hero={hero} rows={rows} isOpponentView={isOpponentView} snapshot={snapshot} />;
 }
 
 function readHero(s: string | null, valid: HeroId[]): HeroId | null {

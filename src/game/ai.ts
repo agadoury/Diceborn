@@ -19,7 +19,7 @@ import { ROLL_ATTEMPTS } from "./types";
 import { getHero } from "../content";
 import { evaluateLadder, pickKeepMask, symbolsOnDice, comboMatchesFaces } from "./dice";
 import { stacksOf, getStatusDef } from "./status";
-import { canPlay } from "./cards";
+import { canPlay, resolveAbilityFor } from "./cards";
 
 // ── Top-level driver: returns the next action the AI wants to take. ─────────
 export function nextAiAction(state: GameState, ai: PlayerId): Action {
@@ -208,13 +208,14 @@ function decideOffensiveRoll(state: GameState, ai: PlayerId): Action {
       // every decision through the unstable pickTargetTier path.
       const symbols = symbolsOnDice(me.dice);
       const faces = me.dice.map(d => d.faces[d.current]);
+      const resolved = hero.abilityLadder.map(a => resolveAbilityFor(me, a, "offensive"));
       let firingTier = -1;
-      for (let i = 0; i < hero.abilityLadder.length; i++) {
-        if (comboMatchesFaces(hero.abilityLadder[i].combo, faces)) firingTier = i;
+      for (let i = 0; i < resolved.length; i++) {
+        if (comboMatchesFaces(resolved[i].combo, faces)) firingTier = i;
       }
       const targetTier = firingTier >= 0 ? firingTier : pickTargetTier(state, ai);
       if (targetTier >= 0) {
-        const ability = hero.abilityLadder[targetTier];
+        const ability = resolved[targetTier];
         const keep = pickKeepMask(ability.combo, symbols);
         // Monotonic lock policy: only LOCK a die that the keep mask wants
         // locked. Never UNLOCK mid-attempt — `pickTargetTier`'s MC depends
@@ -280,7 +281,7 @@ function locksAreOptimal(state: GameState, ai: PlayerId): boolean {
   const hero = getHero(me.hero);
   const target = pickTargetTier(state, ai);
   if (target < 0) return true;
-  const ability = hero.abilityLadder[target];
+  const ability = resolveAbilityFor(me, hero.abilityLadder[target], "offensive");
   const symbols = symbolsOnDice(me.dice);
   const keep = pickKeepMask(ability.combo, symbols);
   for (let i = 0; i < me.dice.length; i++) {
