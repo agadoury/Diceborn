@@ -16,6 +16,7 @@ import type { HeroDefinition, HeroId } from "@/game/types";
 import { Button } from "@/components/ui/Button";
 import { HeroPortrait } from "@/components/game/HeroPortrait";
 import { HeroBackground } from "@/components/effects/HeroBackground";
+import { loadDeck } from "@/store/deckStorage";
 import { sfx } from "@/audio/sfx";
 import { vibrate } from "@/hooks/useHaptics";
 
@@ -137,7 +138,20 @@ export default function HeroSelect() {
         <Button
           variant="ghost"
           size="md"
-          onClick={() => navigate(`/deck-builder?hero=${currentSel}&mode=${mode}`)}
+          onClick={() => {
+            // Pre-resolve the opponent so DeckBuilder can route straight to
+            // /play after save in vs-ai. Hot-seat: return to HeroSelect so
+            // p2 still gets picked.
+            const opp = mode === "vs-ai"
+              ? (ALL_HEROES.find(h => h !== currentSel) ?? ALL_HEROES[0] ?? "")
+              : "";
+            const params = new URLSearchParams({ hero: currentSel, mode });
+            if (mode === "vs-ai" && opp) {
+              params.set("p1", currentSel);
+              params.set("p2", opp);
+            }
+            navigate(`/deck-builder?${params.toString()}`);
+          }}
         >
           Customize deck
         </Button>
@@ -156,6 +170,7 @@ export default function HeroSelect() {
 }
 
 function HeroCard({ hero, selected, onSelect }: { hero: HeroDefinition; selected: boolean; onSelect: () => void }) {
+  const hasSavedDeck = loadDeck(hero.id) != null;
   return (
     <button
       type="button"
@@ -169,6 +184,15 @@ function HeroCard({ hero, selected, onSelect }: { hero: HeroDefinition; selected
       aria-pressed={selected}
     >
       <HeroPortrait hero={hero.id} accent={hero.accentColor} size={64} active />
+      {hasSavedDeck && (
+        <span
+          className="absolute top-1 right-1 px-1.5 py-0.5 rounded text-[8px] tracking-widest font-display
+                     bg-arena-0/80 text-emerald-300 ring-1 ring-emerald-400/40"
+          title="You have a custom deck saved for this hero"
+        >
+          DECK
+        </span>
+      )}
       <div className="absolute bottom-1 left-2 right-2 text-center">
         <div className="text-[10px] sm:text-xs font-display tracking-widest"
              style={{ color: hero.accentColor }}>
