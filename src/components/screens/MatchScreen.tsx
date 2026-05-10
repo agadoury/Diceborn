@@ -11,14 +11,16 @@
  * Desktop layout (Step 6) overlays via `lg:` Tailwind classes — the same
  * components reflow to a wide arena with side ladders.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useGameStore, useInputUnlocked } from "@/store/gameStore";
 import { useUIStore } from "@/store/uiStore";
 import { getHero } from "@/content";
 import type { CardId, HeroId, PlayerId } from "@/game/types";
 import { nextAiAction } from "@/game/ai";
+import { resolveAbilityFor } from "@/game/cards";
 import { useChoreoStore } from "@/store/choreoStore";
+import { Button } from "@/components/ui/Button";
 
 import { HeroPanel } from "@/components/game/HeroPanel";
 import { Hand } from "@/components/game/Hand";
@@ -155,20 +157,31 @@ export default function MatchScreen() {
     if (!live || live.phase !== "offensive-roll") return;
     dispatch({ kind: "toggle-die-lock", die: idx as 0|1|2|3|4 });
   }
-  /** Click on a firing/triggered ladder row during offensive-roll: open the
-   *  picker (advance-phase) and immediately resolve to that ability. The
-   *  store applies actions synchronously, so the second dispatch sees the
-   *  pendingOffensiveChoice the first one just set. */
-  function fireFromLadder(abilityIndex: number) {
+  // Click-to-fire from the ladder is a two-step interaction: the click stashes
+  // the chosen ability index and surfaces a confirm modal; the confirm button
+  // dispatches advance-phase + select-offensive-ability. Cancel just clears.
+  const [pendingLadderFire, setPendingLadderFire] = useState<number | null>(null);
+  useEffect(() => {
+    if (state?.phase !== "offensive-roll" && pendingLadderFire != null) setPendingLadderFire(null);
+  }, [state?.phase, pendingLadderFire]);
+  function requestFireFromLadder(abilityIndex: number) {
+    const live = useGameStore.getState().state;
+    if (!live || live.phase !== "offensive-roll") return;
+    setPendingLadderFire(abilityIndex);
+  }
+  function confirmLadderFire() {
+    const idx = pendingLadderFire;
+    setPendingLadderFire(null);
+    if (idx == null) return;
     const live = useGameStore.getState().state;
     if (!live || live.phase !== "offensive-roll") return;
     dispatch({ kind: "advance-phase" });
     const after = useGameStore.getState().state;
     if (!after?.pendingOffensiveChoice) return;
-    if (!after.pendingOffensiveChoice.matches.some(m => m.abilityIndex === abilityIndex)) return;
-    dispatch({ kind: "select-offensive-ability", abilityIndex });
+    if (!after.pendingOffensiveChoice.matches.some(m => m.abilityIndex === idx)) return;
+    dispatch({ kind: "select-offensive-ability", abilityIndex: idx });
   }
-  const ladderFire = canInput && state.phase === "offensive-roll" ? fireFromLadder : undefined;
+  const ladderFire = canInput && state.phase === "offensive-roll" ? requestFireFromLadder : undefined;
 
   return (
     <div className="safe-pad min-h-svh bg-arena-0 text-ink relative flex flex-col
@@ -308,6 +321,76 @@ export default function MatchScreen() {
           }}
         />
       )}
+
+      {/* Ladder click-to-fire confirm. Resolves the ability through the
+          upgrade pipeline so the prompt shows the live name. */}
+      {pendingLadderFire != null && (() => {
+        const a = meHero.abilityLadder[pendingLadderFire];
+        if (!a) return null;
+        const resolved = resolveAbilityFor(meSnap, a, "offensive");
+        return (
+          <FireConfirm
+            abilityName={resolved.name}
+            tier={resolved.tier}
+            shortText={resolved.shortText}
+            accent={meHero.accentColor}
+            onConfirm={confirmLadderFire}
+            onCancel={() => setPendingLadderFire(null)}
+          />
+        );
+      })()}
+    </div>
+  );
+}
+
+function FireConfirm({
+  abilityName, tier, shortText, accent, onConfirm, onCancel,
+}: {
+  abilityName: string;
+  tier: 1 | 2 | 3 | 4;
+  shortText: string;
+  accent: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-label={`Activate ${abilityName}?`}
+      className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4"
+      onClick={onCancel}
+    >
+      <div
+        className="surface rounded-card p-4 sm:p-5 max-w-sm w-full ring-1"
+        style={{ borderColor: accent, boxShadow: `0 0 24px ${accent}55` }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 mb-3">
+          <span
+            className="grid place-items-center w-8 h-8 rounded-md font-display tracking-widest text-xs shrink-0"
+            style={{ background: `${accent}25`, color: accent }}
+          >
+            T{tier}
+          </span>
+          <span className="font-display tracking-wider text-base" style={{ color: accent }}>
+            {abilityName}
+          </span>
+        </div>
+        <div className="text-sm text-ink/85 mb-4">{shortText}</div>
+        <div className="text-xs text-muted mb-4">Activate this ability?</div>
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <Button variant="secondary" size="lg" onClick={onCancel} className="w-full" sound="ui-back">
+              Cancel
+            </Button>
+          </div>
+          <div className="flex-1">
+            <Button variant="primary" size="lg" heroAccent={accent} onClick={onConfirm} className="w-full" sound="ui-tap">
+              Activate
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
