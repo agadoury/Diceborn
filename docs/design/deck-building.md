@@ -85,7 +85,7 @@ the canonical four. The seven generic cards still ship as `main-action`
 which is treated identically to `main-phase` by the engine.)
 
 The full instant trigger taxonomy lives in
-[`engine/cards.md` Instant trigger taxonomy](./engine/cards.md#instant-trigger-taxonomy-correction-6-§5).
+[`engine/cards.md` Instant trigger taxonomy](../engine/cards.md#instant-trigger-taxonomy-correction-6-§5).
 
 ## 4. The catalog: where cards live
 
@@ -102,7 +102,7 @@ This split exists so the deck-builder can swap card lists per match
 without touching hero data — the hero file stays a clean
 `HeroDefinition`, the cards are independent.
 
-For per-hero card listings see [`docs/cards/`](./cards/).
+For per-hero card listings see [`../content/`](../content/).
 
 ## 5. The builder UI (`/deck-builder`)
 
@@ -232,9 +232,9 @@ new players.
 
 The recommended decks for the three shipping heroes:
 
-- [`docs/heroes/berserker.md`](./heroes/berserker.md) (linked card list in [`docs/cards/berserker.md`](./cards/berserker.md))
-- [`docs/heroes/pyromancer.md`](./heroes/pyromancer.md) (linked card list in [`docs/cards/pyromancer.md`](./cards/pyromancer.md))
-- [`docs/heroes/lightbearer.md`](./heroes/lightbearer.md) (linked card list in [`docs/cards/lightbearer.md`](./cards/lightbearer.md))
+- [`../content/berserker/design.md`](../content/berserker/design.md) (linked card list in [`../content/berserker/cards.md`](../content/berserker/cards.md))
+- [`../content/pyromancer/design.md`](../content/pyromancer/design.md) (linked card list in [`../content/pyromancer/cards.md`](../content/pyromancer/cards.md))
+- [`../content/lightbearer/design.md`](../content/lightbearer/design.md) (linked card list in [`../content/lightbearer/cards.md`](../content/lightbearer/cards.md))
 
 ## 10. Engine touchpoints
 
@@ -253,7 +253,7 @@ The recommended decks for the three shipping heroes:
 
 ## See also
 
-- [`docs/cards/`](./cards/) — per-hero and generic card listings.
-- [`docs/HERO_REQUIREMENTS.md`](./HERO_REQUIREMENTS.md) — what the hero authoring contract expects from a `recommendedDeck` and from each Mastery's `kind` + `cardCategory`.
-- [`docs/engine/cards.md`](./engine/cards.md) — the effect resolver, instant-trigger taxonomy, and Mastery upgrade pipeline (replace + append + repeat).
-- [`docs/UI.md`](./UI.md) — Match-screen and hand UI.
+- [`../content/`](../content/) — per-hero and generic card listings.
+- [`../authoring/hero-spec.md`](../authoring/hero-spec.md) — what the hero authoring contract expects from a `recommendedDeck` and from each Mastery's `kind` + `cardCategory`.
+- [`docs/engine/cards.md`](../engine/cards.md) — the effect resolver, instant-trigger taxonomy, and Mastery upgrade pipeline (replace + append + repeat).
+- [`../ui/README.md`](../ui/README.md) — Match-screen and hand UI.

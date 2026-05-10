@@ -1,6 +1,6 @@
 # Engine: Glossary
 
-> Companion to [`../ENGINE_AND_MECHANICS.md`](../ENGINE_AND_MECHANICS.md). Terms
+> Companion to [`./README.md`](./README.md). Terms
 > used across engine + content code with stable definitions.
 
 ## 16. Glossary

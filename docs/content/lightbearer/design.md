@@ -1,6 +1,6 @@
 # The Lightbearer
 
-> **📦 Source of truth: [`src/content/heroes/lightbearer.ts`](../../src/content/heroes/lightbearer.ts)** for hero data, [`src/content/cards/lightbearer.ts`](../../src/content/cards/lightbearer.ts) for cards. This page documents the *design intent* (lore, dice identity, ability roles, cinematics, audio direction, tuning rationale) — mechanical specifics live in the data files and may evolve faster than this prose.
+> **📦 Source of truth: [`src/content/heroes/lightbearer.ts`](../../../src/content/heroes/lightbearer.ts)** for hero data, [`src/content/cards/lightbearer.ts`](../../../src/content/cards/lightbearer.ts) for cards. This page documents the *design intent* (lore, dice identity, ability roles, cinematics, audio direction, tuning rationale) — mechanical specifics live in the data files and may evolve faster than this prose.
 
 | Field | Value |
 |---|---|
@@ -160,7 +160,7 @@ Lightbearer gains +1 CP every time the opponent fires an offensive ability while
 
 ## 7. Offensive ladder
 
-> **Live data lives in [`src/content/heroes/lightbearer.ts`](../../src/content/heroes/lightbearer.ts).**
+> **Live data lives in [`src/content/heroes/lightbearer.ts`](../../../src/content/heroes/lightbearer.ts).**
 > Combo, damage, and effect for every ability are read from there at
 > runtime. What's documented below is the *role* and *cinematic intent*,
 > which don't drift with tuning.
@@ -217,8 +217,8 @@ time it fires (see `criticalCinematic` in the live data file).
 
 ## 8. Defensive ladder
 
-> Live data: [`lightbearer.ts → defensiveLadder`](../../src/content/heroes/lightbearer.ts).
-> For the defense flow itself see [`ENGINE_AND_MECHANICS.md` §5](../engine/rules.md#5-ability-ladders).
+> Live data: [`lightbearer.ts → defensiveLadder`](../../../src/content/heroes/lightbearer.ts).
+> For the defense flow itself see [`engine/README.md` §5](../../engine/rules.md#5-ability-ladders).
 
 | Tier | Defense | Role |
 |---|---|---|
@@ -238,11 +238,11 @@ Notes:
 
 The full per-card listing for the Lightbearer — IDs, costs, kinds,
 categories, slots, once-per-match flags, and rules text — lives in
-**[`../cards/lightbearer.md`](../cards/lightbearer.md)**.
+**[`./cards.md`](./cards.md)**.
 
 For the deck-building system as a whole (composition rules, the
 builder UI, persistence, the validator), see
-[`../DECK_BUILDING.md`](../DECK_BUILDING.md).
+[`../../design/deck-building.md`](../../design/deck-building.md).
 
 The Lightbearer ships 12 cards total: 3 dice-manip, 4 ladder-upgrade
 Masteries (one per slot — T1 / T2 / T3 / Defensive), and 5 signature
@@ -357,10 +357,10 @@ Standout cards: Sanctuary, Aegis of Dawn, Sunburst
 
 ## 15. See also
 
-- [`docs/cards/lightbearer.md`](../cards/lightbearer.md) — full card listing.
-- [`docs/DECK_BUILDING.md`](../DECK_BUILDING.md) — deck composition rules + builder UI.
-- [`docs/engine/rules.md`](../engine/rules.md) — engine rules, especially [§7 Status system](../engine/rules.md#7-status-system).
-- [`docs/engine/cards.md`](../engine/cards.md) — effect resolver, modifier evaluation pipeline, and the §15 extensions referenced throughout this page.
-- [`docs/HERO_REQUIREMENTS.md`](../HERO_REQUIREMENTS.md) — hero-authoring brief that produced this submission.
-- [`src/content/heroes/lightbearer.ts`](../../src/content/heroes/lightbearer.ts) — hero definition.
-- [`src/content/cards/lightbearer.ts`](../../src/content/cards/lightbearer.ts) — card source.
+- [`./cards.md`](./cards.md) — full card listing.
+- [`../../design/deck-building.md`](../../design/deck-building.md) — deck composition rules + builder UI.
+- [`docs/engine/rules.md`](../../engine/rules.md) — engine rules, especially [§7 Status system](../../engine/rules.md#7-status-system).
+- [`docs/engine/cards.md`](../../engine/cards.md) — effect resolver, modifier evaluation pipeline, and the §15 extensions referenced throughout this page.
+- [`../../authoring/hero-spec.md`](../../authoring/hero-spec.md) — hero-authoring brief that produced this submission.
+- [`src/content/heroes/lightbearer.ts`](../../../src/content/heroes/lightbearer.ts) — hero definition.
+- [`src/content/cards/lightbearer.ts`](../../../src/content/cards/lightbearer.ts) — card source.

@@ -1,6 +1,6 @@
 # The Pyromancer
 
-> **📦 Source of truth: [`src/content/heroes/pyromancer.ts`](../../src/content/heroes/pyromancer.ts)** for hero data, [`src/content/cards/pyromancer.ts`](../../src/content/cards/pyromancer.ts) for cards. This page documents the *design intent* (lore, dice identity, ability roles, cinematics, audio direction, tuning rationale) — mechanical specifics live in the data files and may evolve faster than this prose.
+> **📦 Source of truth: [`src/content/heroes/pyromancer.ts`](../../../src/content/heroes/pyromancer.ts)** for hero data, [`src/content/cards/pyromancer.ts`](../../../src/content/cards/pyromancer.ts) for cards. This page documents the *design intent* (lore, dice identity, ability roles, cinematics, audio direction, tuning rationale) — mechanical specifics live in the data files and may evolve faster than this prose.
 
 | Field | Value |
 |---|---|
@@ -140,7 +140,7 @@ her per stack stripped. Opponents pay either way.
 
 ## 7. Offensive ladder
 
-> **Live data lives in [`src/content/heroes/pyromancer.ts`](../../src/content/heroes/pyromancer.ts).**
+> **Live data lives in [`src/content/heroes/pyromancer.ts`](../../../src/content/heroes/pyromancer.ts).**
 > Combo, damage, and effect for every ability are read from there at
 > runtime. What's documented below is the *role* and *cinematic intent*,
 > which don't drift with tuning.
@@ -202,8 +202,8 @@ same resolution.
 
 ## 8. Defensive ladder
 
-> Live data: [`pyromancer.ts → defensiveLadder`](../../src/content/heroes/pyromancer.ts).
-> For the defense flow itself see [`ENGINE_AND_MECHANICS.md` §5](../engine/rules.md#5-ability-ladders).
+> Live data: [`pyromancer.ts → defensiveLadder`](../../../src/content/heroes/pyromancer.ts).
+> For the defense flow itself see [`engine/README.md` §5](../../engine/rules.md#5-ability-ladders).
 
 | Tier | Defense | Role |
 |---|---|---|
@@ -223,11 +223,11 @@ Notes:
 
 The full per-card listing for the Pyromancer — IDs, costs, kinds,
 categories, slots, once-per-match flags, and rules text — lives in
-**[`../cards/pyromancer.md`](../cards/pyromancer.md)**.
+**[`./cards.md`](./cards.md)**.
 
 For the deck-building system as a whole (composition rules, the
 builder UI, persistence, the validator), see
-[`../DECK_BUILDING.md`](../DECK_BUILDING.md).
+[`../../design/deck-building.md`](../../design/deck-building.md).
 
 The Pyromancer ships 13 cards total: 3 dice-manip, 5 ladder-upgrade
 Masteries (2 T1 / 1 T2 / 1 T3 / 1 Defensive — the two T1 options

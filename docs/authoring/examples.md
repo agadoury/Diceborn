@@ -1,6 +1,6 @@
 # Worked examples — applying the engine primitives
 
-> Companion to [`../HERO_REQUIREMENTS.md`](../HERO_REQUIREMENTS.md).
+> Companion to [`./hero-spec.md`](./hero-spec.md).
 > Reference patterns for each effect primitive, lifted from real
 > abilities and cards. Use these as starting points when designing a
 > new hero — most fresh ideas slot into one of these shapes.

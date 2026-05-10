@@ -2,6 +2,8 @@
 
 > **You are designing a hero for Pact of Heroes — a 1v1 dice-and-card combat game.** This document is your full brief: the game's constraints, the engine's mechanical primitives, a light originality guideline, the output format, and a self-check list. Read all of it before you start designing. Output the filled-in template at the end.
 
+> **Operational companion**: once you've used this brief to *design* a hero, see [`./workflow.md`](./workflow.md) for the *how-to-ship* side — which files to drop, how to register a hero, validation checklist, doc updates, branch / commit / PR rules. The same workflow doc also covers card additions, hero tuning, and card removals.
+
 ---
 
 ## 1. Project context (what Pact of Heroes is)
@@ -312,7 +314,7 @@ Offense gets 3 attempts because the offensive decision tree is *what to roll for
 
 #### What can be blocked:
 
-Only `normal` and `collateral` damage runs through the defensive ladder. **Undefendable**, **pure**, and **ultimate** damage skip the defense flow entirely — the defender takes the full hit. (Shield + Protect tokens still apply to undefendable / ultimate, per [`engine/rules.md` §6 damage pipeline](./engine/rules.md#6-damage-pipeline).) This is a key offensive design lever — undefendable abilities are valuable because they bypass the defender's choice entirely.
+Only `normal` and `collateral` damage runs through the defensive ladder. **Undefendable**, **pure**, and **ultimate** damage skip the defense flow entirely — the defender takes the full hit. (Shield + Protect tokens still apply to undefendable / ultimate, per [`engine/rules.md` §6 damage pipeline](../engine/rules.md#6-damage-pipeline).) This is a key offensive design lever — undefendable abilities are valuable because they bypass the defender's choice entirely.
 
 #### Cards during the defensive roll:
 
@@ -657,7 +659,7 @@ damage types so the offense has answers to a strong defender.
 The full deck-building system — composition rules (4 / 3 / 3 / 2 by
 category), validation, the builder UI, persistence, and how the engine
 resolves catalog → deck at match start — is documented in
-**[`DECK_BUILDING.md`](./DECK_BUILDING.md)**.
+**[`../design/deck-building.md`](../design/deck-building.md)**.
 
 **Hero authoring contract — what to ship in `src/content/cards/<heroId>.ts`.** The deck-builder pulls a 12-card deck from your catalog plus the 4 universal generic cards, so you only ship the *non-generic* portion of the catalog. Minimums:
 
@@ -768,10 +770,10 @@ Standout cards: <2–3 names that define the deck>
 
 ## Appendices
 
-Two reference appendices have moved to the [`docs/authoring/`](./authoring/) folder so this brief stays focused on the hero-design workflow:
+Two reference appendices have moved to the [`./` (this folder)](./) folder so this brief stays focused on the hero-design workflow:
 
-- [**Field-by-field cheat sheet**](./authoring/cheatsheet.md) — for each template field, what it becomes in the implementation and which engine site reads it.
-- [**Worked examples**](./authoring/examples.md) — reference patterns for every engine primitive (mastery cards, persistent buffs, conditional bonuses, bankable spends, wildcard removes, custom triggers, etc.). Use these as starting points when designing a new hero.
+- [**Field-by-field cheat sheet**](./cheatsheet.md) — for each template field, what it becomes in the implementation and which engine site reads it.
+- [**Worked examples**](./examples.md) — reference patterns for every engine primitive (mastery cards, persistent buffs, conditional bonuses, bankable spends, wildcard removes, custom triggers, etc.). Use these as starting points when designing a new hero.
 
 ---
 

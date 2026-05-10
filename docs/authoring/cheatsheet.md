@@ -1,6 +1,6 @@
 # Field-by-field cheat sheet
 
-> Companion to [`../HERO_REQUIREMENTS.md`](../HERO_REQUIREMENTS.md). For
+> Companion to [`./hero-spec.md`](./hero-spec.md). For
 > each field a hero author fills in on the template, this page lists
 > what the field becomes when the hero is implemented and which engine
 > site reads it.

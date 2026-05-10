@@ -1,6 +1,6 @@
 # Engine: Architecture & runtime
 
-> Companion to [`../ENGINE_AND_MECHANICS.md`](../ENGINE_AND_MECHANICS.md). Covers
+> Companion to [`./README.md`](./README.md). Covers
 > the `HeroDefinition` contract, the `applyAction` reducer, store layout,
 > the event taxonomy + Choreographer, the AI driver, the bot-vs-bot
 > simulator, and engine-wide constants. For player-facing rules see
@@ -50,7 +50,7 @@ Heroes register themselves in `src/content/index.ts` (`HEROES: Partial<Record<He
 
 ### Card files (separate from hero data)
 
-Cards are NOT carried on `HeroDefinition` — they live in their own per-hero module under `src/content/cards/<heroId>.ts` and are resolved into decks at runtime via `getCardCatalog(heroId)` + `getDeckCards(heroId, savedIds?)`. Generic universal cards live in `src/content/cards/generic.ts`. **Deck composition rules, the deck-builder UI, persistence, and per-hero card listings live in [`DECK_BUILDING.md`](../DECK_BUILDING.md) and [`docs/cards/`](../cards/)** — the engine doc just notes the structural split.
+Cards are NOT carried on `HeroDefinition` — they live in their own per-hero module under `src/content/cards/<heroId>.ts` and are resolved into decks at runtime via `getCardCatalog(heroId)` + `getDeckCards(heroId, savedIds?)`. Generic universal cards live in `src/content/cards/generic.ts`. **Deck composition rules, the deck-builder UI, persistence, and per-hero card listings live in [`../design/deck-building.md`](../design/deck-building.md) and [`../content/`](../content/)** — the engine doc just notes the structural split.
 
 Adding a hero is therefore two file drops, not one:
 
@@ -59,7 +59,7 @@ Adding a hero is therefore two file drops, not one:
 
 Both files are then registered in `src/content/index.ts` (hero) and `src/content/cards/index.ts` (cards).
 
-For the full hero-authoring brief — what fields each hero must provide, what the simulator validates, what the renderer/choreographer can consume — see `docs/HERO_REQUIREMENTS.md`.
+For the full hero-authoring brief — what fields each hero must provide, what the simulator validates, what the renderer/choreographer can consume — see `../authoring/hero-spec.md`.
 
 ---
 

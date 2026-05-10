@@ -1,6 +1,6 @@
 # The Berserker
 
-> **📦 Source of truth: [`src/content/heroes/berserker.ts`](../../src/content/heroes/berserker.ts)** for hero data, [`src/content/cards/berserker.ts`](../../src/content/cards/berserker.ts) for cards. This page documents the *design intent* (lore, dice identity, ability roles, cinematics, audio direction, tuning rationale) — mechanical specifics live in the data files and may evolve faster than this prose.
+> **📦 Source of truth: [`src/content/heroes/berserker.ts`](../../../src/content/heroes/berserker.ts)** for hero data, [`src/content/cards/berserker.ts`](../../../src/content/cards/berserker.ts) for cards. This page documents the *design intent* (lore, dice identity, ability roles, cinematics, audio direction, tuning rationale) — mechanical specifics live in the data files and may evolve faster than this prose.
 
 | Field | Value |
 |---|---|
@@ -161,7 +161,7 @@ actual damage to the opponent.
 
 ## 7. Offensive ladder
 
-> **Live data lives in [`src/content/heroes/berserker.ts`](../../src/content/heroes/berserker.ts).**
+> **Live data lives in [`src/content/heroes/berserker.ts`](../../../src/content/heroes/berserker.ts).**
 > Combo, damage, and effect for every ability are read from there at
 > runtime. What's documented below is the *role* and *cinematic intent*,
 > which don't drift with tuning. If you spot a mechanical claim here
@@ -267,10 +267,10 @@ convergence strike.
 
 ## 8. Defensive ladder
 
-> Live data: [`src/content/heroes/berserker.ts`](../../src/content/heroes/berserker.ts) → `defensiveLadder`.
+> Live data: [`src/content/heroes/berserker.ts`](../../../src/content/heroes/berserker.ts) → `defensiveLadder`.
 > Three defenses, picker-driven (defender chooses which to attempt; the
 > engine then auto-rolls and resolves). For the defense flow as a system
-> see [`ENGINE_AND_MECHANICS.md` §5](../engine/rules.md#5-ability-ladders).
+> see [`engine/README.md` §5](../../engine/rules.md#5-ability-ladders).
 
 | Tier | Defense | Role |
 |---|---|---|
@@ -289,11 +289,11 @@ Notes:
 
 The full per-card listing for the Berserker — IDs, costs, kinds,
 categories, slots, once-per-match flags, and rules text — lives in
-**[`../cards/berserker.md`](../cards/berserker.md)**.
+**[`./cards.md`](./cards.md)**.
 
 For the deck-building system as a whole (composition rules, the
 builder UI, persistence, the validator), see
-[`../DECK_BUILDING.md`](../DECK_BUILDING.md).
+[`../../design/deck-building.md`](../../design/deck-building.md).
 
 The Berserker ships 14 cards total: 3 dice-manip, 6 ladder-upgrade
 Masteries (3 T1 + 1 T2 + 1 T3 + 1 Defensive — multiple options at T1

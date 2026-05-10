@@ -1,12 +1,12 @@
 # Berserker — cards
 
-> **📦 Source of truth: [`src/content/cards/berserker.ts`](../../src/content/cards/berserker.ts).** Costs, kinds, and rules text below are a snapshot of the data file — convenient for browsing, but if a number here disagrees with the `.ts` the `.ts` wins; please patch this page or open an issue.
+> **📦 Source of truth: [`src/content/cards/berserker.ts`](../../../src/content/cards/berserker.ts).** Costs, kinds, and rules text below are a snapshot of the data file — convenient for browsing, but if a number here disagrees with the `.ts` the `.ts` wins; please patch this page or open an issue.
 >
-> Hero design: [`../heroes/berserker.md`](../heroes/berserker.md). Hero data: [`src/content/heroes/berserker.ts`](../../src/content/heroes/berserker.ts).
+> Hero design: [`./design.md`](./design.md). Hero data: [`src/content/heroes/berserker.ts`](../../../src/content/heroes/berserker.ts).
 
 The Berserker ships **14 cards** in his catalog. The deck-builder picks
 3 dice-manip + 3 ladder-upgrade + 2 signature from this pool, plus 4
-of the 7 universal [`generic` cards](./generic.md), for a 12-card
+of the 7 universal [`generic` cards](../generic-cards.md), for a 12-card
 deck.
 
 Multiple Masteries per slot give the deck-builder real choice — at T1
@@ -63,5 +63,5 @@ abilities work without a Mastery; the upgrade just makes them stronger.)
 
 ## See also
 
-- [`../heroes/berserker.md`](../heroes/berserker.md) — full hero design notes.
-- [`../DECK_BUILDING.md`](../DECK_BUILDING.md) — composition rules.
+- [`./design.md`](./design.md) — full hero design notes.
+- [`../../design/deck-building.md`](../../design/deck-building.md) — composition rules.

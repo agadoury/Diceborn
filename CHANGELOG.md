@@ -13,6 +13,10 @@ What changed and why. Links to the PR / commit if helpful. One short
 paragraph per entry; no bullet-point sprawl.
 ```
 
+## 2026-05-10 — Docs reorg: kebab-case, per-folder READMEs, per-hero folders
+
+Refactored the `docs/` tree for scalability. SCREAMING_SNAKE filenames (`HERO_REQUIREMENTS.md`, `DECK_BUILDING.md`, `ENGINE_AND_MECHANICS.md`, `UI.md`, `INDEX.md`) replaced with kebab-case under topic folders: `authoring/hero-spec.md`, `design/deck-building.md`, `engine/README.md`, `ui/{README,match-screen,choreography,tokens-and-theming}.md`, `docs/README.md`. Per-hero docs collapsed from two trees (`docs/heroes/` + `docs/cards/`) into one folder per hero (`docs/content/<hero>/{design,cards}.md`) so adding a hero touches one folder instead of two. Every folder now has a `README.md` so GitHub auto-renders the index when browsing. `AUDIO_CREDITS.md` moved under `docs/` to keep the repo root limited to README + CHANGELOG.
+
 New entries go at the top.
 
 ---
@@ -62,4 +66,4 @@ is one Ultimate per hero, and the canonical pattern is `5× face-6`.
 
 Three playable heroes across rush / burn / survival archetypes,
 each shipping its full `HeroDefinition` + card pool + atmospheric
-theming + sigils. See `docs/heroes/` and `docs/cards/`.
+theming + sigils. See `docs/content/`.

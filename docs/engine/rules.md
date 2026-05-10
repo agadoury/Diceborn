@@ -1,6 +1,6 @@
 # Engine: Rules
 
-> Companion to [`../ENGINE_AND_MECHANICS.md`](../ENGINE_AND_MECHANICS.md). Covers
+> Companion to [`./README.md`](./README.md). Covers
 > the player-facing game rules + the engine layer that resolves them: match
 > loop, phase progression, dice + combo grammar, ability ladders, damage
 > pipeline, status system. For the cards/effects layer see

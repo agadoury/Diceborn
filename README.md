@@ -87,11 +87,11 @@ instantly; the presentation layer takes 2-6 seconds to *show* it.
 
 Three heroes ship with the current build:
 
-- **The Berserker** — rush archetype, frost-blue twin-axe warrior. Closes via Wolf's Howl on the rare 5-howl roll. See [`docs/heroes/berserker.md`](./docs/heroes/berserker.md).
-- **The Pyromancer** — burn archetype, builds Cinder to critical-mass detonations. Career-moment T4 is God's Crater (5 ruin). See [`docs/heroes/pyromancer.md`](./docs/heroes/pyromancer.md).
-- **The Lightbearer** — survival archetype, banks Radiance and closes with Judgment of the Sun (5 zenith). See [`docs/heroes/lightbearer.md`](./docs/heroes/lightbearer.md).
+- **The Berserker** — rush archetype, frost-blue twin-axe warrior. Closes via Wolf's Howl on the rare 5-howl roll. See [`docs/content/berserker/design.md`](./docs/content/berserker/design.md).
+- **The Pyromancer** — burn archetype, builds Cinder to critical-mass detonations. Career-moment T4 is God's Crater (5 ruin). See [`docs/content/pyromancer/design.md`](./docs/content/pyromancer/design.md).
+- **The Lightbearer** — survival archetype, banks Radiance and closes with Judgment of the Sun (5 zenith). See [`docs/content/lightbearer/design.md`](./docs/content/lightbearer/design.md).
 
-All three follow the canonical offensive ladder shape: 1× T1 + 3× T2 + 2× T3 + 1× T4, with the T4 always gated on `5× face-6`. To add a fourth hero, drop a `HeroDefinition` module in `src/content/heroes/` and register it in `src/content/index.ts`. See [`docs/HERO_REQUIREMENTS.md`](./docs/HERO_REQUIREMENTS.md) for the authoring contract.
+All three follow the canonical offensive ladder shape: 1× T1 + 3× T2 + 2× T3 + 1× T4, with the T4 always gated on `5× face-6`. To add a fourth hero, drop a `HeroDefinition` module in `src/content/heroes/` and register it in `src/content/index.ts`. See [`docs/authoring/hero-spec.md`](./docs/authoring/hero-spec.md) for the authoring contract.
 
 Landing-rate audit runs against whichever heroes are registered:
 
@@ -114,33 +114,24 @@ Vibration API and gracefully no-ops).
 - CSS: ~7 KB gzipped
 - PWA precache: ~480 KiB total (under 1.2 MB budget)
 
-## How to add a new hero
+## How to add or update heroes & cards
 
-1. Drop a new file in `src/content/heroes/<id>.ts` exporting a `HeroDefinition`
-   with all 4 uniqueness pillars. Follow the canonical ladder shape — 1× T1
-   + 3× T2 + 2× T3 + 1× T4 (Ultimate gated on `5× face-6`).
-2. Drop the matching `src/content/cards/<id>.ts` (cards are split out from
-   hero data — see [`docs/DECK_BUILDING.md`](./docs/DECK_BUILDING.md)).
-3. If the hero needs new dice glyphs, add them to `src/components/game/dieFaces.tsx`.
-4. If the hero has a new signature status token, register it in `src/game/status.ts`.
-5. Register the hero in `src/content/index.ts` and the cards in `src/content/cards/index.ts`.
-6. Add a hero design page in `docs/heroes/<id>.md` and a card listing in `docs/cards/<id>.md`.
-7. Validate landing rates: `npm run simulate -- --rates`.
+[`docs/authoring/workflow.md`](./docs/authoring/workflow.md) is the operational guide. It covers four scenarios — adding a new hero, adding cards to an existing hero, tuning an existing hero, and updating or removing cards — and lists the files to touch, validation steps, and CHANGELOG rules for each. The design contract lives in [`docs/authoring/hero-spec.md`](./docs/authoring/hero-spec.md); references in [`docs/authoring/cheatsheet.md`](./docs/authoring/cheatsheet.md) and [`docs/authoring/examples.md`](./docs/authoring/examples.md).
 
-The engine itself never changes when adding a hero. If the hero needs a
-genuinely new mechanic category (a new `PassiveBehavior` kind), add it
-generically so future heroes can reuse it.
+Quick shape: hero data in `src/content/heroes/<id>.ts`, cards in `src/content/cards/<id>.ts`, register both in the matching `index.ts`, then add a hero design page in `docs/content/<id>/design.md` + a card listing in `docs/content/<id>/cards.md`. Canonical ladder is 1× T1 + 3× T2 + 2× T3 + 1× T4 (Ultimate gated on `5× face-6`).
+
+The engine itself never changes when adding a hero. If the hero needs a genuinely new mechanic category (a new `PassiveBehavior` kind, a new effect primitive), add it generically — that's a separate PR before the hero PR.
 
 ## Documentation
 
-- [`docs/INDEX.md`](./docs/INDEX.md) — **start here.** Routes by intent: I'm a player, adding a hero, tuning, fixing the engine, working on UI.
+- [`docs/README.md`](./docs/README.md) — **start here.** Routes by intent: I'm a player, adding a hero, tuning, fixing the engine, working on UI.
 - [`CHANGELOG.md`](./CHANGELOG.md) — design + architecture decisions over time. Read before proposing one that might contradict an earlier one.
-- [`docs/ENGINE_AND_MECHANICS.md`](./docs/ENGINE_AND_MECHANICS.md) — game rules, engine architecture, event flow.
-- [`docs/UI.md`](./docs/UI.md) — match-screen layout, overlays, choreography, design tokens.
-- [`docs/DECK_BUILDING.md`](./docs/DECK_BUILDING.md) — deck composition, builder UI, persistence, validator.
-- [`docs/cards/`](./docs/cards/) — per-hero card listings + the universal generic pool.
-- [`docs/heroes/`](./docs/heroes/) — per-hero design notes (lore, dice, ability roles, tuning rationale; data lives in `src/content/`).
-- [`docs/HERO_REQUIREMENTS.md`](./docs/HERO_REQUIREMENTS.md) — hero-authoring brief. Companions in [`docs/authoring/`](./docs/authoring/) (cheat sheet + worked examples).
+- [`docs/engine/README.md`](./docs/engine/README.md) — game rules, engine architecture, event flow.
+- [`docs/ui/README.md`](./docs/ui/README.md) — match-screen layout, overlays, choreography, design tokens.
+- [`docs/design/deck-building.md`](./docs/design/deck-building.md) — deck composition, builder UI, persistence, validator.
+- [`docs/content/`](./docs/content/) — per-hero card listings + the universal generic pool.
+- [`docs/content/`](./docs/content/) — per-hero design notes (lore, dice, ability roles, tuning rationale; data lives in `src/content/`).
+- [`docs/authoring/hero-spec.md`](./docs/authoring/hero-spec.md) — hero-authoring brief (design contract). Operational companion in [`docs/authoring/workflow.md`](./docs/authoring/workflow.md); references in [`docs/authoring/`](./docs/authoring/) (cheat sheet + worked examples).
 
 ## License & lore
 

@@ -9,10 +9,10 @@ findable as the game grows. Start with whichever matches your task:
 
 | If you're… | Read | Covers |
 |---|---|---|
-| Designing a hero or learning the rules | [`engine/rules.md`](./engine/rules.md) | Game overview, match loop, phase progression, dice + combo grammar, ability ladders, damage pipeline, status system. |
-| Authoring a card or following an effect tree | [`engine/cards.md`](./engine/cards.md) | CP economy, hand mechanics, card kinds, deck-composition validator, instant-trigger taxonomy, effect resolver, modifier evaluation pipeline. |
-| Wiring a new engine feature | [`engine/runtime.md`](./engine/runtime.md) | `HeroDefinition` contract, the `applyAction` reducer, store layout, event taxonomy + Choreographer, AI driver, simulator + tests, engine-wide constants. |
-| Looking up a term | [`engine/glossary.md`](./engine/glossary.md) | Vocabulary used across engine + content code. |
+| Designing a hero or learning the rules | [`./rules.md`](./rules.md) | Game overview, match loop, phase progression, dice + combo grammar, ability ladders, damage pipeline, status system. |
+| Authoring a card or following an effect tree | [`./cards.md`](./cards.md) | CP economy, hand mechanics, card kinds, deck-composition validator, instant-trigger taxonomy, effect resolver, modifier evaluation pipeline. |
+| Wiring a new engine feature | [`./runtime.md`](./runtime.md) | `HeroDefinition` contract, the `applyAction` reducer, store layout, event taxonomy + Choreographer, AI driver, simulator + tests, engine-wide constants. |
+| Looking up a term | [`./glossary.md`](./glossary.md) | Vocabulary used across engine + content code. |
 
 ## Quick orientation
 
@@ -35,12 +35,12 @@ For deeper detail on any of these mechanics, follow the table above.
 
 ## See also
 
-- [`INDEX.md`](./INDEX.md) — doc tree routed by intent.
-- [`DECK_BUILDING.md`](./DECK_BUILDING.md) — deck composition, the builder UI, persistence, and the validator.
-- [`cards/`](./cards/) — per-hero card listings + the universal generic pool.
-- [`HERO_REQUIREMENTS.md`](./HERO_REQUIREMENTS.md) — hero-authoring brief; what a hero submission must contain to land cleanly.
-- [`UI.md`](./UI.md) — match-screen layout, overlays, the choreographer, design tokens.
-- [`../CHANGELOG.md`](../CHANGELOG.md) — design + architecture decisions log.
+- [`../README.md`](../README.md) — doc tree routed by intent.
+- [`../design/deck-building.md`](../design/deck-building.md) — deck composition, the builder UI, persistence, and the validator.
+- [`../content/`](../content/) — per-hero card listings + the universal generic pool.
+- [`../authoring/hero-spec.md`](../authoring/hero-spec.md) — hero-authoring brief; what a hero submission must contain to land cleanly.
+- [`../ui/README.md`](../ui/README.md) — match-screen layout, overlays, the choreographer, design tokens.
+- [`../../CHANGELOG.md`](../../CHANGELOG.md) — design + architecture decisions log.
 - `../README.md` — project overview, commands, routes, bundle stats.
 - `../src/game/types.ts` — the type contract; the canonical source of truth for action / event / state shapes.
 - `../src/game/engine.ts` — `applyAction` reducer.

@@ -1,14 +1,14 @@
 # Lightbearer — cards
 
-> **📦 Source of truth: [`src/content/cards/lightbearer.ts`](../../src/content/cards/lightbearer.ts).** Costs, kinds, and rules text below are a snapshot of the data file — convenient for browsing, but if a number here disagrees with the `.ts` the `.ts` wins; please patch this page or open an issue.
+> **📦 Source of truth: [`src/content/cards/lightbearer.ts`](../../../src/content/cards/lightbearer.ts).** Costs, kinds, and rules text below are a snapshot of the data file — convenient for browsing, but if a number here disagrees with the `.ts` the `.ts` wins; please patch this page or open an issue.
 >
-> Hero design: [`../heroes/lightbearer.md`](../heroes/lightbearer.md). Hero data: [`src/content/heroes/lightbearer.ts`](../../src/content/heroes/lightbearer.ts).
+> Hero design: [`./design.md`](./design.md). Hero data: [`src/content/heroes/lightbearer.ts`](../../../src/content/heroes/lightbearer.ts).
 
 The Lightbearer ships **12 cards** in his catalog — the floor for the
 deck-builder's authoring contract (3 dice-manip + 4 Masteries — one
 per slot — + 5 signature). The deck-builder picks 3 dice-manip + 3
 ladder-upgrade + 2 signature, plus 4 of the 7 universal
-[`generic` cards](./generic.md), for a 12-card deck.
+[`generic` cards](../generic-cards.md), for a 12-card deck.
 
 With only one Mastery per slot, the build choice for Lightbearer is
 which 3 of 4 slots to claim and which 2 of 5 signature plays to
@@ -59,5 +59,5 @@ starter — the deck-builder can swap it in.
 
 ## See also
 
-- [`../heroes/lightbearer.md`](../heroes/lightbearer.md) — full hero design notes.
-- [`../DECK_BUILDING.md`](../DECK_BUILDING.md) — composition rules.
+- [`./design.md`](./design.md) — full hero design notes.
+- [`../../design/deck-building.md`](../../design/deck-building.md) — composition rules.
