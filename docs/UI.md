@@ -171,7 +171,7 @@ Bottom-anchored or full-screen modal layers gated on the choreographer being idl
 | `ResultScreen` | `state.winner != null` | full | Match summary + rematch / menu CTAs. Replaces the match UI entirely. |
 | `HotSeatCurtain` | `state.activePlayer` flips in hot-seat mode | 60 | Full-screen hand-off. Player must tap to continue. |
 | `CardLiftedOverlay` (in `Hand.tsx`) | Active card lifted | 30 | Dimmed backdrop + enlarged card + PLAY / Sell / Cancel buttons. Tap outside dismisses. |
-| `AttackSelectLayer` | `state.pendingOffensiveChoice && useInputUnlocked()` | 50 | **Active player picks which ability to fire.** Lists each match with tier chip, base damage, short text, damage type. Pass option at bottom. AI auto-picks `matches[0]`. See [Engine §11 attack flow](./ENGINE_AND_MECHANICS.md#11-events--the-choreographer). |
+| `AttackSelectLayer` | `state.pendingOffensiveChoice && useInputUnlocked()` | 50 | **Active player picks which ability to fire.** Lists each match with tier chip, base damage, short text, damage type. Pass option at bottom. AI auto-picks `matches[0]`. See [Engine §11 attack flow](./engine/runtime.md#11-events--the-choreographer). |
 | `DefenseSelectLayer` | `state.pendingAttack && useInputUnlocked()` | 50 | **Defender picks which defense to attempt.** Shows incoming damage + type + tier; lists each defense with combo, dice count, effect. "Take it" option for no defense. AI picks highest-tier defense. The pick auto-rolls and resolves in a single dispatch — there is no separate ROLL action for defense. |
 | `DefenseStatusPanel` | `state.pendingAttack` set OR a `defense-*` event queued/playing | 40 | **Persistent context panel** pinned top-center while a defense is in flight. Shows the defender's accent header, the incoming attack name + damage, the chosen defense's combo strip + name + dice count, and a live status that progresses `DEFENDING…` → `ROLLING…` → `DEFENDED −X` (green) / `MISSED` (red). Lives separately from the picker so the player keeps full context through the entire choreography (picker disappears on click; this panel stays through the dice tumble and damage application). |
 | `InstantPromptLayer` | Choreographer detects a playable Instant after a qualifying event | 50 | 1.5s TTL countdown bar + Instant card buttons + Skip. Auto-closes on TTL. |
@@ -466,8 +466,10 @@ Things that are **stale or placeholder** and should be addressed before ship:
 
 ## See also
 
+- [`INDEX.md`](./INDEX.md) — doc tree routed by intent
 - [`ENGINE_AND_MECHANICS.md`](./ENGINE_AND_MECHANICS.md) — game rules, engine architecture, event flow
 - [`DECK_BUILDING.md`](./DECK_BUILDING.md) — deck composition rules, builder UI, persistence
 - [`cards/`](./cards/) — per-hero card listings + the universal generic pool
 - [`HERO_REQUIREMENTS.md`](./HERO_REQUIREMENTS.md) — hero authoring brief
+- [`CHANGELOG.md`](../CHANGELOG.md) — design + architecture decisions log
 - `README.md` — project overview, commands, routes, bundle stats

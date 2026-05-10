@@ -1,9 +1,9 @@
 # Generic cards
 
-Universal pool, available to every hero. Lives in
-[`src/content/cards/generic.ts`](../../src/content/cards/generic.ts).
-The deck-builder pulls **4 of the 7** into every deck (per the
-`generic` category limit).
+> **📦 Source of truth: [`src/content/cards/generic.ts`](../../src/content/cards/generic.ts).** Costs, kinds, and rules text below are a snapshot of the data file — convenient for browsing, but if a number here disagrees with the `.ts` the `.ts` wins; please patch this page or open an issue.
+
+Universal pool, available to every hero. The deck-builder pulls **4 of
+the 7** into every deck (per the `generic` category limit).
 
 All seven generic cards are `main-phase` plays (still tagged with the
 legacy alias `main-action`, which the engine treats identically to
