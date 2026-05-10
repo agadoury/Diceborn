@@ -15,106 +15,156 @@
 interface FaceProps { className?: string }
 
 // ── Berserker ──────────────────────────────────────────────────────────────
+// Battle-axe: vertical haft with a single crescent blade flaring right.
 function BerserkerAxe(_: FaceProps) {
   return (
     <g>
-      <path d="M50 12 L54 84 L46 84 Z" />
-      <path d="M50 24 C28 24 18 38 18 50 C28 50 38 46 50 36 Z" />
-      <path d="M50 24 C72 24 82 38 82 50 C72 50 62 46 50 36 Z" />
+      {/* Haft */}
+      <rect x="46" y="22" width="8" height="64" rx="2" />
+      {/* Pommel */}
+      <rect x="40" y="84" width="20" height="6" rx="2" />
+      {/* Crescent blade */}
+      <path d="M54 22 L82 28 Q90 38 84 54 L70 50 Q62 38 54 36 Z" />
+      <path d="M54 36 L70 50 L60 50 Z" opacity="0.55" />
     </g>
   );
 }
+// Pelt: hide-shaped silhouette with shaggy upper edge — reads as fur trim.
 function BerserkerFur(_: FaceProps) {
   return (
     <g>
-      <path d="M20 76 L30 40 L40 70 L50 32 L60 70 L70 40 L80 76 Z" />
-      <path d="M28 80 Q38 70 48 80 Q58 70 68 80 Q78 70 80 84 L20 84 Q22 70 28 80 Z" opacity="0.55" />
+      <path d="
+        M18 36
+        Q24 22 30 32 Q36 22 42 32 Q50 22 58 32 Q64 22 70 32 Q76 22 82 36
+        L84 70
+        Q72 84 60 76 Q50 86 40 76 Q28 84 16 70 Z
+      " />
     </g>
   );
 }
+// Howl: crescent moon on the right, sound-wave arcs on the left.
 function BerserkerHowl(_: FaceProps) {
   return (
     <g>
-      <path d="M30 38 L52 28 L52 72 L30 62 Z" />
-      <path d="M62 30 Q78 50 62 70" stroke="currentColor" strokeWidth="6" fill="none" strokeLinecap="round" />
-      <path d="M70 22 Q92 50 70 78" stroke="currentColor" strokeWidth="5" fill="none" strokeLinecap="round" opacity="0.7" />
+      <path d="M68 18 A30 30 0 1 0 68 82 A22 22 0 1 1 68 18 Z" />
+      <path d="M28 28 Q14 50 28 72" stroke="currentColor" strokeWidth="6" fill="none" strokeLinecap="round" opacity="0.85" />
+      <path d="M16 18 Q-2 50 16 82" stroke="currentColor" strokeWidth="5" fill="none" strokeLinecap="round" opacity="0.55" />
     </g>
   );
 }
 
 // ── Pyromancer ─────────────────────────────────────────────────────────────
+// Ash: a curl of smoke rising past three drifting flecks.
 function PyroAsh(_: FaceProps) {
   return (
     <g>
-      <circle cx="34" cy="28" r="6" />
-      <circle cx="58" cy="44" r="5" opacity="0.85" />
-      <circle cx="40" cy="60" r="4" opacity="0.7" />
-      <circle cx="68" cy="74" r="6" />
-      <circle cx="22" cy="78" r="3.5" opacity="0.6" />
+      <path d="M58 86 Q44 76 56 64 Q70 54 56 42 Q42 30 56 18" stroke="currentColor" strokeWidth="7" fill="none" strokeLinecap="round" />
+      <circle cx="26" cy="34" r="5" opacity="0.85" />
+      <circle cx="22" cy="58" r="3.5" opacity="0.7" />
+      <circle cx="32" cy="76" r="4" opacity="0.55" />
     </g>
   );
 }
+// Ember: classic flame teardrop with a smaller inner flame.
 function PyroEmber(_: FaceProps) {
   return (
     <g>
-      <path d="M50 14 C40 32 60 40 50 56 C42 50 36 42 38 32 C30 44 28 60 40 74 C50 80 64 76 70 64 C76 50 64 38 60 24 C56 32 54 22 50 14 Z" />
+      <path d="
+        M50 12
+        C58 28 70 38 70 56
+        C70 74 60 86 50 86
+        C40 86 30 74 30 56
+        C30 44 38 38 42 30
+        C42 38 46 42 50 42
+        C50 30 50 22 50 12 Z
+      " />
+      <path d="M50 50 C44 58 46 70 50 76 C54 70 56 58 50 50 Z" fill="#1B1228" opacity="0.45" />
     </g>
   );
 }
+// Magma: hot drip with two darker bubbles.
 function PyroMagma(_: FaceProps) {
   return (
     <g>
-      <path d="M50 12 C36 36 28 56 36 72 C42 84 60 84 66 72 C74 56 64 36 50 12 Z" />
-      <circle cx="46" cy="52" r="4" fill="#1B1228" opacity="0.55" />
-      <circle cx="56" cy="64" r="3" fill="#1B1228" opacity="0.55" />
+      <path d="M50 12 C34 38 26 58 34 74 C40 86 60 86 66 74 C74 58 66 38 50 12 Z" />
+      <circle cx="44" cy="56" r="5" fill="#1B1228" opacity="0.55" />
+      <circle cx="58" cy="68" r="3.5" fill="#1B1228" opacity="0.55" />
+      <circle cx="52" cy="44" r="2" fill="#1B1228" opacity="0.4" />
     </g>
   );
 }
+// Ruin: pile of cracked stone slabs.
 function PyroRuin(_: FaceProps) {
   return (
     <g>
-      <path d="M22 20 L78 20 L70 50 L82 80 L18 80 L30 50 Z" opacity="0.85" />
-      <path d="M40 22 L52 50 L46 80" stroke="#1B1228" strokeWidth="4" fill="none" />
-      <path d="M62 22 L54 52 L66 80" stroke="#1B1228" strokeWidth="4" fill="none" />
+      {/* Tall shard */}
+      <path d="M30 84 L34 28 L52 22 L52 84 Z" />
+      {/* Short shard */}
+      <path d="M52 84 L52 46 L72 38 L74 84 Z" opacity="0.85" />
+      {/* Crack on tall shard */}
+      <path d="M40 30 L36 50 L44 60 L38 78" stroke="#1B1228" strokeWidth="3" fill="none" strokeLinecap="round" />
+      {/* Ground */}
+      <rect x="20" y="84" width="64" height="4" rx="1" opacity="0.6" />
     </g>
   );
 }
 
 // ── Lightbearer ────────────────────────────────────────────────────────────
+// Sword: tapered blade, crossguard, grip, pommel — straight knight's longsword.
 function LightSword(_: FaceProps) {
   return (
     <g>
-      <path d="M50 10 L56 64 L44 64 Z" />
-      <rect x="30" y="60" width="40" height="6" />
+      {/* Blade with point */}
+      <path d="M50 8 L56 60 L44 60 Z" />
+      {/* Crossguard */}
+      <rect x="26" y="58" width="48" height="8" rx="2" />
+      {/* Grip */}
       <rect x="46" y="66" width="8" height="20" />
-      <rect x="40" y="84" width="20" height="4" />
+      {/* Pommel */}
+      <circle cx="50" cy="90" r="5" />
     </g>
   );
 }
+// Sun: solid disc with eight tapered rays.
 function LightSun(_: FaceProps) {
   return (
     <g>
       <circle cx="50" cy="50" r="18" />
       {[0, 45, 90, 135, 180, 225, 270, 315].map(a => (
-        <rect key={a} x="48" y="6" width="4" height="14" transform={`rotate(${a} 50 50)`} />
+        <path key={a} d="M48 6 L52 6 L51 22 L49 22 Z" transform={`rotate(${a} 50 50)`} />
       ))}
     </g>
   );
 }
+// Dawn: half-disc rising over a horizon line, with rays fanning up.
 function LightDawn(_: FaceProps) {
   return (
     <g>
-      <path d="M14 70 A36 36 0 0 1 86 70 Z" />
-      <rect x="10" y="74" width="80" height="3" />
-      <path d="M30 60 L36 50 M50 50 L50 38 M70 60 L64 50" stroke="currentColor" strokeWidth="4" strokeLinecap="round" fill="none" opacity="0.8" />
+      {/* Sun half */}
+      <path d="M22 64 A28 28 0 0 1 78 64 Z" />
+      {/* Horizon line */}
+      <rect x="10" y="66" width="80" height="4" rx="1" />
+      {/* Rays */}
+      <path d="M30 50 L24 40" stroke="currentColor" strokeWidth="4" strokeLinecap="round" fill="none" />
+      <path d="M50 40 L50 26" stroke="currentColor" strokeWidth="4" strokeLinecap="round" fill="none" />
+      <path d="M70 50 L76 40" stroke="currentColor" strokeWidth="4" strokeLinecap="round" fill="none" />
+      <path d="M40 44 L36 32" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none" opacity="0.75" />
+      <path d="M60 44 L64 32" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none" opacity="0.75" />
     </g>
   );
 }
+// Zenith: heraldic eight-point star with a small pierced center.
 function LightZenith(_: FaceProps) {
   return (
     <g>
-      <path d="M50 8 L58 42 L92 50 L58 58 L50 92 L42 58 L8 50 L42 42 Z" />
-      <circle cx="50" cy="50" r="8" fill="#1B1228" opacity="0.35" />
+      {/* Star — long primary points + shorter secondary points. */}
+      <path d="
+        M50 6 L56 42 L82 18 L58 44
+        L94 50 L58 56 L82 82 L56 58
+        L50 94 L44 58 L18 82 L42 56
+        L6 50 L42 44 L18 18 L44 42 Z
+      " />
+      <circle cx="50" cy="50" r="6" fill="#1B1228" opacity="0.4" />
     </g>
   );
 }
