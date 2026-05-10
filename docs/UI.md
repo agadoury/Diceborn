@@ -106,7 +106,7 @@ The opponent ladder is collapsed under their HeroPanel on mobile (read-only). Th
                 ActionBar (fixed bottom)
 ```
 
-Both ladders sit in 260px sticky side rails (`lg:sticky lg:top-6`). The center column is capped at `max-w-2xl` for symmetry between the opponent and active panels. The action bar stays fixed-bottom on both layouts.
+Both ladders sit in 340px sticky side rails (`lg:sticky lg:top-6`) — wide enough that ability names + short-text don't truncate at typical desktop widths. The center column is capped at `max-w-2xl` for symmetry between the opponent and active panels. The action bar stays fixed-bottom on both layouts.
 
 ### Atmospheric background
 
@@ -139,15 +139,15 @@ Both ladders sit in 260px sticky side rails (`lg:sticky lg:top-6`). The center c
 |---|---|
 | `HeroPanel` | Portrait + name + HP + CP + status track + optional collapsible ladder (mobile only). Two variants: `opponent` (compact, top of screen) and `active` (full). Reactive to `hero-state` events from the choreographer — portrait shifts to hit / defended / low-hp / victorious / defeated. |
 | `HeroPortrait` | Per-hero sigil renderer. Falls back to a generic concentric-circle placeholder when no sigil is registered. Accent-glow ring on the active player. State variants drive subtle pose / glow shifts. |
-| `AbilityLadder` | Vertical stack of ability rows, T4 at top → T1 at bottom. Live-state styling per row: FIRING (bright glow + scale 1.04 + READY flag), TRIGGERED (60% glow + scale 1.02), REACHABLE (default + % badge), OUT-OF-REACH (40% opacity desaturated). LETHAL flag overlays a red-gold border + skull badge + bell sting on first appearance. Combos render as inline face-icons, not text. |
-| `DiceTray` | 5 hero dice in a row. Tap to lock/unlock during offensive roll. Tumble animation on `dice-rolled` events (900ms mobile / 1200ms desktop, 260ms in reduced-motion). Each die plays an overshoot bounce on land + dust + thud SFX + haptic tick. Dimmed at 45% opacity outside roll phases. `centerStage` prop scales it up during offensive-roll for focus. |
-| `Die` | Single die. Renders a hero-specific glyph for the current face symbol (via `FACE_GLYPHS`). Tinted with the symbol's `FACE_TINT` color. Lock overlay = small padlock + dim background. |
+| `AbilityLadder` | Vertical stack of ability rows, T4 at top → T1 at bottom, grouped under "Tier N — Basic/Strong/Signature/Ultimate" headers (no per-row tier number — position under the header conveys it). Live-state styling per row: FIRING (bright glow + scale 1.04 + READY flag), TRIGGERED (60% glow + scale 1.02), REACHABLE (default + % badge), OUT-OF-REACH (40% opacity desaturated). LETHAL flag overlays a red-gold border + skull badge + bell sting on first appearance. Combos render as inline face-icons, not text. **Click-to-fire**: during `offensive-roll`, the active player can tap any FIRING or TRIGGERED row in their own ladder to open a confirm modal — confirming dispatches `advance-phase + select-offensive-ability` for that index, skipping the full picker overlay. |
+| `DiceTray` | 5 hero dice in a row. Tap to lock/unlock during offensive roll. Tumble animation on `dice-rolled` AND `defense-dice-rolled` events (900ms mobile / 1200ms desktop, 260ms in reduced-motion). Each die plays an overshoot bounce on land + dust + thud SFX + haptic tick. Dimmed at 45% opacity outside roll phases. `centerStage` prop scales it up during offensive-roll for focus. **During a defense flow** (either `pendingAttack` is set or a `defense-*` event is queued/playing), the tray switches to render the defender's dice with the defender's hero accent — the `DefenseTray` wrapper in `MatchScreen.tsx` handles the swap. Locking is disabled while a defense is in flight. |
+| `Die` | Single die. Renders a hero-specific glyph for the current face symbol (via `FACE_GLYPHS`), tinted with the symbol's `FACE_TINT` color. Also shows a small numeric face-value corner badge so straights and n-of-a-kind combos remain readable when several die faces share a symbol. Lock overlay = small padlock + dim background. |
 | `Hand` | Horizontally scrolling card row. Tap a card → lifts (scale 1.05 + translate-y -3 + accent ring) and opens a CardLiftedOverlay with PLAY / Sell / Cancel. Long-press for inspect tooltip. Cards that aren't currently playable fade to 60% opacity with a "not playable" badge. |
 | `CardView` | Single card. Visual treatment differentiates kind label (ACTION / ROLL / INSTANT / MASTERY / etc.), shows cost in an ember-gold disc, name in display font, text in body, optional flavor in italics. Hero-specific cards get the hero accent in the kind chip. |
-| `ActionBar` | Bottom-anchored primary CTA. Phase-driven label: ROLL / REROLL (n left) / CONFIRM / END TURN / OPPONENT'S TURN / MATCH OVER. Includes a left-side menu button. |
+| `ActionBar` | Bottom-anchored phase-driven CTAs. Most phases show a single primary button (ROLL on `main-pre`, END TURN on `main-post`, OPPONENT'S TURN / MATCH OVER otherwise). On `offensive-roll` the bar splits into TWO equal-width buttons when rerolls remain: CONFIRM (primary) and REROLL (N left) (secondary). Once attempts hit zero, only CONFIRM remains. Includes a left-side menu button. |
 | `PhaseIndicator` | Small banner above the dice tray showing phase name + active player + "thinking..." spinner when AI is acting. |
 | `StatusTrack` / `StatusBadge` / `StatusIcon` | Status token chip row. Each chip shows the icon + stack count. Pulses if the status's `pulse` flag is set. Hover/long-press for tooltip. |
-| `dieFaces.tsx` | `FACE_GLYPHS: Record<symbol, ReactNode>` and `FACE_TINT: Record<symbol, hex>`. Heroes register their own glyphs here when they're added. Empty by default. |
+| `dieFaces.tsx` | `FACE_GLYPHS: Record<symbol, ReactNode>` and `FACE_TINT: Record<symbol, hex>`. Currently populated for all three shipping heroes: Berserker (axe / fur / howl), Pyromancer (ash / ember / magma / ruin), Lightbearer (sword / sun / dawn / zenith). New heroes register their glyphs by extending these maps. |
 | `HotSeatCurtain` | Full-screen hand-off overlay between turns in hot-seat mode. Shows the next player's hero portrait + "Pass to PX" + a big TAP TO CONTINUE button. |
 
 ### `src/components/screens/` — full screens
@@ -170,7 +170,8 @@ Bottom-anchored or full-screen modal layers gated on the choreographer being idl
 | `HotSeatCurtain` | `state.activePlayer` flips in hot-seat mode | 60 | Full-screen hand-off. Player must tap to continue. |
 | `CardLiftedOverlay` (in `Hand.tsx`) | Active card lifted | 30 | Dimmed backdrop + enlarged card + PLAY / Sell / Cancel buttons. Tap outside dismisses. |
 | `AttackSelectLayer` | `state.pendingOffensiveChoice && useInputUnlocked()` | 50 | **Active player picks which ability to fire.** Lists each match with tier chip, base damage, short text, damage type. Pass option at bottom. AI auto-picks `matches[0]`. See [Engine §11 attack flow](./ENGINE_AND_MECHANICS.md#11-events--the-choreographer). |
-| `DefenseSelectLayer` | `state.pendingAttack && useInputUnlocked()` | 50 | **Defender picks which defense to attempt.** Shows incoming damage + type + tier; lists each defense with combo, dice count, effect. "Take it" option for no defense. AI picks highest-tier defense. |
+| `DefenseSelectLayer` | `state.pendingAttack && useInputUnlocked()` | 50 | **Defender picks which defense to attempt.** Shows incoming damage + type + tier; lists each defense with combo, dice count, effect. "Take it" option for no defense. AI picks highest-tier defense. The pick auto-rolls and resolves in a single dispatch — there is no separate ROLL action for defense. |
+| `DefenseStatusPanel` | `state.pendingAttack` set OR a `defense-*` event queued/playing | 40 | **Persistent context panel** pinned top-center while a defense is in flight. Shows the defender's accent header, the incoming attack name + damage, the chosen defense's combo strip + name + dice count, and a live status that progresses `DEFENDING…` → `ROLLING…` → `DEFENDED −X` (green) / `MISSED` (red). Lives separately from the picker so the player keeps full context through the entire choreography (picker disappears on click; this panel stays through the dice tumble and damage application). |
 | `InstantPromptLayer` | Choreographer detects a playable Instant after a qualifying event | 50 | 1.5s TTL countdown bar + Instant card buttons + Skip. Auto-closes on TTL. |
 | `Banner` | `bannerText` set in choreoStore | 40 | Centered title overlay used for `match-started`, `turn-started`, `match-won`, `attack-intended` (as "X → AbilityName"), `offensive-pick-prompt` (as "PICK YOUR ATTACK"). Auto-fades. |
 | `ActionLog` | Always rendered | 5 | Right-side feed of recent events (or bottom-corner on mobile). Every event maps to an optional one-line entry via `formatEvent` in `ActionLog.tsx`. |
@@ -192,11 +193,11 @@ The choreographer is mounted at the route root in `App.tsx` via `<Choreographer>
 | `ScreenShake` | Wraps children. Applies `transform: translate(...)` based on `choreoStore.shake`. Magnitudes from tokens: 2px / 6px / 10px (tiny / med / large). |
 | `HitStop` | Pauses CSS animations briefly via `animation-play-state: paused` when `choreoStore.hitStopUntil > now`. 100–200ms typical. |
 | `DamageNumberLayer` | Spawns floating numbers from `choreoStore.damageNumbers`. Variants: `dmg` (red), `heal` (green), `pure` (purple), `crit` (gold-large), `white` (undefendable), `cp` (ember-gold). Sizes `sm / md / lg` based on amount. Auto-cull after 1.4s. |
-| `AttackEffectLayer` | Per-ability hit FX (radial accent burst, slash streaks, etc.). Currently a generic `<DefaultFx />` since heroes are unregistered; per-hero effects register here when content lands. |
+| `AttackEffectLayer` | Per-ability hit FX (radial accent burst, slash streaks, etc.). |
 | `AbilityCinematicLayer` | Full-screen Tier-4 Ultimate cinematic: letterbox bars, slow-mo, hero name + bark line, accent glow. Reads from `choreoStore.cinematic`. |
 | `Banner` | Centered title overlay (see [§5](#5-overlays)). |
 | `ActionLog` | Live event feed. |
-| `InstantPromptLayer`, `AttackSelectLayer`, `DefenseSelectLayer` | The three player-input overlays. |
+| `InstantPromptLayer`, `AttackSelectLayer`, `DefenseSelectLayer`, `DefenseStatusPanel` | The four overlays driving / contextualising player input. |
 
 ### Beat durations
 
@@ -205,13 +206,14 @@ The choreographer is mounted at the route root in `App.tsx` via `<Choreographer>
 | Event | Default (ms) | Notes |
 |---|---|---|
 | `dice-rolled` | 1100 | Wait for tray tumble + settle. |
-| `defense-dice-rolled` | 1100 | Same. |
+| `defense-dice-rolled` | 1300 | Tray tumble + settle, slightly longer to leave the rolled faces on screen. |
 | `ability-triggered` | 1000 (1200 if crit) | Plays AttackEffect. |
 | `ultimate-fired` | 2200 (3000 if crit) | Cinematic owns the hold. |
 | `damage-dealt` | 900 (1300 for big hits ≥15) | Hit-stop + shake + damage number. |
-| `attack-intended` | 900 | Banner setup before AttackSelect overlay. |
+| `attack-intended` | 900 | Banner setup before DefenseSelect overlay. |
 | `offensive-pick-prompt` | 700 | Banner setup before AttackSelect overlay. |
-| `defense-resolved` | 1100 if reduction>0 else 500 | |
+| `defense-intended` | 500 (no roll) / 1300 (with roll) | When a real defense is picked, shows banner like `P2 → WOLFHIDE (3D)` for 1300ms. |
+| `defense-resolved` | 500 / 1100 / 1300 | When the defender rolled, shows a `<ABILITY> — DEFENDED` (green) or `<ABILITY> — MISSED` (red) banner for 1100ms. |
 | `phase-changed` | 200 | Small breath. |
 | `card-played` | 700 | + haptic. |
 | `turn-started` | 1100 | Banner. |
@@ -262,7 +264,13 @@ Every interactive component reads this and disables itself while false. It's the
 
 ### AI driver
 
-In `MatchScreen.tsx`, an effect watches `state.activePlayer === aiPlayer && useInputUnlocked()` and dispatches `nextAiAction(state, ai)` after a 900ms cooldown. The cooldown is intentional — gives the human player time to read what just happened before the AI's next move starts.
+In `MatchScreen.tsx` the AI driver is installed once per match-screen mount as a Zustand-subscribe pattern (mirroring the Choreographer pump): it subscribes directly to `useGameStore` and `useChoreoStore`, schedules a 600ms tick on any store change, and runs a 500ms safety-net `setInterval` so a transition that races the subscribe registration is still caught. The tick reads fresh state from the stores, checks `inputReady` (queue empty + nothing playing + no cinematic), and fires `nextAiAction(state, aiPlayer)` when the AI has an action to take. Eligibility covers three off-turn cases beyond the obvious "AI's own turn":
+
+  - `state.pendingAttack.defender === aiPlayer` — the human attacked the AI; the AI auto-picks + auto-rolls a defense.
+  - `state.pendingCounter.holder === aiPlayer` — the AI is responding to a counter prompt.
+  - The "AI is the attacker waiting for the human's defense" case is explicitly skipped so `nextAiAction` doesn't fall through to advance-phase / end-turn and blow past the engine's pause.
+
+The 600ms tick gives the player a beat to read what just happened; the 500ms safety-net poller is the second line of defense.
 
 ---
 
@@ -341,12 +349,12 @@ A hero's UI footprint comes from four registries plus its `HeroDefinition` accen
 | `HEROES` (the registry) | `src/content/index.ts` | Source of truth — every other registry is keyed by `HeroId`. |
 | `registerSigil(heroId, render)` | `src/components/game/HeroPortrait.tsx` | Portrait sigil renderer. State-aware (idle / hit / defended / low-hp / victorious / defeated). Falls back to a generic concentric-circle placeholder when not registered. |
 | `registerAtmosphere(heroId, config)` | `src/components/effects/HeroBackground.tsx` | Background motif + particle direction / density / hue. Falls back to a purple ember bed using the hero's accent color. |
-| `FACE_GLYPHS` / `FACE_TINT` | `src/components/game/dieFaces.tsx` | Per-symbol SVG glyph + tint hex. Currently empty — heroes register here when added. |
+| `FACE_GLYPHS` / `FACE_TINT` | `src/components/game/dieFaces.tsx` | Per-symbol SVG glyph + tint hex. Populated for all three shipping heroes (Berserker axe/fur/howl, Pyromancer ash/ember/magma/ruin, Lightbearer sword/sun/dawn/zenith). New heroes register their glyphs by extending these maps. |
 | (status icons) | `src/components/game/StatusIcon.tsx` | Universal pool icons (burn, stun, protect, shield, regen) are baked in; signature tokens add their icon via the status `visualTreatment` field. |
 
 The `accentColor` hex is the single overriding theme value. Components that themed off the hero (CTAs, panel side-glow, ladder firing-row glow, attack-effect bursts, banner color) read it via the snapshot or directly from `HeroDefinition.accentColor` and inject it as a CSS custom property or inline style.
 
-When **no heroes are registered**, every screen renders an explicit empty state ("No heroes registered" with a pointer to `src/content/heroes/`). The dev showcase still renders for the hero-agnostic primitives (status registry, choreographer test bench, dice playground stub).
+If a build ever ships with **no heroes registered**, every screen renders an explicit empty state ("No heroes registered" with a pointer to `src/content/heroes/`). The current build ships three heroes, so this empty-state path is only reachable in a stripped-down build or an in-progress hero refactor.
 
 ---
 
@@ -445,10 +453,8 @@ Settings screen has a master mute. Choreographer gates audio output via `audio.p
 
 Things that are **stale or placeholder** and should be addressed before ship:
 
-- **`/how-to-play` is out of date.** Mentions "5 phases" (8), "2 attempts" (3), "Defensive Roll (auto)" (interactive), and the auto-fire ability resolver. Needs a rewrite to match the current rules. See `src/components/screens/HowToPlay.tsx`.
-- **No heroes are registered.** Every screen handles this gracefully (empty states, registry checks), but the match flow is uninteresting until a hero ships. See `src/content/heroes/` (currently empty).
-- **`AttackEffectLayer` renders a generic burst** because no per-hero effects are registered. Per-ability hit FX register here as content lands.
-- **AbilityCinematic falls back to generic name + accent** when the firing hero isn't registered.
+- **`/how-to-play` is out of date.** Mentions "5 phases" (8), "2 attempts" (3), and an old auto-resolving defensive flow. Needs a rewrite to match the current rules (manual offensive roll, defender picks then engine auto-rolls). See `src/components/screens/HowToPlay.tsx`.
+- **AbilityCinematic / AttackEffect** can fall back to a generic name + accent if a not-yet-registered hero ships — the three current heroes (Berserker, Pyromancer, Lightbearer) have full theming.
 - **Status detonation event is emitted but the configured `effect` isn't auto-resolved** at the call site yet — see ENGINE_AND_MECHANICS.md known-follow-ups for the queue mechanism.
 - **Bankable spend prompts** (`pendingBankSpend`) — engine support + UI overlay are wired and dispatchable, but the auto-open from `applyAttackEffects` / `resolveDefenseChoice` based on hero `spendOptions` isn't yet auto-triggered.
 - **`Settings` does not expose** an "audio volume" slider (just mute) or a "spectator hand-off" toggle for hot-seat (always shows curtain).

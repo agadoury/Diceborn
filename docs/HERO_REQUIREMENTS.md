@@ -116,7 +116,7 @@ The complete first-class effect set — designed to express every recurring patt
 
 | Sub-field | Meaning |
 |---|---|
-| `self_cost: N` | Unblockable HP loss to the caster on resolution. Does NOT trigger on-hit signatures or Frenzy/Radiance gains. Covers Avalanche's "13 to opponent + 3 self". |
+| `self_cost: N` | Unblockable HP loss to the caster on resolution. Does NOT trigger on-hit signatures or Frenzy/Radiance gains. Used by abilities that bake recoil into the cost (e.g. a hypothetical "13 to opponent + 3 self"). No live shipping ability currently uses `self_cost`; the primitive is supported. |
 | `conditional_type_override: { condition, overrideTo }` | Promote damage type (e.g. `"normal"` → `"undefendable"`) when the condition holds. Covers Cleave Mastery's "undefendable when 4+ axes". |
 
 #### Conditional bonus (apply to `damage`, `scaling-damage`, `heal`, `reduce-damage`, `apply-status`)
@@ -345,15 +345,15 @@ A Tier 4 ability can declare a more-restrictive variant — "Critical Ultimate" 
 | Field on the AbilityDef | Meaning |
 |---|---|
 | `criticalCondition: DiceCombo` | Strictly more restrictive than the base `combo`. When BOTH the base combo and this match, the ability fires with the critical effect. Engine validation expects criticalCondition ⇒ combo. |
-| `criticalEffect.cosmeticOnly: true` | No mechanical change, enhanced cinematic only (Avalanche). |
-| `criticalEffect.damageMultiplier: N` | Multiply base damage (Judgment of the Sun: 2x). |
-| `criticalEffect.damageOverride: N` | Replace base damage (God's Crater: set 22). |
+| `criticalEffect.cosmeticOnly: true` | No mechanical change, enhanced cinematic only. |
+| `criticalEffect.damageMultiplier: N` | Multiply base damage. |
+| `criticalEffect.damageOverride: N` | Replace base damage. |
 | `criticalEffect.effectAdditions: AbilityEffect[]` | Extra effects on top of the base. |
-| `criticalEffect.consumeModifierBonus: N` | Override how the bankable passive is consumed (Judgment of the Sun: Radiance bonus +4 dmg / +2 heal each instead of +2 / +1). |
+| `criticalEffect.consumeModifierBonus: N` | Override how the bankable passive is consumed (e.g. a Radiance ability could bump its bonus from +2 dmg / +1 heal to +4 dmg / +2 heal at crit). |
 | `criticalCinematic: string` | Free-form brief — what changes from the base cinematic. |
-| `ultimateBand: "standard" \| "career-moment"` | `"standard"` = 8–25% landing / 13–15 dmg; `"career-moment"` = 1–5% landing / 15–18 dmg (Wolf's Howl, God's Crater). The simulator validates against the matching band. |
+| `ultimateBand: "standard" \| "career-moment"` | `"standard"` = 8–25% landing / 13–15 dmg; `"career-moment"` = 0.5–2% landing / 13–18 dmg. The three shipping T4s (Wolf's Howl, God's Crater, Judgment of the Sun) are all `"career-moment"` since they're all gated on `5× face-6`. The simulator validates against the matching band. |
 
-If your T4 ability is itself a once-per-career special (e.g. requires 5-of-a-kind), you don't need a separate `criticalCondition` — just set `ultimateBand: "career-moment"` and the validator accepts the lower landing rate.
+If your T4 ability is itself a once-per-career special (e.g. requires `5× face-6`), you don't need a separate `criticalCondition` — just set `ultimateBand: "career-moment"` and the validator accepts the lower landing rate. The three shipping heroes follow this pattern: their T4s have no `criticalCondition` / `criticalEffect` blocks, only a `criticalCinematic` brief that plays every time the ability fires.
 
 ---
 
@@ -376,15 +376,17 @@ If two heroes' games feel similar — *"I roll for damage, opponent rolls for da
 
 The simulator validates landing rates after implementation. Aim for these bands:
 
-#### Offensive ladder
+#### Canonical offensive ladder shape
+
+The three shipping heroes (Berserker, Pyromancer, Lightbearer) all follow the same shape: **1× T1 + 3× T2 + 2× T3 + 1× T4 = 7 abilities**. The single T4 is a "career-moment" ultimate gated on `5× face-6` (all 5 dice rolling the unique face-6 symbol of that hero). New heroes should follow the same shape unless there's a strong design reason to deviate — uniformity here keeps tuning legible across the roster.
 
 | Tier | Target landing rate | Damage envelope | Role |
 |---|---|---|---|
 | **Tier 1 (Basic)** | 75–95% | **3–9 dmg** (extended ceiling for Minor Crit on T1 scaling abilities — e.g. Cleave 4/6/8) | "I always do something" |
-| **Tier 2 (Strong)** | 45–70% | 5–9 dmg | "I'm playing well" |
+| **Tier 2 (Strong)** | 45–80% | 5–9 dmg | "I'm playing well" — note the upper end can stretch when one of the three T2 slots is a low-difficulty `straight-3`-class combo |
 | **Tier 3 (Signature)** | 20–45% | 9–13 dmg | Big swing — earned, not expected |
-| **Tier 4-Standard** | 8–25% | 13–15 dmg | Once or twice per match. Set `ultimateBand: "standard"`. |
-| **Tier 4-Career-Moment** | 1–5% | 15–18 dmg | Once-per-career screenshot moment. Set `ultimateBand: "career-moment"`. Allow at most one per ladder. |
+| **Tier 4-Standard** | 8–25% | 13–15 dmg | Reserved for future heroes that want a less-rare T4. None of the three shipping heroes use this band. |
+| **Tier 4-Career-Moment** | 0.5–2% | 13–18 dmg | Once-per-career screenshot moment. Set `ultimateBand: "career-moment"`. The canonical pattern is `5× face-6`; the three shipping T4s all use it (Wolf's Howl 5×howl, God's Crater 5×ruin, Judgment of the Sun 5×zenith). |
 
 #### Defensive ladder (player-pick model)
 
@@ -899,7 +901,7 @@ Effect: compound
 
 ### Self-cost damage
 
-Avalanche — 13 to opponent + 3 unblockable self-damage:
+Hypothetical recoil ability — 13 to opponent + 3 unblockable self-damage on the caster:
 
 ```
 Effect: damage
@@ -907,6 +909,8 @@ Effect: damage
   type:   ultimate
   self_cost: 3
 ```
+
+(No live shipping ability uses `self_cost`; the primitive is illustrated here for hero authors.)
 
 ### Conditional heal (scales with banked passive)
 
@@ -958,46 +962,47 @@ Effect: apply-status
 
 Reads as "apply 1 stack base + 2 stacks if at low HP" — three stacks total when wounded, one when healthy. Ideal for desperation-mode escalations on weaker abilities.
 
-### Critical Ultimate (mechanical)
+### Critical Ultimate (mechanical, hypothetical)
 
-Judgment of the Sun — 3+ zenith faces doubles base damage AND escalates Radiance consume:
+A hypothetical T4 where rolling an extra restrictive variant doubles damage and escalates a bankable consume — none of the three shipping heroes use this pattern today (their T4s are all "career-moment" with no separate crit), but the engine still supports it for future heroes:
 
 ```
-[T4] JUDGMENT OF THE SUN
-  Combo:  compound and: [ symbol-count zenith 2, symbol-count sword 1, symbol-count sun 2 ]
-  Effect: damage 14 ultimate (+ Stun, + spend ALL Radiance @ 2 dmg / 1 heal each)
+[T4] HYPOTHETICAL_BIG_HIT
+  Combo:  compound and: [ symbol-count <signature> 2, symbol-count <accent> 1, symbol-count <flex> 2 ]
+  Effect: damage 14 ultimate (+ Stun, + spend ALL bank @ 2 dmg / 1 heal each)
   UltimateBand: standard
-  CriticalCondition: { kind: "symbol-count", symbol: "lightbearer:zenith", count: 3 }
+  CriticalCondition: { kind: "symbol-count", symbol: "<signature>", count: 3 }
   CriticalEffect:
     damageMultiplier: 2
-    consumeModifierBonus: 4         # Radiance bonus becomes +4 dmg / +2 heal each
-  CriticalCinematic: extended slow-mo on descending strike, screen flashes pure white,
-                     bark gets layered choir + brass undertone.
+    consumeModifierBonus: 4         # bank bonus becomes +4 dmg / +2 heal each
+  CriticalCinematic: extended slow-mo, screen flashes pure white, bark gets layered choir.
 ```
 
-### Critical Ultimate (cosmetic-only)
+### Critical Ultimate (cosmetic-only, hypothetical)
 
-Avalanche — large straight rolled as 2-3-4-5-6 plays the brighter cinematic:
+Same shape but the crit only changes the cinematic, not the math:
 
 ```
-[T4] AVALANCHE
+[T4] HYPOTHETICAL_COSMETIC_CRIT
   ...
-  CriticalCondition: <2-3-4-5-6 specifically — implementation: combo + n-of-a-kind 5 with
-                      the high-value range; or use a custom check>
+  CriticalCondition: <a strictly more-restrictive variant of the base combo>
   CriticalEffect: { cosmeticOnly: true }
-  CriticalCinematic: brighter ice-particle treatment, sharper screen-flash, no damage change.
+  CriticalCinematic: brighter particle treatment, sharper screen-flash, no damage change.
 ```
 
-### Career-moment T4 (no separate critical block)
+### Career-moment T4 (no separate critical block) — what the three shipping heroes actually do
 
-Wolf's Howl — 5-of-a-kind 6s, the entire ability is its own crit:
+The canonical pattern: combo gated on `5× face-6` (all 5 dice rolling the unique face-6 symbol). The base combo is already the most-restrictive shape, so no `CriticalCondition` / `CriticalEffect` is needed — only a `CriticalCinematic` brief that plays every time the ability fires.
 
 ```
-[T4] WOLF'S HOWL
-  Combo: { kind: "n-of-a-kind", count: 5 }   // additionally constrained to face value 6
-  UltimateBand: career-moment                 // landing 1–5%, damage 15–18 dmg envelope
-  // No CriticalCondition needed — the base combo is already the most-restrictive shape.
+[T4] WOLF'S HOWL                          # Berserker example
+  Combo: { kind: "symbol-count", symbol: "berserker:howl", count: 5 }
+  UltimateBand: career-moment             # landing ≈0.5–2%
+  CriticalCinematic: extended ultimate; anticipation, howl, four spectral
+                     ice-wolves manifest, convergence strike, settle.
 ```
+
+The other two shipping heroes follow the same shape: God's Crater uses `pyromancer:ruin`, Judgment of the Sun uses `lightbearer:zenith`. All three are `ultimateBand: "career-moment"`, none have a separate crit block.
 
 ### Bankable spend on offensive resolution
 
@@ -1124,15 +1129,17 @@ CARD: SUNBURST
 
 ### Wildcard remove-status (§15.7)
 
-Apostasy — remove all negative status from self:
+Apostasy — remove 1 negative-status stack from self:
 
 ```
 Effect:
   kind:   remove-status
   status: "any-debuff"
-  stacks: "all"
+  stacks: 1
   target: "self"
 ```
+
+The wildcard branch also accepts `stacks: "all"` for full strips — that's the right call when the ability is meant to be a wholesale cleanse rather than a targeted bleed-off.
 
 Ash Mirror — strip 1 positive status from attacker, player's choice:
 
@@ -1210,7 +1217,7 @@ Run through this list. If you can't answer "yes" to all of them, redesign.
 - [ ] Signature token (if any) uses the structured fields — `passiveModifier`, `detonation`, or `stateThresholdEffects` instead of plain-English Notes.
 - [ ] Bankable signature passive (if any) declares `passiveKey`, `bankStartsAt`, and `spendOptions[]`.
 - [ ] CP gain triggers use the structured `on:` enumeration (no freeform "+1 CP whenever …" prose).
-- [ ] T4 Ultimates are tagged `ultimateBand: "standard"` (8–25%) or `"career-moment"` (1–5%). Career-moment uses no separate `criticalCondition` if the base combo is already maximally restrictive.
+- [ ] Offensive ladder follows the canonical **1× T1 + 3× T2 + 2× T3 + 1× T4** shape, totaling 7 abilities. T4 is `ultimateBand: "career-moment"` and gated on `5× face-6` (all five dice rolling the hero's unique face-6 symbol). No separate `criticalCondition` — the base combo is already the apex roll.
 - [ ] Every defensive ability declares its `defenseDiceCount` (2–5). Ladder has 3 defenses with clearly different shapes.
 - [ ] Zero `[custom]` flags except for genuinely one-off mechanics that no primitive captures.
 - [ ] The four uniqueness pillars (dice identity, resource identity, win-condition identity, signature mechanic) all answer different questions. The hero would feel mechanically distinct from any other I might design.

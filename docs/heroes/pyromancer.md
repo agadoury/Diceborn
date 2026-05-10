@@ -139,6 +139,10 @@ her per stack stripped. Opponents pay either way.
 
 ## 7. Offensive ladder
 
+Canonical shape: 1× T1 + 3× T2 + 2× T3 + 1× T4. The T4 is gated on
+`5× face-6` (here: 5 ruin), making it a career-moment ultimate. Volcanic
+Rain (a previously-listed second T4) was removed during the unification.
+
 ### T1 · Ember Strike
 
 | Field | Value |
@@ -202,27 +206,18 @@ The Crater Heart upgrade uses the new structural Mastery field
 `damage-conditional-bonus` to *create* a `conditional_bonus` on Pyro
 Lance's damage leaf — the base ability ships without one.
 
-### T4 · Volcanic Rain (standard)
+### T4 · God's Crater (career-moment)
 
 | Field | Value |
 |---|---|
-| Combo | `compound and [ruin×2, ash×2]` |
-| Damage type | ultimate |
-| Effect | 12 ultimate + ASHFALL Cinder (base +2 = 3 stacks; +1 if 3+ ember) |
-| Target landing | 8–25% |
-| Critical condition | `compound and [n-of-a-kind 2, ruin×2]` |
-| Critical effect | cosmetic only (gold-fire treatment) |
-
-### T4 · God's Crater (standard, with career-moment crit)
-
-| Field | Value |
-|---|---|
-| Combo | `symbol-count: pyromancer:ruin, count 4` |
+| Combo | `symbol-count: pyromancer:ruin, count 5` (all 5 dice on face 6) |
 | Damage type | ultimate |
 | Effect | Stun + 11 ultimate + push Cinder to 5 (fires detonation for 8, or 12 with Crater Wind) |
-| Target landing | 8–25% |
-| Critical condition | `symbol-count: pyromancer:ruin, count 5` |
-| Critical effect | damageOverride 22 + extra 4 pure damage |
+| Target landing | 0.5–2% (rare-roll career-moment ultimate) |
+
+There is no separate `criticalCondition` / `criticalEffect` block — the
+5-ruin gate is already the apex roll. The cinematic stinger plays every
+time it fires (see `criticalCinematic` in the live data file).
 
 The "force detonation" at the end of the effect tree leans on the
 detonation dispatch wiring — applying 5 Cinder pushes the opponent to
@@ -312,7 +307,7 @@ choice is a UI follow-up).
 | Ambient bed | Crackling hearth + slow heart-rhythm thump + occasional distant volcanic rumble. Thump intensifies if opponent has Cinder at 4+. |
 | Bark — on roll | (silent — soft hiss as she ignites a fresh ember) |
 | Bark — T3 lands | "Burn." (Pyro Lance) / "Ash and ember." (Magma Heart) |
-| Bark — T4 fires | "BURN ALL OF IT." (God's Crater) — audio peak. Volcanic Rain: long satisfied wordless exhale. |
+| Bark — T4 fires | "BURN ALL OF IT." (God's Crater) — audio peak of her entire kit. |
 | Bark — taking lethal hit | (single ember-puff fading to silence — no words) |
 | Bark — victory | "The mountain remembers." (quiet, almost prayerful) |
 | Bark — defeat | (silent — flame in her hand goes out) |
@@ -331,9 +326,11 @@ to her setup-heavy economy). Early game (turns 1–3): Ember Strike applies
 1–2 Cinder per turn, building toward critical mass. Mid-game (turns
 4–6): the opponent must decide — defuse (feeding her CP) or race.
 Crater Wind played around turn 4–5 turns every detonation into 12 damage.
-Late game (turns 7+): God's Crater for the cinematic close (10.4% per
-attempt, ~30% chance per match) or sustained Cinder-pressure with
-Phoenix Veil/Phoenix Stir while detonations whittle the opponent down.
+Late game (turns 7+): rely on sustained Cinder-pressure with Phoenix
+Veil + steady detonations whittling the opponent down. The 5-ruin
+career-moment God's Crater is rare enough that it should be treated as
+a screenshot moment, not a scheduled close — most matches end via the
+detonation economy alone.
 
 **Strong matchups.** Punishes attrition tanks (Berserker — Cinder
 ignores Frenzy; Lightbearer — strip Radiance via Ash Mirror).
@@ -357,10 +354,13 @@ attempt itself is taxed even when the opponent decides to abort.
 ```
 THE PYROMANCER · BURN · COMPLEXITY 3
 Dice: 2 ash / 2 ember / 1 magma / 1 ruin
-Win condition: Build Cinder to critical mass (5) → 8/12 dmg detonation. Close with God's Crater or attrition.
+Win condition: Build Cinder to critical mass (5) → 8/12 dmg detonation. Closes via attrition.
 Signature: Ashfall — every offensive hit applies +1 Cinder (+1 if 3+ ember).
-Tier 1: Ember Strike (3+ ash, 3/5/7 + Cinder, 84%)        Tier 2: Firestorm / Obsidian Burst / Ember Wall (33–84%)
-Tier 3: Magma Heart / Pyro Lance (48–54%)                 Tier 4: Volcanic Rain / God's Crater (10–36%)
+Ladder shape (canonical): 1× T1 + 3× T2 + 2× T3 + 1× T4.
+Tier 1: Ember Strike (3+ ash, 3/5/7 + Cinder, ~84%)
+Tier 2: Firestorm / Obsidian Burst / Ember Wall (45–70%)
+Tier 3: Magma Heart / Pyro Lance (20–45%)
+Tier 4: God's Crater (5 ruin = all 5 dice on face 6, 0.5–2%)
 Token: Cinder (debuff, max 5 — never ticks; detonates at 5 for 8 ub, 12 with Crater Wind)
 Standout cards: Char, Crater Wind, Phoenix Veil
 "The mountain remembers everything I burn."

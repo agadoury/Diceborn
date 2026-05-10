@@ -78,9 +78,13 @@ instantly; the presentation layer takes 2-6 seconds to *show* it.
 
 ## Heroes
 
-No heroes are currently registered. Drop a `HeroDefinition` module in
-`src/content/heroes/` and register it in `src/content/index.ts` to
-populate the menu, hero-select, simulator, and dev showcase.
+Three heroes ship with the current build:
+
+- **The Berserker** — rush archetype, frost-blue twin-axe warrior. Closes via Wolf's Howl on the rare 5-howl roll. See [`docs/heroes/berserker.md`](./docs/heroes/berserker.md).
+- **The Pyromancer** — burn archetype, builds Cinder to critical-mass detonations. Career-moment T4 is God's Crater (5 ruin). See [`docs/heroes/pyromancer.md`](./docs/heroes/pyromancer.md).
+- **The Lightbearer** — survival archetype, banks Radiance and closes with Judgment of the Sun (5 zenith). See [`docs/heroes/lightbearer.md`](./docs/heroes/lightbearer.md).
+
+All three follow the canonical offensive ladder shape: 1× T1 + 3× T2 + 2× T3 + 1× T4, with the T4 always gated on `5× face-6`. To add a fourth hero, drop a `HeroDefinition` module in `src/content/heroes/` and register it in `src/content/index.ts`. See [`docs/HERO_REQUIREMENTS.md`](./docs/HERO_REQUIREMENTS.md) for the authoring contract.
 
 Landing-rate audit runs against whichever heroes are registered:
 
