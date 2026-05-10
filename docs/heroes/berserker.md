@@ -1,5 +1,7 @@
 # The Berserker
 
+> **📦 Source of truth: [`src/content/heroes/berserker.ts`](../../src/content/heroes/berserker.ts)** for hero data, [`src/content/cards/berserker.ts`](../../src/content/cards/berserker.ts) for cards. This page documents the *design intent* (lore, dice identity, ability roles, cinematics, audio direction, tuning rationale) — mechanical specifics live in the data files and may evolve faster than this prose.
+
 | Field | Value |
 |---|---|
 | **ID** | `berserker` |
@@ -7,7 +9,6 @@
 | **Complexity** | 1 |
 | **Accent color** | `#9CC8E0` |
 | **Signature quote** | "The wound is the door." |
-| **Source** | [`src/content/heroes/berserker.ts`](../../src/content/heroes/berserker.ts) |
 
 The Berserker is Pact of Heroes' first registered hero and the canonical example
 of the Rush archetype. Reliable bread-and-butter Cleave at ~98% landing,
@@ -160,22 +161,28 @@ actual damage to the opponent.
 
 ## 7. Offensive ladder
 
-Canonical shape: 1× T1 + 3× T2 + 2× T3 + 1× T4. The T4 is always gated
-on `5× face-6` (here: 5 howl), making it a career-moment ultimate.
-Tier-band bands (target landing rate) per the engine's tuning bands —
-T1 75–95%, T2 45–80%, T3 20–45%, T4 career-moment 0.5–2%. Ranges below
-come from the original spec; the simulator's `simulateLandingRate` uses
-a simpler lock model and reports different numbers in some cases.
+> **Live data lives in [`src/content/heroes/berserker.ts`](../../src/content/heroes/berserker.ts).**
+> Combo, damage, and effect for every ability are read from there at
+> runtime. What's documented below is the *role* and *cinematic intent*,
+> which don't drift with tuning. If you spot a mechanical claim here
+> that conflicts with the data file, the data file wins — patch this
+> doc.
+
+Canonical shape: 1× T1 + 3× T2 + 2× T3 + 1× T4. The T4 is gated on
+`5× howl` (all 5 dice on face 6), making it a career-moment ultimate.
+Tier-band targets: T1 75–95%, T2 45–80%, T3 20–45%, T4 0.5–2%.
+
+| Tier | Ability | Role |
+|---|---|---|
+| T1 | Cleave | Bread-and-butter axe wash. ~98% landing keeps Frost-bite stacks ticking on the opponent. |
+| T2 | Glacier Strike | Compact unblockable + small self-heal — clutch when the opponent has stacked their defenses. |
+| T2 | Winter Storm | Mid-range straight; bigger numbers, no special clauses. |
+| T2 | Avalanche | Cheap straight-3 sustain (demoted from a former T4); fills gaps when nothing else lines up. |
+| T3 | Blood Harvest | Burst payoff. Bonus-dice damage + Frenzy-scaled self-heal for the comeback path. |
+| T3 | Frostfang | Stun-locker. Rare howl gate, but the Stun shifts a turn entirely. |
+| T4 | Wolf's Howl (career-moment) | The screenshot moment. 5-howl gate; Stun + ultimate damage + 4 Frost-bite + 2 Frenzy. |
 
 ### T1 · Cleave
-
-| Field | Value |
-|---|---|
-| Combo | `symbol-count: berserker:axe, count 3` |
-| Damage type | normal |
-| Effect | scaling-damage 4 / +2 per extra / max 2 extras → **4 / 6 / 8** dmg, then apply 1 Frost-bite |
-| Target landing | 75–95% (validated 98.4% — intentionally above band; identity-defining basic) |
-| ShortText | "4/6/8 dmg + Frost-bite" |
 
 **Cinematic.** Wind-up: portrait sweeps forward, axes pulled back, brief
 frost vignette on screen edges. Strike: twin axe-arc particles slash
@@ -186,14 +193,6 @@ total.
 
 ### T2 · Glacier Strike
 
-| Field | Value |
-|---|---|
-| Combo | `compound and [symbol-count axe×2, symbol-count howl×2]` |
-| Damage type | undefendable |
-| Effect | 5 dmg unblockable, apply 1 Frost-bite, heal 1 |
-| Target landing | 45–70% (validated 49.3%) |
-| ShortText | "5 dmg ub + heal 1 + Frost-bite" |
-
 **Cinematic.** Berserker dashes forward, strikes with both axes
 simultaneously in an X-pattern. The X leaves a frost-blue scar on the
 opponent's panel briefly. Self-heal visualized as a small frost-mist
@@ -201,14 +200,6 @@ puff at his feet. Audio: dual axe-strike + frost-crystal chime + soft
 heal-shimmer, ~1.6s total.
 
 ### T2 · Winter Storm
-
-| Field | Value |
-|---|---|
-| Combo | `straight: length 4` |
-| Damage type | normal |
-| Effect | 9 dmg + 2 Frost-bite |
-| Target landing | 45–70% (validated 55.8%) |
-| ShortText | "9 dmg + 2 Frost-bite" |
 
 **Cinematic.** Sweeping ice-storm imagery — wind whips around the
 opponent's panel, multiple small frost-shards rain in from upper screen,
@@ -218,14 +209,6 @@ wind-whoosh layered with multiple frost impacts and final heavy hit,
 
 ### T2 · Avalanche
 
-| Field | Value |
-|---|---|
-| Combo | `straight: length 3` |
-| Damage type | normal |
-| Effect | 6 dmg + 1 Frost-bite |
-| Target landing | 55–80% |
-| ShortText | "6 dmg + 1 Frost-bite" |
-
 **Cinematic.** Smaller-scale snow imagery — a short cascade of snow and
 ice tumbles across the upper portion of the opponent's panel and lands
 as a single heavy thud. Audio: brief avalanche-rumble + heavy impact,
@@ -233,14 +216,6 @@ as a single heavy thud. Audio: brief avalanche-rumble + heavy impact,
 straight-3 gate keeps it on-tier with the other T2s.)
 
 ### T3 · Blood Harvest
-
-| Field | Value |
-|---|---|
-| Combo | `compound and [symbol-count axe×3, symbol-count howl×2]` |
-| Damage type | normal |
-| Effect | bonus-dice-damage (3 dice, sum-of-faces); threshold 14 → +2 Frost-bite; always +1 Frost-bite; heal 0 + 2 per Frenzy stack |
-| Target landing | 20–45% (validated 31.2%) |
-| ShortText | "sum dmg + Frost-bite + heal/Frenzy" |
 
 The heal uses the cross-effect `conditional_bonus` primitive sourced
 from `self-passive-counter` (`frenzy`) — at 6 stacks, Blood Harvest
@@ -255,14 +230,6 @@ damage chime, ~2.5s total.
 
 ### T3 · Frostfang
 
-| Field | Value |
-|---|---|
-| Combo | `symbol-count: berserker:howl, count 4` |
-| Damage type | undefendable |
-| Effect | apply Stun, 6 dmg unblockable, apply 2 Frost-bite |
-| Target landing | 20–45% (validated 10.4% — intentionally below band; Stun justifies the rarity) |
-| ShortText | "Stun + 6 dmg ub + 2 Frost-bite" |
-
 **Cinematic.** Berserker dashes forward, strikes with both axes
 simultaneously in an X-pattern. The X leaves a frost-blue scar on the
 opponent's panel that pulses for the duration of the Stun (visible Stun
@@ -271,14 +238,7 @@ chime, ~2.0s total.
 
 ### T4 · Wolf's Howl (career-moment)
 
-| Field | Value |
-|---|---|
-| Combo | `symbol-count: berserker:howl, count 5` (all 5 dice on face 6) |
-| Damage type | ultimate |
-| Effect | apply Stun, 14 ultimate damage, apply 4 Frost-bite, +2 Frenzy (respects cap) |
-| Target landing | 0.5–2% (rare-roll career-moment ultimate) |
-| ShortText | "Stun + 14 ult + 4 Frost-bite + 2 Frenzy" |
-| Bark | "FOR THE PACK!" (his voice, layered with subtle wolf-pack chorus) |
+**Bark:** "FOR THE PACK!" (his voice, layered with subtle wolf-pack chorus).
 
 **Extended ultimate cinematic** (4.5s total).
 1. Anticipation (600ms): screen darkens to 30% opacity, portrait scales
@@ -307,39 +267,21 @@ convergence strike.
 
 ## 8. Defensive ladder
 
-### D1 · Wolfhide
+> Live data: [`src/content/heroes/berserker.ts`](../../src/content/heroes/berserker.ts) → `defensiveLadder`.
+> Three defenses, picker-driven (defender chooses which to attempt; the
+> engine then auto-rolls and resolves). For the defense flow as a system
+> see [`ENGINE_AND_MECHANICS.md` §5](../engine/rules.md#5-ability-ladders).
 
-| Field | Value |
-|---|---|
-| Combo | `symbol-count: berserker:fur, count 1` |
-| Defense dice | 3 |
-| Effect | reduce-damage 4 |
-| Target landing | 60–80% (validated 70.3%) |
+| Tier | Defense | Role |
+|---|---|---|
+| D1 | Wolfhide | Reliable mitigation at low cost; the everyday block. |
+| D2 | Bloodoath | Take-the-hit-then-heal; doubles as an offensive fallback when his attack whiffs. |
+| D3 | Glacial Counter | Frost-bites the attacker on a successful block; punishes pressure. |
 
-### D2 · Bloodoath
+Notes:
 
-| Field | Value |
-|---|---|
-| Combo | `symbol-count: berserker:fur, count 2` |
-| Defense dice | 4 |
-| Effect | heal 4 (full attack damage applies first, then heal) |
-| Target landing | 35–55% (validated 40.7%) |
-| Offensive fallback | 4 dice, same combo; on land: heal 4 + 1 Frenzy (capped) |
-
-The offensive fallback fires when the Berserker's offensive turn ends
-without any ability landing — consolation prize for whiff turns.
-
-### D3 · Glacial Counter
-
-| Field | Value |
-|---|---|
-| Combo | `compound and [symbol-count howl×1, symbol-count axe×1]` |
-| Defense dice | 3 |
-| Effect | reduce-damage 5, apply 1 Frost-bite to attacker |
-| Target landing | 20–40% (validated 33.3%) |
-
-In defensive context `target: "opponent"` resolves to the original
-attacker, so Glacial Counter's Frost-bite lands on whoever just hit him.
+- **Bloodoath's offensive fallback** fires when the Berserker's offensive turn ends without any ability landing — consolation prize for whiff turns (heal + 1 Frenzy stack, capped).
+- **Glacial Counter** uses defensive-context `target: "opponent"` which resolves to the original attacker, so the Frost-bite stack lands on whoever just hit him.
 
 ---
 

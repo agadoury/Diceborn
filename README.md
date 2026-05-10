@@ -133,12 +133,14 @@ generically so future heroes can reuse it.
 
 ## Documentation
 
+- [`docs/INDEX.md`](./docs/INDEX.md) — **start here.** Routes by intent: I'm a player, adding a hero, tuning, fixing the engine, working on UI.
+- [`CHANGELOG.md`](./CHANGELOG.md) — design + architecture decisions over time. Read before proposing one that might contradict an earlier one.
 - [`docs/ENGINE_AND_MECHANICS.md`](./docs/ENGINE_AND_MECHANICS.md) — game rules, engine architecture, event flow.
 - [`docs/UI.md`](./docs/UI.md) — match-screen layout, overlays, choreography, design tokens.
 - [`docs/DECK_BUILDING.md`](./docs/DECK_BUILDING.md) — deck composition, builder UI, persistence, validator.
 - [`docs/cards/`](./docs/cards/) — per-hero card listings + the universal generic pool.
-- [`docs/heroes/`](./docs/heroes/) — per-hero design notes (lore, dice, ladders, tuning).
-- [`docs/HERO_REQUIREMENTS.md`](./docs/HERO_REQUIREMENTS.md) — hero-authoring brief.
+- [`docs/heroes/`](./docs/heroes/) — per-hero design notes (lore, dice, ability roles, tuning rationale; data lives in `src/content/`).
+- [`docs/HERO_REQUIREMENTS.md`](./docs/HERO_REQUIREMENTS.md) — hero-authoring brief. Companions in [`docs/authoring/`](./docs/authoring/) (cheat sheet + worked examples).
 
 ## License & lore
 

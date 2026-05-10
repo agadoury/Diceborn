@@ -1,7 +1,8 @@
 # Lightbearer — cards
 
-Source: [`src/content/cards/lightbearer.ts`](../../src/content/cards/lightbearer.ts).
-Hero data: [`src/content/heroes/lightbearer.ts`](../../src/content/heroes/lightbearer.ts).
+> **📦 Source of truth: [`src/content/cards/lightbearer.ts`](../../src/content/cards/lightbearer.ts).** Costs, kinds, and rules text below are a snapshot of the data file — convenient for browsing, but if a number here disagrees with the `.ts` the `.ts` wins; please patch this page or open an issue.
+>
+> Hero design: [`../heroes/lightbearer.md`](../heroes/lightbearer.md). Hero data: [`src/content/heroes/lightbearer.ts`](../../src/content/heroes/lightbearer.ts).
 
 The Lightbearer ships **12 cards** in his catalog — the floor for the
 deck-builder's authoring contract (3 dice-manip + 4 Masteries — one

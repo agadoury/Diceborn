@@ -1,7 +1,8 @@
 # Pyromancer — cards
 
-Source: [`src/content/cards/pyromancer.ts`](../../src/content/cards/pyromancer.ts).
-Hero data: [`src/content/heroes/pyromancer.ts`](../../src/content/heroes/pyromancer.ts).
+> **📦 Source of truth: [`src/content/cards/pyromancer.ts`](../../src/content/cards/pyromancer.ts).** Costs, kinds, and rules text below are a snapshot of the data file — convenient for browsing, but if a number here disagrees with the `.ts` the `.ts` wins; please patch this page or open an issue.
+>
+> Hero design: [`../heroes/pyromancer.md`](../heroes/pyromancer.md). Hero data: [`src/content/heroes/pyromancer.ts`](../../src/content/heroes/pyromancer.ts).
 
 The Pyromancer ships **13 cards** in her catalog. The deck-builder
 picks 3 dice-manip + 3 ladder-upgrade + 2 signature from this pool,

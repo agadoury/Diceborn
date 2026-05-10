@@ -1,5 +1,7 @@
 # The Lightbearer
 
+> **📦 Source of truth: [`src/content/heroes/lightbearer.ts`](../../src/content/heroes/lightbearer.ts)** for hero data, [`src/content/cards/lightbearer.ts`](../../src/content/cards/lightbearer.ts) for cards. This page documents the *design intent* (lore, dice identity, ability roles, cinematics, audio direction, tuning rationale) — mechanical specifics live in the data files and may evolve faster than this prose.
+
 | Field | Value |
 |---|---|
 | **ID** | `lightbearer` |
@@ -7,8 +9,6 @@
 | **Complexity** | 2 |
 | **Accent color** | `#FBBF24` |
 | **Signature quote** | "Dawn breaks always." |
-| **Source** | [`src/content/heroes/lightbearer.ts`](../../src/content/heroes/lightbearer.ts) |
-| **Cards** | [`src/content/cards/lightbearer.ts`](../../src/content/cards/lightbearer.ts) |
 
 The Lightbearer is the Survival archetype — a sun-priest who treats prayer
 and warfare as the same discipline. He banks **Radiance** by being hit
@@ -160,107 +160,53 @@ Lightbearer gains +1 CP every time the opponent fires an offensive ability while
 
 ## 7. Offensive ladder
 
+> **Live data lives in [`src/content/heroes/lightbearer.ts`](../../src/content/heroes/lightbearer.ts).**
+> Combo, damage, and effect for every ability are read from there at
+> runtime. What's documented below is the *role* and *cinematic intent*,
+> which don't drift with tuning.
+
 Canonical shape: 1× T1 + 3× T2 + 2× T3 + 1× T4. The T4 is gated on
-`5× face-6` (here: 5 zenith), making it a career-moment ultimate.
+`5× zenith` (all 5 dice on face 6), making it a career-moment ultimate.
 Apostasy was demoted from a previous T4 defensive ultimate to a T2
 utility / cleanse during the unification.
 
+| Tier | Ability | Role |
+|---|---|---|
+| T1 | Dawnblade | Bread-and-butter sword wash; ~84% landing keeps Verdict ticking. With Dawnblade Mastery the damage curve shifts higher. |
+| T2 | Sun Strike | Undefendable mid-pressure; also banks a Radiance and keeps Verdict ticking. |
+| T2 | Dawn Prayer | Sustain T2 — small hit + self-heal + Radiance bank. |
+| T2 | Apostasy | Utility / cleanse T2 (no damage). Heal + clear a debuff + bank a Radiance. Demoted from a former defensive T4. |
+| T3 | Solar Blade | Strip-and-rebuild. Removes all Verdict from opponent, scales damage with stacks stripped, then re-applies one. |
+| T3 | Divine Ray | Zenith-gated burst T3 — damage + Verdict + Radiance. |
+| T4 | Judgment of the Sun (career-moment) | The screenshot moment. 5-zenith gate; ultimate damage + heal both scale with banked Radiance, then drain the bank. |
+
 ### T1 · Dawnblade
 
-```ts
-combo: { kind: "symbol-count", symbol: "lightbearer:sword", count: 3 }
-effect: compound:
-  - scaling-damage  baseAmount: 3, perExtra: 2, maxExtra: 2  (3 / 5 / 6 dmg)
-  - apply-status    lightbearer:verdict ×1 → opponent
-```
-
-Bread-and-butter T1 at ~84% landing. With Dawnblade Mastery the curve shifts to 4 / 6 / 8.
-
-### T2 · Sun Strike
-
-```ts
-combo: 2 swords + 1 sun + 1 dawn   (compound and)
-effect: compound:
-  - damage 5 undefendable
-  - passive-counter-modifier  radiance +1
-  - apply-status              verdict ×1 → opponent
-```
-
-Undefendable mid-game pressure that also banks a Radiance and keeps Verdict ticking.
-
-### T2 · Dawn Prayer
-
-```ts
-combo: 1 sword + 1 sun + 2 dawn   (compound and)
-effect: compound:
-  - damage 4 normal
-  - heal 2 → self
-  - passive-counter-modifier  radiance +1
-  - apply-status              verdict ×1 → opponent
-```
-
-The sustain T2 — pairs the small hit with a heal on the same combo.
+The everyday sword wash. With Dawnblade Mastery the curve shifts (live
+values in the data file).
 
 ### T2 · Apostasy
 
-```ts
-combo: { kind: "symbol-count", symbol: "lightbearer:dawn", count: 3 }
-effect: compound:
-  - heal 6 → self
-  - remove-status   any-debuff, stacks: 1 → self    // §15.7 wildcard, single stack
-  - passive-counter-modifier  radiance +1
-```
-
-Utility / cleanse T2 — no direct damage. Demoted from a former T4
-defensive ultimate during the ladder unification (was heal 12 +
-cleanse-all + Stun + 3 Radiance). The smaller heal-6 + cleanse-1 keeps
-it on-tier with the other T2s while preserving the recovery-on-rare-roll
-flavor. Wildcard remove-status (§15.7) still works the same way — it
-just only clears one stack of one debuff per fire now.
+No direct damage. Demoted from a former T4 defensive ultimate during
+the ladder unification (was heal-all + cleanse-all + Stun + big
+Radiance bank). The smaller T2 form preserves the
+recovery-on-rare-roll flavor without overshadowing the T3/T4 close.
+Wildcard remove-status (§15.7) clears one stack of one debuff per fire.
 
 ### T3 · Solar Blade
 
-```ts
-combo: { kind: "symbol-count", symbol: "lightbearer:sword", count: 4 }
-effect: compound:
-  - remove-status  verdict, stacks: "all" → opponent
-  - damage 7 undefendable
-      conditional_bonus: +1 dmg per Verdict stack stripped
-  - apply-status   verdict ×1 → opponent  (re-application)
-```
-
-Strip-and-rebuild design: at 4 stacks stripped, deals 7 + 4 = 11 ub. Re-applies a single Verdict so pressure resumes immediately. With Sunblade Mastery: 9 ub base + 2/stripped (max 17 ub at 4-strip).
-
-### T3 · Divine Ray
-
-```ts
-combo: 1 zenith + 2 swords + 2 suns   (compound and)
-effect: compound:
-  - damage 9 normal
-  - apply-status              verdict ×2 → opponent
-  - passive-counter-modifier  radiance +1
-```
-
-The zenith-gated burst T3. With Sunblade Mastery: 11 dmg + 3 Verdict.
+Strip-and-rebuild design — strips ALL Verdict from the opponent,
+scales the damage leaf with the stripped count, then re-applies one
+Verdict so pressure resumes next turn. With Sunblade Mastery the base
+shifts higher and the per-strip bonus grows.
 
 ### T4 · Judgment of the Sun (career-moment)
 
-```ts
-combo: { kind: "symbol-count", symbol: "lightbearer:zenith", count: 5 }
-effect: compound:
-  - damage 14 ultimate
-      conditional_bonus: +2 dmg per banked Radiance (passive-counter-min ≥1)
-  - heal 0 → self
-      conditional_bonus: +1 HP per banked Radiance (passive-counter-min ≥1)
-  - apply-status              stun ×1 → opponent
-  - passive-counter-modifier  radiance set 0   // drains the bank
-```
-
-The career closer — gated on `5× face-6` (all 5 dice rolling zenith)
-following the same career-moment pattern as Wolf's Howl and God's
-Crater. **Order matters in the compound** — the damage and heal both
-read `radiance` BEFORE the `set 0` drain wipes the bank. At 6 Radiance:
-14 + 12 = 26 damage, +6 HP heal. Target landing 0.5–2%.
+The career closer — gated on `5× zenith` following the same
+career-moment pattern as Wolf's Howl and God's Crater. **Order matters
+in the compound effect**: the damage and heal both read `radiance`
+BEFORE the `set 0` drain wipes the bank, so at 6 Radiance the hit and
+the heal both get the full Radiance bonus before the drain.
 
 There is no separate `criticalCondition` / `criticalEffect` block — the
 5-zenith gate is already the apex roll. The cinematic stinger (extended
@@ -271,41 +217,20 @@ time it fires (see `criticalCinematic` in the live data file).
 
 ## 8. Defensive ladder
 
-### D1 · Dawn-Ward
+> Live data: [`lightbearer.ts → defensiveLadder`](../../src/content/heroes/lightbearer.ts).
+> For the defense flow itself see [`ENGINE_AND_MECHANICS.md` §5](../engine/rules.md#5-ability-ladders).
 
-```ts
-combo: 1+ dawn   (3 dice rolled)
-effect: compound:
-  - heal 4 → self
-  - passive-counter-modifier radiance +0
-      conditional: combo-symbol-count dawn 3   // inert until Cathedral Light upgrade
-offensiveFallback: heal 4 on 1+ dawn (3 dice rolled)
-```
+| Tier | Defense | Role |
+|---|---|---|
+| D1 | Dawn-Ward | Heal-after-the-hit; cheap and reliable. Doubles as an offensive fallback when his attack turn whiffs. |
+| D2 | Prayer of Shielding | The Radiance-banker — always grants +1 Radiance on success (+2 with Vow of Service). |
+| D3 | Wall of Dawn | The "really committed" defense — biggest single-defense reduction in the kit. |
 
-Heal-after-the-hit defense. The inert `passive-counter-modifier value: 0` is activated by Cathedral Light Mastery's `passive-counter-gain-amount` modifier (sets to 2). Doubles as an offensive-fallback when the offensive turn whiffs.
+Notes:
 
-### D2 · Prayer of Shielding
-
-```ts
-combo: 1 sun + 1 zenith   (4 dice rolled)
-effect: compound:
-  - reduce-damage 5
-  - passive-counter-modifier radiance +1
-```
-
-The Radiance-banker defense — always grants +1 Radiance on success. Vow of Service signature play upgrades to +2 (via the `passive-counter-gain-amount` ability-modifier scoped to Tier 2+ defenses).
-
-### D3 · Wall of Dawn
-
-```ts
-combo: 2+ sun   (4 dice rolled)
-effect: compound:
-  - reduce-damage 8
-  - passive-counter-modifier radiance +0
-      conditional: combo-symbol-count sun 4   // inert until Cathedral Light upgrade
-```
-
-The "really committed" defense — biggest single-defense reduction in the kit. Cathedral Light activates a +1 Radiance gain when all four rolled dice show sun.
+- **Dawn-Ward** ships with an inert `passive-counter-modifier value: 0` that the **Cathedral Light** Mastery activates via `passive-counter-gain-amount` (sets to 2 with a `combo-symbol-count dawn 3` gate).
+- **Prayer of Shielding**'s flat +1 Radiance is the hook for the Vow of Service signature play, which scopes a `passive-counter-gain-amount: 2` modifier to all Tier 2+ defenses.
+- **Wall of Dawn** also exposes an inert Radiance leaf gated on `4× sun`; Cathedral Light activates it.
 
 ---
 
@@ -434,7 +359,8 @@ Standout cards: Sanctuary, Aegis of Dawn, Sunburst
 
 - [`docs/cards/lightbearer.md`](../cards/lightbearer.md) — full card listing.
 - [`docs/DECK_BUILDING.md`](../DECK_BUILDING.md) — deck composition rules + builder UI.
-- [`docs/ENGINE_AND_MECHANICS.md`](../ENGINE_AND_MECHANICS.md) — engine architecture, especially [§7 Status system](../ENGINE_AND_MECHANICS.md#7-status-system) and the §15 extensions block in the docs section.
+- [`docs/engine/rules.md`](../engine/rules.md) — engine rules, especially [§7 Status system](../engine/rules.md#7-status-system).
+- [`docs/engine/cards.md`](../engine/cards.md) — effect resolver, modifier evaluation pipeline, and the §15 extensions referenced throughout this page.
 - [`docs/HERO_REQUIREMENTS.md`](../HERO_REQUIREMENTS.md) — hero-authoring brief that produced this submission.
 - [`src/content/heroes/lightbearer.ts`](../../src/content/heroes/lightbearer.ts) — hero definition.
 - [`src/content/cards/lightbearer.ts`](../../src/content/cards/lightbearer.ts) — card source.

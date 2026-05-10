@@ -85,7 +85,7 @@ the canonical four. The seven generic cards still ship as `main-action`
 which is treated identically to `main-phase` by the engine.)
 
 The full instant trigger taxonomy lives in
-[`ENGINE_AND_MECHANICS.md` §8 Instant trigger taxonomy](./ENGINE_AND_MECHANICS.md#instant-trigger-taxonomy-correction-6-§5).
+[`engine/cards.md` Instant trigger taxonomy](./engine/cards.md#instant-trigger-taxonomy-correction-6-§5).
 
 ## 4. The catalog: where cards live
 
@@ -255,5 +255,5 @@ The recommended decks for the three shipping heroes:
 
 - [`docs/cards/`](./cards/) — per-hero and generic card listings.
 - [`docs/HERO_REQUIREMENTS.md`](./HERO_REQUIREMENTS.md) — what the hero authoring contract expects from a `recommendedDeck` and from each Mastery's `kind` + `cardCategory`.
-- [`docs/ENGINE_AND_MECHANICS.md`](./ENGINE_AND_MECHANICS.md) — the full effect resolver, instant-trigger taxonomy, and Mastery upgrade pipeline (replace + append + repeat).
+- [`docs/engine/cards.md`](./engine/cards.md) — the effect resolver, instant-trigger taxonomy, and Mastery upgrade pipeline (replace + append + repeat).
 - [`docs/UI.md`](./UI.md) — Match-screen and hand UI.

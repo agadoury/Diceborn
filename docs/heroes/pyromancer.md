@@ -1,5 +1,7 @@
 # The Pyromancer
 
+> **📦 Source of truth: [`src/content/heroes/pyromancer.ts`](../../src/content/heroes/pyromancer.ts)** for hero data, [`src/content/cards/pyromancer.ts`](../../src/content/cards/pyromancer.ts) for cards. This page documents the *design intent* (lore, dice identity, ability roles, cinematics, audio direction, tuning rationale) — mechanical specifics live in the data files and may evolve faster than this prose.
+
 | Field | Value |
 |---|---|
 | **ID** | `pyromancer` |
@@ -7,7 +9,6 @@
 | **Complexity** | 3 |
 | **Accent color** | `#F97316` |
 | **Signature quote** | "The mountain remembers everything I burn." |
-| **Source** | [`src/content/heroes/pyromancer.ts`](../../src/content/heroes/pyromancer.ts) |
 
 The Pyromancer is the Burn archetype — a glass-cannon builder whose entire
 identity is Cinder pressure. Every offensive ability she lands ticks +1
@@ -139,81 +140,54 @@ her per stack stripped. Opponents pay either way.
 
 ## 7. Offensive ladder
 
+> **Live data lives in [`src/content/heroes/pyromancer.ts`](../../src/content/heroes/pyromancer.ts).**
+> Combo, damage, and effect for every ability are read from there at
+> runtime. What's documented below is the *role* and *cinematic intent*,
+> which don't drift with tuning.
+
 Canonical shape: 1× T1 + 3× T2 + 2× T3 + 1× T4. The T4 is gated on
-`5× face-6` (here: 5 ruin), making it a career-moment ultimate. Volcanic
-Rain (a previously-listed second T4) was removed during the unification.
+`5× ruin` (all 5 dice on face 6), making it a career-moment ultimate.
+Volcanic Rain (a previously-listed second T4) was removed during the
+unification.
+
+| Tier | Ability | Role |
+|---|---|---|
+| T1 | Ember Strike | Cinder-tick basic. Scaling damage on ash count + the ASHFALL Cinder rider that defines her kit. |
+| T2 | Firestorm | Mid-curve generalist. Multi-symbol combo + extra Cinder via the ASHFALL bonus. |
+| T2 | Obsidian Burst | Unblockable + applies `defense-handicap-1` to the opponent's next defense (one-shot debuff). |
+| T2 | Ember Wall | Defensive-leaning T2: 3-ember combo gives damage + Cinder + Shield-to-self. |
+| T3 | Magma Heart | Pure damage payoff at 4-ash; the cleanest "I won the roll" hit. |
+| T3 | Pyro Lance | Unblockable burst. With Crater Heart Mastery, scales with Cinder stacks on the opponent. |
+| T4 | God's Crater (career-moment) | The screenshot moment. 5-ruin gate; Stun + ultimate damage + force-detonate (push Cinder to 5 → 8 / 12 unblockable). |
 
 ### T1 · Ember Strike
 
-| Field | Value |
-|---|---|
-| Combo | `symbol-count: pyromancer:ash, count 3` |
-| Damage type | normal |
-| Effect | scaling-damage 3 / +2 per extra / max 2 extras → **3 / 5 / 7**, then ASHFALL Cinder |
-| Target landing | 75–95% (validated 84.1%) |
-| ShortText | "3/5/7 dmg + Cinder" |
-
-### T2 · Firestorm
-
-| Field | Value |
-|---|---|
-| Combo | `compound and [ash×2, ember×1, magma×1]` |
-| Damage type | normal |
-| Effect | 5 dmg + ASHFALL Cinder (base +1 = 2 stacks; +1 if 3+ ember) |
-| Target landing | 45–70% |
+The kit's identity hit. ASHFALL applies +1 Cinder on every land (+1
+more if 3+ ember rolled), so Ember Strike is the steady drumbeat of
+her detonation pressure.
 
 ### T2 · Obsidian Burst
 
-| Field | Value |
-|---|---|
-| Combo | `compound and [magma×1, ash×2, ember×1]` |
-| Damage type | undefendable |
-| Effect | 7 unblockable + ASHFALL Cinder + apply `pyromancer:defense-handicap-1` (opponent's next defense rolls 1 fewer die) |
-| Target landing | 45–70% |
-
 `defense-handicap-1` is registered with `consumesOnDefensiveRoll: true`
 — the engine ticks one stack off when the opponent's next defense
-fires, so the penalty is single-use.
+fires, so the penalty is single-use. Pairs hard with a follow-up T3
+the next turn.
 
 ### T2 · Ember Wall
 
-| Field | Value |
-|---|---|
-| Combo | `symbol-count: pyromancer:ember, count 3` |
-| Damage type | normal |
-| Effect | 4 dmg + 2 Cinder (+1 if 4+ ember) + 1 Shield to self |
-| Target landing | 45–70% |
-
-### T3 · Magma Heart
-
-| Field | Value |
-|---|---|
-| Combo | `symbol-count: pyromancer:ash, count 4` |
-| Damage type | normal |
-| Effect | 8 dmg + ASHFALL Cinder (base +1 = 2 stacks) |
-| Target landing | 20–45% |
+Note the inline `conditional_bonus` on the Cinder application (combo
+gate `4+ ember`) — Ember Wall over-rolls turn into a +1 Cinder bonus.
+The Shield application is a flat self-buff.
 
 ### T3 · Pyro Lance
 
-| Field | Value |
-|---|---|
-| Combo | `compound and [ruin×1, magma×2]` |
-| Damage type | undefendable |
-| Effect | 9 unblockable + ASHFALL Cinder. Crater Heart adds +2 dmg per Cinder when opponent has 3+. |
-| Target landing | 20–45% |
-
-The Crater Heart upgrade uses the new structural Mastery field
+The Crater Heart Mastery uses the structural Mastery field
 `damage-conditional-bonus` to *create* a `conditional_bonus` on Pyro
-Lance's damage leaf — the base ability ships without one.
+Lance's damage leaf — the base ability ships without one. With the
+Mastery played and the opponent at 3+ Cinder, Pyro Lance scales by
++2 dmg per Cinder stack.
 
 ### T4 · God's Crater (career-moment)
-
-| Field | Value |
-|---|---|
-| Combo | `symbol-count: pyromancer:ruin, count 5` (all 5 dice on face 6) |
-| Damage type | ultimate |
-| Effect | Stun + 11 ultimate + push Cinder to 5 (fires detonation for 8, or 12 with Crater Wind) |
-| Target landing | 0.5–2% (rare-roll career-moment ultimate) |
 
 There is no separate `criticalCondition` / `criticalEffect` block — the
 5-ruin gate is already the apex roll. The cinematic stinger plays every
@@ -221,50 +195,27 @@ time it fires (see `criticalCinematic` in the live data file).
 
 The "force detonation" at the end of the effect tree leans on the
 detonation dispatch wiring — applying 5 Cinder pushes the opponent to
-the threshold and the engine fires the inline detonation effect on
-the same resolution.
+the threshold and the engine fires the inline detonation effect on the
+same resolution.
 
 ---
 
 ## 8. Defensive ladder
 
-### D1 · Magma Shield
+> Live data: [`pyromancer.ts → defensiveLadder`](../../src/content/heroes/pyromancer.ts).
+> For the defense flow itself see [`ENGINE_AND_MECHANICS.md` §5](../engine/rules.md#5-ability-ladders).
 
-| Field | Value |
-|---|---|
-| Combo | `symbol-count: pyromancer:ember, count 1` |
-| Defense dice | 3 |
-| Effect | reduce-damage 3 + apply 1 Cinder to attacker |
-| Target landing | 60–80% (validated 70.3%) |
+| Tier | Defense | Role |
+|---|---|---|
+| D1 | Magma Shield | Cheap reliable mitigation; also slaps a Cinder on the attacker — feeds her economy from the defense lane too. |
+| D2 | Disperse | Full attack negation on a 2-symbol combo; the high-roll defense. |
+| D3 | Ash Mirror | Reduces incoming damage and strips a positive status from the attacker. |
 
-Uses the new `apply_to_attacker` sub-field on `reduce-damage` (a single
-primitive instead of a compound).
+Notes:
 
-### D2 · Disperse
-
-| Field | Value |
-|---|---|
-| Combo | `compound and [magma×1, ember×1]` |
-| Defense dice | 4 |
-| Effect | `reduce-damage` with `negate_attack: true` (full negation) |
-| Target landing | 35–55% (validated 38.1%) |
-
-The Mountain's Patience Mastery patches the baseline 0-stack apply-status
-inside Disperse via `applied-status-stacks-on-success` to land 2 Cinder
-on the attacker on a successful negation.
-
-### D3 · Ash Mirror
-
-| Field | Value |
-|---|---|
-| Combo | `compound and [ruin×1, ash×1]` |
-| Defense dice | 3 |
-| Effect | reduce-damage 5 + remove-status `any-positive` 1 stack from attacker |
-| Target landing | 20–40% (validated 25.0%) |
-
-`any-positive` is a wildcard the engine resolves to the attacker's
-first buff-type status (deterministic for now; multi-status player
-choice is a UI follow-up).
+- **Magma Shield** uses the `apply_to_attacker` sub-field on `reduce-damage` (single primitive instead of a compound).
+- **Disperse**'s baseline 0-stack apply-status is the hook the Mountain's Patience Mastery patches via `applied-status-stacks-on-success` to land 2 Cinder on the attacker on a successful negation.
+- **Ash Mirror**'s `any-positive` is a wildcard the engine resolves to the attacker's first buff-type status (deterministic for now; multi-status player choice is a UI follow-up).
 
 ---
 
