@@ -2,6 +2,8 @@
 
 > **You are designing a hero for Pact of Heroes — a 1v1 dice-and-card combat game.** This document is your full brief: the game's constraints, the engine's mechanical primitives, a light originality guideline, the output format, and a self-check list. Read all of it before you start designing. Output the filled-in template at the end.
 
+> **Operational companion**: once you've used this brief to *design* a hero, see [`authoring/workflow.md`](./authoring/workflow.md) for the *how-to-ship* side — which files to drop, how to register a hero, validation checklist, doc updates, branch / commit / PR rules. The same workflow doc also covers card additions, hero tuning, and card removals.
+
 ---
 
 ## 1. Project context (what Pact of Heroes is)

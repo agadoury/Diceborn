@@ -9,18 +9,14 @@ read first; that doc cross-links to siblings.
 - [`heroes/`](./heroes/) — per-hero design pages. Lore, dice, ability roles, tuning notes.
 - [`cards/`](./cards/) — per-hero card listings + the universal generic pool.
 
-## I'm adding a new hero
+## I'm adding or updating a hero or cards
 
-1. **Read first**: [`HERO_REQUIREMENTS.md`](./HERO_REQUIREMENTS.md) — the authoring brief. Constraints, primitives, tuning bands, template, self-check.
-2. **Reference**: [`authoring/cheatsheet.md`](./authoring/cheatsheet.md) (what each template field becomes), [`authoring/examples.md`](./authoring/examples.md) (worked patterns for every primitive).
-3. **Companion**: [`DECK_BUILDING.md`](./DECK_BUILDING.md) — what shape the hero's card pool should take and how the deck-builder uses it.
-4. **Output**: drop `src/content/heroes/<id>.ts` (data — combos, effects, tuning numbers) and `src/content/cards/<id>.ts` (cards), register both in `src/content/index.ts` + `src/content/cards/index.ts`, and add a hero design page (`docs/heroes/<id>.md`) + card listing (`docs/cards/<id>.md`). The `.ts` files are the source of truth for mechanical data; the `.md` pages are for design intent — lore, ability roles, cinematics, tuning rationale.
+1. **Read first**: [`authoring/workflow.md`](./authoring/workflow.md) — the operational guide. Covers four scenarios (new hero, add cards, tune hero, update / remove cards), files to touch in each, validation checklist, submission rules.
+2. **Design contract**: [`HERO_REQUIREMENTS.md`](./HERO_REQUIREMENTS.md) — the authoring brief. Constraints, primitives, tuning bands, template, self-check. Read end-to-end when designing a brand-new hero.
+3. **Reference**: [`authoring/cheatsheet.md`](./authoring/cheatsheet.md) (what each template field becomes), [`authoring/examples.md`](./authoring/examples.md) (worked patterns for every primitive).
+4. **Companion**: [`DECK_BUILDING.md`](./DECK_BUILDING.md) — what shape the hero's card pool should take and how the deck-builder uses it.
 
-## I'm tuning an existing hero
-
-- Edit `src/content/heroes/<id>.ts` for combos / damage / effects and `src/content/cards/<id>.ts` for card costs / text. Those data files are the source of truth.
-- The matching `docs/heroes/<id>.md` and `docs/cards/<id>.md` pages are intentionally **prose-only** for ability data — they describe roles and intent, not specific numbers, so tuning passes don't require doc edits.
-- If a tuning change shifts a *role* (e.g. an ability stops being a sustain T2 and becomes a burst T2), update the role description in the hero page.
+The `.ts` files in `src/content/` are the source of truth for mechanical data. The `.md` pages in `docs/heroes/` and `docs/cards/` are for design intent — lore, ability roles, cinematics, tuning rationale. Tuning passes typically only edit `.ts` files. See [`authoring/workflow.md` §1](./authoring/workflow.md#1-source-of-truth-in-one-rule).
 
 ## I'm fixing or extending the engine
 
@@ -55,8 +51,9 @@ docs/
 │   └── glossary.md         ← terminology
 ├── UI.md                   ← match screen + theming
 ├── DECK_BUILDING.md        ← deck system
-├── HERO_REQUIREMENTS.md    ← hero authoring brief
+├── HERO_REQUIREMENTS.md    ← hero authoring brief (design contract)
 ├── authoring/
+│   ├── workflow.md         ← how to add/tune heroes & cards (operational)
 │   ├── cheatsheet.md       ← field-by-field reference
 │   └── examples.md         ← worked patterns per primitive
 ├── heroes/

@@ -114,22 +114,13 @@ Vibration API and gracefully no-ops).
 - CSS: ~7 KB gzipped
 - PWA precache: ~480 KiB total (under 1.2 MB budget)
 
-## How to add a new hero
+## How to add or update heroes & cards
 
-1. Drop a new file in `src/content/heroes/<id>.ts` exporting a `HeroDefinition`
-   with all 4 uniqueness pillars. Follow the canonical ladder shape — 1× T1
-   + 3× T2 + 2× T3 + 1× T4 (Ultimate gated on `5× face-6`).
-2. Drop the matching `src/content/cards/<id>.ts` (cards are split out from
-   hero data — see [`docs/DECK_BUILDING.md`](./docs/DECK_BUILDING.md)).
-3. If the hero needs new dice glyphs, add them to `src/components/game/dieFaces.tsx`.
-4. If the hero has a new signature status token, register it in `src/game/status.ts`.
-5. Register the hero in `src/content/index.ts` and the cards in `src/content/cards/index.ts`.
-6. Add a hero design page in `docs/heroes/<id>.md` and a card listing in `docs/cards/<id>.md`.
-7. Validate landing rates: `npm run simulate -- --rates`.
+[`docs/authoring/workflow.md`](./docs/authoring/workflow.md) is the operational guide. It covers four scenarios — adding a new hero, adding cards to an existing hero, tuning an existing hero, and updating or removing cards — and lists the files to touch, validation steps, and CHANGELOG rules for each. The design contract lives in [`docs/HERO_REQUIREMENTS.md`](./docs/HERO_REQUIREMENTS.md); references in [`docs/authoring/cheatsheet.md`](./docs/authoring/cheatsheet.md) and [`docs/authoring/examples.md`](./docs/authoring/examples.md).
 
-The engine itself never changes when adding a hero. If the hero needs a
-genuinely new mechanic category (a new `PassiveBehavior` kind), add it
-generically so future heroes can reuse it.
+Quick shape: hero data in `src/content/heroes/<id>.ts`, cards in `src/content/cards/<id>.ts`, register both in the matching `index.ts`, then add a hero design page in `docs/heroes/<id>.md` + a card listing in `docs/cards/<id>.md`. Canonical ladder is 1× T1 + 3× T2 + 2× T3 + 1× T4 (Ultimate gated on `5× face-6`).
+
+The engine itself never changes when adding a hero. If the hero needs a genuinely new mechanic category (a new `PassiveBehavior` kind, a new effect primitive), add it generically — that's a separate PR before the hero PR.
 
 ## Documentation
 
@@ -140,7 +131,7 @@ generically so future heroes can reuse it.
 - [`docs/DECK_BUILDING.md`](./docs/DECK_BUILDING.md) — deck composition, builder UI, persistence, validator.
 - [`docs/cards/`](./docs/cards/) — per-hero card listings + the universal generic pool.
 - [`docs/heroes/`](./docs/heroes/) — per-hero design notes (lore, dice, ability roles, tuning rationale; data lives in `src/content/`).
-- [`docs/HERO_REQUIREMENTS.md`](./docs/HERO_REQUIREMENTS.md) — hero-authoring brief. Companions in [`docs/authoring/`](./docs/authoring/) (cheat sheet + worked examples).
+- [`docs/HERO_REQUIREMENTS.md`](./docs/HERO_REQUIREMENTS.md) — hero-authoring brief (design contract). Operational companion in [`docs/authoring/workflow.md`](./docs/authoring/workflow.md); references in [`docs/authoring/`](./docs/authoring/) (cheat sheet + worked examples).
 
 ## License & lore
 

@@ -9,6 +9,7 @@ persistence, and the validator — see
 For the card-effect grammar (the primitives `damage` /
 `apply-status` / `ability-upgrade` / `persistent-buff` / etc.), see
 [`../ENGINE_AND_MECHANICS.md`](../ENGINE_AND_MECHANICS.md).
+**Adding or updating cards?** See [`../authoring/workflow.md`](../authoring/workflow.md) — Scenario 2 (add cards) and Scenario 4 (update / remove cards).
 
 ## Index
 

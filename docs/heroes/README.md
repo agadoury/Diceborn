@@ -27,7 +27,8 @@ For card-system mechanics, deck composition, and the builder UI see
 [`../DECK_BUILDING.md`](../DECK_BUILDING.md). For per-hero card
 listings see [`../cards/`](../cards/).
 
-When adding a hero (per the [card-file split](../engine/cards.md#card-files-separate-from-hero-data)):
+**Adding or updating a hero?** See [`../authoring/workflow.md`](../authoring/workflow.md) — covers add new hero, add cards, tune hero, update / remove cards. Quick shape:
+
 1. Drop `src/content/heroes/<id>.ts` (HeroDefinition — no `cards` field).
 2. Drop `src/content/cards/<id>.ts` (`<HERO>_CARDS: Card[]`).
 3. Register the hero in `src/content/index.ts` and the cards in `src/content/cards/index.ts`.
