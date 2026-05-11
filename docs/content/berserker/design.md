@@ -267,7 +267,7 @@ convergence strike.
 
 ## 8. Defensive ladder
 
-> Live data: [`src/content/heroes/berserker.ts`](../../../src/content/heroes/berserker.ts) → `defensiveLadder`.
+> Live data: [`src/content/heroes/berserker.ts`](../../../src/content/heroes/berserker.ts) → `defensiveCatalog`. The player drafts 2 of the catalog's defenses into the match's live ladder via the LoadoutBuilder.
 > Three defenses, picker-driven (defender chooses which to attempt; the
 > engine then auto-rolls and resolves). For the defense flow as a system
 > see [`engine/README.md` §5](../../engine/rules.md#5-ability-ladders).

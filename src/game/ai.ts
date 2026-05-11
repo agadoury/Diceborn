@@ -114,8 +114,7 @@ function instantMatchesPendingAttack(card: import("./types").Card, state: GameSt
 
 function pickBestDefense(state: GameState, ai: PlayerId): number | null {
   const me = state.players[ai];
-  const hero = getHero(me.hero);
-  const dl = hero.defensiveLadder;
+  const dl = me.activeDefense;
   if (!dl || dl.length === 0) return null;
   let bestIdx = 0;
   let bestTier = -1;
@@ -208,7 +207,8 @@ function decideOffensiveRoll(state: GameState, ai: PlayerId): Action {
       // every decision through the unstable pickTargetTier path.
       const symbols = symbolsOnDice(me.dice);
       const faces = me.dice.map(d => d.faces[d.current]);
-      const resolved = hero.abilityLadder.map(a => resolveAbilityFor(me, a, "offensive"));
+      void hero;
+      const resolved = me.activeOffense.map(a => resolveAbilityFor(me, a, "offensive"));
       let firingTier = -1;
       for (let i = 0; i < resolved.length; i++) {
         if (comboMatchesFaces(resolved[i].combo, faces)) firingTier = i;
@@ -278,10 +278,9 @@ function pickTargetTier(state: GameState, ai: PlayerId): number {
  *  reference/follow-up if we revive the oscillating eval path. */
 function locksAreOptimal(state: GameState, ai: PlayerId): boolean {
   const me = state.players[ai];
-  const hero = getHero(me.hero);
   const target = pickTargetTier(state, ai);
   if (target < 0) return true;
-  const ability = resolveAbilityFor(me, hero.abilityLadder[target], "offensive");
+  const ability = resolveAbilityFor(me, me.activeOffense[target], "offensive");
   const symbols = symbolsOnDice(me.dice);
   const keep = pickKeepMask(ability.combo, symbols);
   for (let i = 0; i < me.dice.length; i++) {

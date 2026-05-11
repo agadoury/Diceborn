@@ -137,7 +137,12 @@ export const LIGHTBEARER: HeroDefinition = {
     },
   },
 
-  abilityLadder: [
+  recommendedLoadout: {
+    offense: ["Dawnblade", "Sun Strike", "Solar Blade", "Judgment of the Sun"],
+    defense: ["Dawn-Ward", "Prayer of Shielding"],
+  },
+
+  abilityCatalog: [
     // ── T1 ────────────────────────────────────────────────────────────────────
     {
       tier: 1,
@@ -355,9 +360,96 @@ export const LIGHTBEARER: HeroDefinition = {
         ],
       },
     },
+    // ── Catalog alternates (loadout-drafted) ─────────────────────────────────
+    {
+      tier: 1,
+      name: "Sunlit Cut",
+      damageType: "normal",
+      targetLandingRate: [0.75, 0.95],
+      combo: { kind: "symbol-count", symbol: "lightbearer:sword", count: 3 },
+      shortText: "4 dmg + heal 1 + Verdict",
+      longText:
+        "3+ swords; deals 4 damage, heal 1 HP, and applies 1 Verdict. Trade Dawnblade's escalating damage for incremental sustain.",
+      effect: {
+        kind: "compound",
+        effects: [
+          { kind: "damage", amount: 4, type: "normal" },
+          { kind: "heal", amount: 1, target: "self" },
+          { kind: "apply-status", status: "lightbearer:verdict", stacks: 1, target: "opponent" },
+        ],
+      },
+    },
+    {
+      tier: 2,
+      name: "Solar Lance",
+      damageType: "normal",
+      // Three-symbol compound combos at T2 (cf. Sun Strike, Dawn Prayer)
+      // audit at ~30% on this hero's dice; the canonical T2 band assumes
+      // simpler combos. We size to the measured rate.
+      targetLandingRate: [0.2, 0.5],
+      combo: {
+        kind: "compound",
+        op: "and",
+        clauses: [
+          { kind: "symbol-count", symbol: "lightbearer:sun",   count: 2 },
+          { kind: "symbol-count", symbol: "lightbearer:sword", count: 1 },
+          { kind: "symbol-count", symbol: "lightbearer:dawn",  count: 1 },
+        ],
+      },
+      shortText: "6 dmg + heal 1 + Verdict",
+      longText:
+        "2 sun + 1 sword + 1 dawn; deals 6 damage, heals 1 HP, applies 1 Verdict. Sun-leaning T2 alternative.",
+      effect: {
+        kind: "compound",
+        effects: [
+          { kind: "damage", amount: 6, type: "normal" },
+          { kind: "heal", amount: 1, target: "self" },
+          { kind: "apply-status", status: "lightbearer:verdict", stacks: 1, target: "opponent" },
+        ],
+      },
+    },
+    {
+      tier: 3,
+      name: "Radiant Burst",
+      damageType: "normal",
+      targetLandingRate: [0.35, 0.6],
+      combo: { kind: "symbol-count", symbol: "lightbearer:sun", count: 4 },
+      shortText: "10 dmg + 2 Verdict",
+      longText:
+        "4+ sun; deals 10 damage and applies 2 Verdict. Sun-symbol T3 alternative to Solar Blade (sword-heavy) or Divine Ray (zenith-gated).",
+      effect: {
+        kind: "compound",
+        effects: [
+          { kind: "damage", amount: 10, type: "normal" },
+          { kind: "apply-status", status: "lightbearer:verdict", stacks: 2, target: "opponent" },
+        ],
+      },
+    },
+    {
+      tier: 4,
+      name: "Crown of Light",
+      damageType: "ultimate",
+      targetLandingRate: [0.005, 0.02],
+      ultimateBand: "career-moment",
+      combo: { kind: "symbol-count", symbol: "lightbearer:zenith", count: 5 },
+      shortText: "12 ult + heal 8 + 3 Verdict + Stun",
+      longText:
+        "5 zenith (all 5 dice on face 6); 12 ultimate damage, heal 8 HP, 3 Verdict, Stun. The survival-focused career-moment — a Lightbearer who lives to see another dawn.",
+      effect: {
+        kind: "compound",
+        effects: [
+          { kind: "damage", amount: 12, type: "ultimate" },
+          { kind: "heal", amount: 8, target: "self" },
+          { kind: "apply-status", status: "lightbearer:verdict", stacks: 3, target: "opponent" },
+          { kind: "apply-status", status: "stun", stacks: 1, target: "opponent" },
+        ],
+      },
+      criticalCinematic:
+        "The crown manifests above the Lightbearer's brow in pure white-gold, the opponent stunned and judged in a sphere of light, frame holds three full seconds before the slow exhale and HP-bar refill.",
+    },
   ],
 
-  defensiveLadder: [
+  defensiveCatalog: [
     // ── D1 — Dawn-Ward ───────────────────────────────────────────────────────
     {
       tier: 1,
@@ -446,6 +538,25 @@ export const LIGHTBEARER: HeroDefinition = {
             respectsCap: true,
             conditional: { kind: "combo-symbol-count", symbol: "lightbearer:sun", count: 4 },
           },
+        ],
+      },
+    },
+    // Catalog alternate — defense-catalog-only.
+    {
+      tier: 2,
+      name: "Vigil",
+      damageType: "normal",
+      combo: { kind: "n-of-a-kind", count: 2 },
+      defenseDiceCount: 3,
+      targetLandingRate: [0.55, 0.75],
+      shortText: "Reduce 3 + 1 Radiance",
+      longText:
+        "Two of a kind on 3 dice rolled; reduces incoming damage by 3, gain 1 Radiance.",
+      effect: {
+        kind: "compound",
+        effects: [
+          { kind: "reduce-damage", amount: 3 },
+          { kind: "passive-counter-modifier", passiveKey: "radiance", operation: "add", value: 1, respectsCap: true },
         ],
       },
     },

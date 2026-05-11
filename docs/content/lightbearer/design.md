@@ -217,7 +217,7 @@ time it fires (see `criticalCinematic` in the live data file).
 
 ## 8. Defensive ladder
 
-> Live data: [`lightbearer.ts → defensiveLadder`](../../../src/content/heroes/lightbearer.ts).
+> Live data: [`lightbearer.ts → defensiveCatalog`](../../../src/content/heroes/lightbearer.ts). The player drafts 2 of the catalog's defenses into the match's live ladder via the LoadoutBuilder.
 > For the defense flow itself see [`engine/README.md` §5](../../engine/rules.md#5-ability-ladders).
 
 | Tier | Defense | Role |

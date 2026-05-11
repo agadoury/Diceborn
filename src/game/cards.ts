@@ -441,7 +441,7 @@ function addAbilityModifier(
 /** A read-only view of an ability after the ladder-upgrade pipeline has
  *  composed any active replacement / append / repeat operations for the
  *  caster. Drop-in compatible with `AbilityDef` so phases.ts / dice.ts /
- *  ai.ts can swap their `hero.abilityLadder[i]` reads for `resolveAbilityFor`
+ *  ai.ts can swap their `snapshot.activeOffense[i]` reads for `resolveAbilityFor`
  *  without signature churn.
  *
  *  Field-tweak modifications (today's Mastery system) are NOT folded into

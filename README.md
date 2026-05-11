@@ -41,6 +41,8 @@ npm run simulate -- --n 100 --quiet   # bulk: 100 matches, summary only
 |---------------------|---------------------------------------------------|
 | `/`                 | Main menu                                         |
 | `/heroes?mode=...`  | Hero Select (mode = `vs-ai` or `hot-seat`)        |
+| `/loadouts`         | Loadout hero picker — standalone (no match)      |
+| `/loadout?hero=...` | Draft a hero's pre-match ability loadout         |
 | `/decks`            | Deck Builder hero picker — standalone (no match) |
 | `/deck-builder?hero=...` | Edit a hero's deck                            |
 | `/play?...`         | Match screen                                      |

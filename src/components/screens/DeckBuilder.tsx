@@ -30,6 +30,7 @@ import { CardView } from "@/components/game/CardView";
 import { getCardCatalog, getHero } from "@/content";
 import { validateDeckComposition } from "@/game/cards";
 import { saveDeck, loadDeck } from "@/store/deckStorage";
+import { loadLoadout } from "@/store/loadoutStorage";
 import type { Card, CardCategory, CardId, HeroId } from "@/game/types";
 import { sfx } from "@/audio/sfx";
 
@@ -78,6 +79,17 @@ export default function DeckBuilder() {
   const hero = getHero(heroId);
   const catalog = useMemo(() => getCardCatalog(heroId), [heroId]);
   const cardById = useMemo(() => new Map(catalog.map(c => [c.id, c])), [catalog]);
+
+  // Loadout-aware soft warnings on mastery cards. A mastery scoped to a
+  // specific ability id ("Cleave Mastery") is dead-weight if that ability
+  // isn't in the player's drafted loadout. We surface a warning chip but
+  // don't block the deck from being saved — see deck-building docs.
+  const loadoutAbilityNames = useMemo(() => {
+    const sel = loadLoadout(heroId) ?? hero.recommendedLoadout;
+    const names = new Set<string>();
+    for (const n of [...sel.offense, ...sel.defense]) names.add(n.toLowerCase());
+    return names;
+  }, [heroId, hero.recommendedLoadout]);
 
   // Initial deck = saved deck (if any) else recommendedDeck.
   const initialIds = loadDeck(heroId) ?? [...hero.recommendedDeck];
@@ -151,16 +163,25 @@ export default function DeckBuilder() {
 
   return (
     <main className="safe-pad min-h-svh bg-arena-0 text-ink">
-      <header className="flex items-center justify-between gap-3 mb-4">
+      <header className="flex items-center justify-between gap-3 mb-3">
         <Button variant="ghost" size="sm" onClick={() => navigate(-1)} sound="ui-back">← Back</Button>
         <h1 className="font-display tracking-widest text-d-2"
             style={{ color: hero.accentColor, textShadow: `0 0 20px ${hero.accentColor}66` }}>
           {hero.name.toUpperCase()}
         </h1>
         <span className="text-xs uppercase tracking-widest text-muted">
-          {deckIds.length}/12
+          {entry === "standalone" ? `${deckIds.length}/12` : "STEP 2 / 2"}
         </span>
       </header>
+
+      {/* Wizard stepper hint when this is part of the match-setup flow. */}
+      {entry !== "standalone" && (
+        <div className="flex items-center justify-center gap-2 mb-3 text-[10px] uppercase tracking-widest">
+          <span className="text-muted">1 · ABILITIES</span>
+          <span className="text-muted">›</span>
+          <span style={{ color: hero.accentColor }}>2 · DECK ({deckIds.length}/12)</span>
+        </div>
+      )}
 
       {/* Validation strip */}
       <ValidationStrip counts={counts} issues={issues} />
@@ -187,13 +208,14 @@ export default function DeckBuilder() {
                 && filledUpgradeSlots.has(card.masteryTier)
                 && !deckIds.includes(card.id);
               const disabled = catFull || slotTaken;
+              const loadoutMiss = masteryTargetsMissing(card, loadoutAbilityNames);
               return (
                 <button
                   key={card.id}
                   type="button"
                   onClick={() => add(card)}
                   disabled={disabled}
-                  className={`text-left ${disabled ? "opacity-40 cursor-not-allowed" : "hover:scale-[1.02] active:scale-[0.98]"} transition-transform`}
+                  className={`text-left relative ${disabled ? "opacity-40 cursor-not-allowed" : "hover:scale-[1.02] active:scale-[0.98]"} transition-transform`}
                   aria-label={`Add ${card.name}`}
                 >
                   <CardView card={card} accent={card.hero === "generic" ? undefined : hero.accentColor} />
@@ -201,6 +223,16 @@ export default function DeckBuilder() {
                     {CATEGORY_LABEL[cat]}
                     {cat === "ladder-upgrade" && card.masteryTier != null && ` · T${card.masteryTier === "defensive" ? "Def" : card.masteryTier}`}
                   </div>
+                  {loadoutMiss && (
+                    <span
+                      className="absolute top-1 right-1 px-1.5 py-0.5 rounded
+                                 text-[9px] tracking-widest font-display
+                                 bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/40"
+                      title="This mastery's target ability isn't in your current loadout — it won't trigger in match."
+                    >
+                      NO TARGET
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -248,6 +280,18 @@ export default function DeckBuilder() {
       </div>
     </main>
   );
+}
+
+/** True when the card is a mastery whose `upgradesAbilities` lists a
+ *  specific ability name that isn't currently in the player's loadout.
+ *  Tier / category-scoped masteries (`all-tier-N`, `all-defenses`) never
+ *  warn — those scopes match whichever abilities are drafted. */
+function masteryTargetsMissing(card: Card, loadoutNames: Set<string>): boolean {
+  if (card.kind !== "mastery") return false;
+  const targets = card.upgradesAbilities;
+  if (!Array.isArray(targets)) return false;
+  if (targets.length === 0) return false;
+  return targets.every(name => !loadoutNames.has(name.toLowerCase()));
 }
 
 function FilterChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {

@@ -553,6 +553,19 @@ export type PassiveBehavior = {
   [key: string]: unknown;
 };
 
+/** Pre-match loadout selection — the abilities the player drafts into their
+ *  hero's live offensive + defensive ladders for this match. Stored by
+ *  ability `name` (not catalog index) so reorderings of the catalog are
+ *  resilient. Resolved at `start-match` against the hero's `abilityCatalog`
+ *  and `defensiveCatalog` to produce `HeroSnapshot.activeOffense` /
+ *  `activeDefense`. */
+export interface LoadoutSelection {
+  /** 4 ability names — exactly one per tier (T1, T2, T3, T4). */
+  offense: ReadonlyArray<string>;
+  /** 2 ability names — any two distinct entries from the defensive catalog. */
+  defense: ReadonlyArray<string>;
+}
+
 export interface HeroDefinition {
   id: HeroId;
   name: string;
@@ -563,18 +576,29 @@ export interface HeroDefinition {
   diceIdentity: { faces: readonly DieFace[]; fluffDescription: string }; // length 6
   resourceIdentity: { cpGainTriggers: PassiveTrigger[]; fluffDescription: string };
   signatureMechanic: { name: string; description: string; implementation: PassiveBehavior };
-  /** Variable count — one or more abilities per tier. Engine picks the
-   *  highest-tier matched ability to fire; if multiple match in the same
-   *  tier, picks the highest-damage one. Older heroes ship with exactly
-   *  4 entries (one per tier); newer heroes can declare 5-9 abilities
-   *  spread across the four tiers. */
-  abilityLadder: readonly AbilityDef[];
-  /** Optional defensive ladder — auto-resolved during the Defensive Roll
-   *  Phase. Same picker logic as the offensive ladder. */
-  defensiveLadder?: readonly AbilityDef[];
+  /** Full pool of offensive abilities this hero can field. Pre-match the
+   *  player drafts a 4-ability loadout (one per tier) from this catalog;
+   *  the live ladder used during a match is `HeroSnapshot.activeOffense`.
+   *  The simulator's landing-rate audit iterates this catalog so every
+   *  authored ability stays in band even when not selected.
+   *
+   *  Canonical shape: ≥1 ability per tier (T1, T2, T3, T4). T4s are
+   *  career-moments gated on `5× face-6`. */
+  abilityCatalog: readonly AbilityDef[];
+  /** Full pool of defensive abilities. Pre-match the player drafts 2
+   *  distinct entries; in-match `HeroSnapshot.activeDefense` is what
+   *  surfaces in the defensive picker. */
+  defensiveCatalog?: readonly AbilityDef[];
+  /** Default loadout — used when the player hasn't customised one. Also
+   *  what the AI fields. Ability names must resolve to entries in
+   *  `abilityCatalog` / `defensiveCatalog`. */
+  recommendedLoadout: LoadoutSelection;
   /** Pre-built starter deck, 12 conformant cards (4/3/3/2 by cardCategory).
    *  Used as the AI deck and as the default the deck builder offers when
-   *  the player hasn't customised. Card ids must resolve via getCardCatalog. */
+   *  the player hasn't customised. Card ids must resolve via getCardCatalog.
+   *  Mastery cards in this deck should target abilities present in the
+   *  `recommendedLoadout` so the starter experience has its upgrades
+   *  actually firing. */
   recommendedDeck: ReadonlyArray<CardId>;
   /** Optional: applied to every successful offensive ability landed by this hero
    *  (e.g. Barbarian → Bleeding, Pyromancer → Smolder). */
@@ -740,7 +764,16 @@ export interface HeroSnapshot {
   /** Transient state for the signature mechanic — Rage stacks, Protect tokens, etc.
    *  Generic key-value bag so the engine doesn't need to know per-hero shapes. */
   signatureState: Record<string, number>;
-  /** Variable length — matches the hero's abilityLadder length. */
+  /** Live offensive ladder for this match — the 4 abilities the player drafted
+   *  from their hero's `abilityCatalog`, ordered T1 → T4. Materialized in
+   *  `start-match` from the supplied `LoadoutSelection` (or the hero's
+   *  `recommendedLoadout`). Engine reads (picker, ability resolution,
+   *  ladder evaluator) all index into this — not `abilityCatalog`. */
+  activeOffense: AbilityDef[];
+  /** Live defensive ladder for this match — the 2 defenses the player
+   *  drafted from `defensiveCatalog`. Same lifecycle as `activeOffense`. */
+  activeDefense: AbilityDef[];
+  /** Variable length — matches `activeOffense.length` (typically 4). */
   ladderState: LadderRowState[];
   isLowHp: boolean;
   /** Pending bonus to next offensive ability (e.g. Berserk Rush). */
@@ -781,7 +814,8 @@ export interface HeroSnapshot {
 export interface PendingAttack {
   attacker: PlayerId;
   defender: PlayerId;
-  /** Index into the attacker hero's `abilityLadder`. */
+  /** Index into the attacker's `HeroSnapshot.activeOffense` (the
+   *  drafted 4-ability loadout). */
   abilityIndex: number;
   abilityName: string;
   tier: AbilityTier;
@@ -884,7 +918,12 @@ export type Action =
       /** Optional custom decks per player. Each array is a 12-element list of
        *  CardIds that must resolve via getCardCatalog(heroId). When omitted,
        *  the engine falls back to that hero's recommendedDeck. */
-      p1Deck?: ReadonlyArray<CardId>; p2Deck?: ReadonlyArray<CardId> }
+      p1Deck?: ReadonlyArray<CardId>; p2Deck?: ReadonlyArray<CardId>;
+      /** Optional custom ability loadouts per player. Each is a 4-offense /
+       *  2-defense selection of ability names that must resolve via the
+       *  hero's `abilityCatalog` / `defensiveCatalog`. When omitted (or
+       *  invalid), the engine falls back to that hero's `recommendedLoadout`. */
+      p1Loadout?: LoadoutSelection; p2Loadout?: LoadoutSelection }
   | { kind: "advance-phase" }
   | { kind: "toggle-die-lock"; die: 0 | 1 | 2 | 3 | 4 }
   | { kind: "roll-dice" }
@@ -908,11 +947,12 @@ export type Action =
    *  `null` declines: the queued removal proceeds normally. */
   | { kind: "respond-to-status-removal"; cardId: CardId | null }
   /** Active player's response to a `pendingOffensiveChoice`. `abilityIndex`
-   *  is into the attacker's `abilityLadder`. `null` means "decline to fire"
-   *  — the offensive turn fizzles (then `offensiveFallback` is checked). */
+   *  is into the attacker's `HeroSnapshot.activeOffense`. `null` means
+   *  "decline to fire" — the offensive turn fizzles (then
+   *  `offensiveFallback` is checked). */
   | { kind: "select-offensive-ability"; abilityIndex: number | null }
   /** Defender's response to a `pendingAttack`. `abilityIndex` is into the
-   *  defender hero's `defensiveLadder`; `null` means "take the hit
+   *  defender's `HeroSnapshot.activeDefense`; `null` means "take the hit
    *  undefended" (also used when the defender has no defenses available).
    *  The engine rolls the defense dice inline and applies damage. */
   | { kind: "select-defense"; abilityIndex: number | null }

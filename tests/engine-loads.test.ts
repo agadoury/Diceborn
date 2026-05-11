@@ -142,6 +142,8 @@ function mockSnapshot(): HeroSnapshot {
     hand: [], deck: [], discard: [], statuses: [],
     upgrades: { 1: 0, 2: 0, 3: 0, 4: 0 },
     signatureState: {},
+    activeOffense: [],
+    activeDefense: [],
     ladderState: [] as LadderRowState[],
     isLowHp: false, nextAbilityBonusDamage: 0,
     abilityModifiers: [], tokenOverrides: [], symbolBends: [],

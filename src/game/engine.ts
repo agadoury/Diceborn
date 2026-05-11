@@ -12,6 +12,7 @@
 
 import type {
   Action,
+  AbilityDef,
   ApplyResult,
   CardId,
   Die,
@@ -20,8 +21,10 @@ import type {
   HeroDefinition,
   HeroId,
   HeroSnapshot,
+  LoadoutSelection,
   PlayerId,
 } from "./types";
+import { resolveLoadout } from "./loadout";
 import {
   STARTING_HP, STARTING_CP, STARTING_HAND, ROLL_ATTEMPTS, HP_CAP_BONUS,
 } from "./types";
@@ -45,7 +48,7 @@ export function applyAction(state: GameState, action: Action): ApplyResult {
   const events: GameEvent[] = [];
 
   switch (action.kind) {
-    case "start-match":     events.push(...startMatch(next, action.seed, action.p1, action.p2, action.coinFlipWinner, action.p1Deck, action.p2Deck)); break;
+    case "start-match":     events.push(...startMatch(next, action.seed, action.p1, action.p2, action.coinFlipWinner, action.p1Deck, action.p2Deck, action.p1Loadout, action.p2Loadout)); break;
     case "advance-phase":   events.push(...advancePhase(next)); break;
     case "toggle-die-lock": events.push(...toggleDieLock(next, action.die)); break;
     case "roll-dice":       events.push(...rollAction(next)); break;
@@ -69,6 +72,7 @@ export function applyAction(state: GameState, action: Action): ApplyResult {
 function startMatch(
   state: GameState, seed: number, p1: HeroId, p2: HeroId, coin: PlayerId,
   p1Deck?: ReadonlyArray<CardId>, p2Deck?: ReadonlyArray<CardId>,
+  p1Loadout?: LoadoutSelection, p2Loadout?: LoadoutSelection,
 ): GameEvent[] {
   state.rngSeed = seed;
   state.rngCursor = 1;          // skip 0 so coinFlip is deterministic but consumed.
@@ -77,8 +81,8 @@ function startMatch(
   state.startPlayerSkippedFirstIncome = false;
   state.turn = 1;
   state.players = {
-    p1: makeHeroSnapshot("p1", p1, state, p1Deck),
-    p2: makeHeroSnapshot("p2", p2, state, p2Deck),
+    p1: makeHeroSnapshot("p1", p1, state, p1Deck, p1Loadout),
+    p2: makeHeroSnapshot("p2", p2, state, p2Deck, p2Loadout),
   };
   // Bankable signature passive: seed signatureState[passiveKey] with bankStartsAt.
   for (const pid of ["p1", "p2"] as const) {
@@ -110,9 +114,21 @@ function startMatch(
   return events;
 }
 
-function makeHeroSnapshot(player: PlayerId, heroId: HeroId, state: GameState, savedDeckIds?: ReadonlyArray<CardId>): HeroSnapshot {
+function makeHeroSnapshot(
+  player: PlayerId,
+  heroId: HeroId,
+  state: GameState,
+  savedDeckIds?: ReadonlyArray<CardId>,
+  loadout?: LoadoutSelection,
+): HeroSnapshot {
   const hero = getHero(heroId);
   const cards = getDeckCards(heroId, savedDeckIds);
+  // Resolve the loadout: prefer the caller's selection when it validates
+  // against the hero's catalogs; fall back to `recommendedLoadout` otherwise
+  // (same wholesale-fallback policy as `getDeckCards`).
+  const resolved = resolveLoadout(hero, loadout);
+  const activeOffense: AbilityDef[] = resolved.offense.map(a => ({ ...a }));
+  const activeDefense: AbilityDef[] = resolved.defense.map(a => ({ ...a }));
   return {
     player, hero: heroId,
     hp: STARTING_HP,
@@ -127,7 +143,9 @@ function makeHeroSnapshot(player: PlayerId, heroId: HeroId, state: GameState, sa
     statuses: [],
     upgrades: { 1: 0, 2: 0, 3: 0, 4: 0 },
     signatureState: {},
-    ladderState: hero.abilityLadder.map(a => ({ kind: "out-of-reach", tier: a.tier })),
+    activeOffense,
+    activeDefense,
+    ladderState: activeOffense.map(a => ({ kind: "out-of-reach", tier: a.tier })),
     isLowHp: false,
     nextAbilityBonusDamage: 0,
     abilityModifiers: [],
@@ -686,6 +704,8 @@ function clonePlayer(p: HeroSnapshot | undefined): HeroSnapshot {
     statuses: p.statuses.map(s => ({ ...s })),
     upgrades: { ...p.upgrades },
     signatureState: { ...p.signatureState },
+    activeOffense: p.activeOffense.slice(),
+    activeDefense: p.activeDefense.slice(),
     ladderState: [...p.ladderState] as HeroSnapshot["ladderState"],
     abilityModifiers: p.abilityModifiers.map(m => ({ ...m, modifications: m.modifications.map(x => ({ ...x })) })),
     tokenOverrides: p.tokenOverrides.map(o => ({ ...o, modifications: o.modifications.map(x => ({ ...x })) })),

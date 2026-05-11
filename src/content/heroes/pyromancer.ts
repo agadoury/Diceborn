@@ -117,7 +117,12 @@ export const PYROMANCER: HeroDefinition = {
     },
   },
 
-  abilityLadder: [
+  recommendedLoadout: {
+    offense: ["Ember Strike", "Firestorm", "Pyro Lance", "God's Crater"],
+    defense: ["Magma Shield", "Disperse"],
+  },
+
+  abilityCatalog: [
     {
       tier: 1,
       name: "Ember Strike",
@@ -271,9 +276,109 @@ export const PYROMANCER: HeroDefinition = {
       criticalCinematic:
         "Extended gold-fire treatment, +1500ms slow-motion on the pillar descent, voice bark layered with volcanic chorus, screen flashes pure white.",
     },
+    // ── Catalog alternates (loadout-drafted) ─────────────────────────────────
+    {
+      tier: 1,
+      name: "Sparkfall",
+      damageType: "normal",
+      targetLandingRate: [0.75, 0.95],
+      combo: { kind: "symbol-count", symbol: "pyromancer:ash", count: 3 },
+      shortText: "3 dmg + 2 Cinder",
+      longText:
+        "3+ ash; 3 damage + 2 Cinder (+1 if 3+ ember). Trade Ember Strike's escalating damage for heavier Cinder pressure.",
+      effect: {
+        kind: "compound",
+        effects: [
+          { kind: "damage", amount: 3, type: "normal" },
+          ASHFALL_CINDER(1),
+        ],
+      },
+    },
+    {
+      tier: 2,
+      name: "Slagspatter",
+      damageType: "normal",
+      // n-of-a-kind audit caveat: see Iron Tide. The simulator under-reports.
+      targetLandingRate: [0.15, 0.4],
+      combo: { kind: "n-of-a-kind", count: 3 },
+      shortText: "6 dmg + 1 Cinder",
+      longText:
+        "Three of a kind (any face); 6 damage + 1 Cinder (+1 if 3+ ember). Hero-symbol-agnostic T2.",
+      effect: {
+        kind: "compound",
+        effects: [
+          { kind: "damage", amount: 6, type: "normal" },
+          ASHFALL_CINDER(0),
+        ],
+      },
+    },
+    {
+      tier: 3,
+      name: "Cinder Storm",
+      damageType: "normal",
+      targetLandingRate: [0.35, 0.6],
+      combo: {
+        kind: "compound",
+        op: "and",
+        clauses: [
+          { kind: "symbol-count", symbol: "pyromancer:ember", count: 3 },
+          { kind: "symbol-count", symbol: "pyromancer:magma", count: 1 },
+        ],
+      },
+      shortText: "7 dmg + 3 Cinder",
+      longText:
+        "3 ember + 1 magma; 7 damage + 3 Cinder (+1 if 4+ ember). Cinder-heavy T3 alternative to Magma Heart or Pyro Lance.",
+      effect: {
+        kind: "compound",
+        effects: [
+          { kind: "damage", amount: 7, type: "normal" },
+          {
+            kind: "apply-status",
+            status: "pyromancer:cinder",
+            stacks: 3,
+            target: "opponent",
+            conditional_bonus: {
+              condition: { kind: "combo-symbol-count", symbol: "pyromancer:ember", count: 4 },
+              bonusPerUnit: 1,
+              source: "fixed-one",
+            },
+          },
+        ],
+      },
+    },
+    {
+      tier: 4,
+      name: "Pyric Sentence",
+      damageType: "ultimate",
+      targetLandingRate: [0.005, 0.02],
+      ultimateBand: "career-moment",
+      combo: { kind: "symbol-count", symbol: "pyromancer:ruin", count: 5 },
+      shortText: "13 ult + +1/Cinder + strip Cinder",
+      longText:
+        "5 ruin (all 5 dice on face 6); 13 ultimate damage + 1 dmg per Cinder stack on opponent, then strip all Cinder. The mountain's verdict, in full.",
+      effect: {
+        kind: "compound",
+        effects: [
+          {
+            kind: "damage",
+            amount: 13,
+            type: "ultimate",
+            conditional_bonus: {
+              condition: { kind: "opponent-has-status-min", status: "pyromancer:cinder", count: 1 },
+              bonusPerUnit: 1,
+              source: "opponent-status-stacks",
+              sourceStatus: "pyromancer:cinder",
+            },
+          },
+          { kind: "remove-status", status: "pyromancer:cinder", stacks: "all", target: "opponent" },
+        ],
+      },
+      criticalCinematic:
+        "Vertical pillar of red-gold light bisects the screen, opponent silhouetted in pure white at impact, all Cinder stacks visibly burning off in a fan of sparks before the camera settles.",
+    },
   ],
 
-  defensiveLadder: [
+  defensiveCatalog: [
     {
       tier: 1,
       name: "Magma Shield",
@@ -340,6 +445,19 @@ export const PYROMANCER: HeroDefinition = {
           { kind: "remove-status", status: "any-positive", stacks: 1, target: "opponent" },
         ],
       },
+    },
+    // Catalog alternate — defense-catalog-only.
+    {
+      tier: 2,
+      name: "Smoke Veil",
+      damageType: "normal",
+      targetLandingRate: [0.5, 0.7],
+      combo: { kind: "n-of-a-kind", count: 2 },
+      defenseDiceCount: 3,
+      shortText: "Reduce 4",
+      longText:
+        "Two of a kind on 3 dice rolled; reduces incoming damage by 4. Symbol-agnostic mid-tier brace.",
+      effect: { kind: "reduce-damage", amount: 4 },
     },
   ],
 

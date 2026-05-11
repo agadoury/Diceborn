@@ -247,10 +247,12 @@ export function beginOffensivePick(state: GameState): GameEvent[] {
     tier: import("./types").AbilityTier; baseDamage: number;
     damageType: import("./types").DamageType; shortText: string;
   }> = [];
-  for (let i = 0; i < hero.abilityLadder.length; i++) {
+  for (let i = 0; i < active.activeOffense.length; i++) {
     // Resolve through ladder-upgrade pipeline (replace + append + repeat) and
     // then apply combo-overrides (§15.6) so both code paths compose.
-    const a = resolveAbilityFor(active, hero.abilityLadder[i], "offensive");
+    // Index targets the player's drafted offensive loadout, not the
+    // full catalog.
+    const a = resolveAbilityFor(active, active.activeOffense[i], "offensive");
     const combo = effectiveCombo(active, a);
     if (!comboMatchesFaces(combo, faces)) continue;
     matches.push({
@@ -297,7 +299,7 @@ export function beginOffensivePick(state: GameState): GameEvent[] {
  * damage inline (undefendable / pure / ultimate) or stashes `pendingAttack`
  * for the defender's pick.
  *
- * `abilityIndex` is the chosen index into the attacker's `abilityLadder`.
+ * `abilityIndex` is the chosen index into the attacker's `activeOffense`.
  * Caller has already validated it against `pendingOffensiveChoice.matches`
  * and cleared `pendingOffensiveChoice`.
  */
@@ -311,7 +313,7 @@ export function commitOffensiveAbility(state: GameState, abilityIndex: number): 
   // Resolve the ability through the ladder-upgrade pipeline (replace + append
   // + repeat). Field-tweak modifications are still applied per-leaf inside
   // resolveAbilityEffect via modifierMatches.
-  const ability = resolveAbilityFor(active, hero.abilityLadder[abilityIndex], "offensive");
+  const ability = resolveAbilityFor(active, active.activeOffense[abilityIndex], "offensive");
 
   events.push({
     t: "offensive-choice-made",
@@ -444,7 +446,8 @@ export function resolveDefenseChoice(state: GameState, abilityIndex: number | nu
 
   const defender = state.players[pa.defender];
   const defHero = getHero(defender.hero);
-  const dl = defHero.defensiveLadder;
+  // The drafted defensive loadout (2 abilities) — not the full catalog.
+  const dl = defender.activeDefense;
 
   let reduction = pa.injectedReduction ?? 0;
   let matchedTier: 1 | 2 | 3 | 4 | undefined;
@@ -600,7 +603,9 @@ function applyAttackEffects(
   const opponent = state.players[other(attackerId)];
   const hero = getHero(active.hero);
   // Use the resolved view so replacements + appends + repeat are honored.
-  const ability = resolveAbilityFor(active, hero.abilityLadder[abilityIndex], "offensive");
+  // `abilityIndex` came from `pendingAttack`, which indexes into the
+  // attacker's drafted offensive loadout — not the full catalog.
+  const ability = resolveAbilityFor(active, active.activeOffense[abilityIndex], "offensive");
 
   // Critical Ultimate damage modifiers — applied once at the top of the
   // effect resolution. damageOverride takes precedence over multiplier.
@@ -984,9 +989,11 @@ function resolveAbilityEffect(state: GameState, effect: import("./types").Abilit
 function tryOffensiveFallback(state: GameState): GameEvent[] {
   const events: GameEvent[] = [];
   const active = state.players[state.activePlayer];
-  const hero = getHero(active.hero);
-  const dl = hero.defensiveLadder;
-  if (!dl) return events;
+  void getHero(active.hero); // keep import resolved; hero lookup unused here
+  // The drafted defensive loadout — consulted for `offensiveFallback`
+  // blocks on whichever two defenses the player brought.
+  const dl = active.activeDefense;
+  if (!dl || dl.length === 0) return events;
   // Resolve each defensive entry through ladder-upgrade pipeline so a
   // replacement upgrade in flight on a defensive slot still surfaces its
   // (possibly overridden) `offensiveFallback` here.

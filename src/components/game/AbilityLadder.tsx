@@ -63,10 +63,19 @@ export function AbilityLadder({ hero, rows, className, isOpponentView = false, s
   }, [rows]);
 
   // Resolve through ladder-upgrade pipeline when a snapshot is supplied.
-  // Without it (e.g. dev-tools previews), fall back to base abilities with no replacement marker.
+  // The live ladder for an in-match snapshot is `activeOffense` (the
+  // player's 4-ability drafted loadout). Without a snapshot (dev-tools
+  // previews) fall back to the recommended loadout's offensive entries —
+  // resolved against the full catalog by name — with no replacement marker.
+  const previewAbilities = (() => {
+    if (snapshot) return snapshot.activeOffense;
+    const wanted = new Set(hero.recommendedLoadout.offense.map(n => n.toLowerCase()));
+    const matched = hero.abilityCatalog.filter(a => wanted.has(a.name.toLowerCase()));
+    return matched.length === 4 ? matched : hero.abilityCatalog;
+  })();
   const resolvedAbilities = snapshot
-    ? hero.abilityLadder.map(a => resolveAbilityFor(snapshot, a, "offensive"))
-    : hero.abilityLadder.map(a => ({ ...a, isReplaced: false as boolean }));
+    ? previewAbilities.map(a => resolveAbilityFor(snapshot, a, "offensive"))
+    : previewAbilities.map(a => ({ ...a, isReplaced: false as boolean }));
 
   // Group abilities by tier and render T4 → T1. Within a tier, order by
   // base damage descending so the most-impactful row sits at the top.

@@ -12,10 +12,11 @@
  * next AI action.
  */
 import { create } from "zustand";
-import type { Action, CardId, GameEvent, GameState, HeroId, PlayerId } from "@/game/types";
+import type { Action, CardId, GameEvent, GameState, HeroId, LoadoutSelection, PlayerId } from "@/game/types";
 import { applyAction, makeEmptyState } from "@/game/engine";
 import { enqueueEvents, useChoreoStore } from "./choreoStore";
 import { loadDeck } from "./deckStorage";
+import { loadLoadout } from "./loadoutStorage";
 
 export type MatchMode = "hot-seat" | "vs-ai";
 
@@ -37,6 +38,11 @@ interface GameStoreState {
      *  any) is loaded from localStorage; the engine in turn falls back to the
      *  hero's recommendedDeck when no saved deck exists. */
     p1Deck?: ReadonlyArray<CardId>; p2Deck?: ReadonlyArray<CardId>;
+    /** Optional explicit loadouts. When omitted, each player's saved loadout
+     *  (if any) is loaded from localStorage; the engine falls back to the
+     *  hero's `recommendedLoadout` when no saved selection exists or it
+     *  fails validation. */
+    p1Loadout?: LoadoutSelection; p2Loadout?: LoadoutSelection;
   }) => void;
   dispatch: (action: Action) => void;
   reset: () => void;
@@ -49,15 +55,18 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   lastEvents: [],
   matchLog: [],
 
-  startMatch: ({ p1, p2, mode, seed, coin, p1Deck, p2Deck }) => {
+  startMatch: ({ p1, p2, mode, seed, coin, p1Deck, p2Deck, p1Loadout, p2Loadout }) => {
     const empty = makeEmptyState();
     const matchSeed = seed ?? (Date.now() & 0xffff);
     const winner = coin ?? (Math.random() < 0.5 ? "p1" : "p2");
     const resolvedP1Deck = p1Deck ?? loadDeck(p1) ?? undefined;
     const resolvedP2Deck = p2Deck ?? loadDeck(p2) ?? undefined;
+    const resolvedP1Loadout = p1Loadout ?? loadLoadout(p1) ?? undefined;
+    const resolvedP2Loadout = p2Loadout ?? loadLoadout(p2) ?? undefined;
     const r = applyAction(empty, {
       kind: "start-match", seed: matchSeed, p1, p2, coinFlipWinner: winner,
       p1Deck: resolvedP1Deck, p2Deck: resolvedP2Deck,
+      p1Loadout: resolvedP1Loadout, p2Loadout: resolvedP2Loadout,
     });
     enqueueEvents(r.events);
     set({
