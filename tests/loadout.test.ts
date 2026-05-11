@@ -172,3 +172,56 @@ describe("start-match materialises active arrays from a loadout", () => {
     expect(state.players.p2.ladderState.length).toBe(state.players.p2.activeOffense.length);
   });
 });
+
+describe("engine respects activeOffense, not the full catalog", () => {
+  /** Force the active player's dice to a specific symbol multiset by writing
+   *  directly to `current`. Used to make a specific ability's combo match
+   *  deterministically without going through the RNG. */
+  function setAllDiceToFace(state: import("../src/game/types").GameState, pid: "p1" | "p2", faceIndex: 0|1|2|3|4|5) {
+    for (const d of state.players[pid].dice) d.current = faceIndex;
+  }
+
+  it("offensive picker only surfaces abilities from activeOffense — catalog alternates with the same combo do not match", () => {
+    // Berserker's Cleave and Pommel Strike share `symbol-count axe count: 3`.
+    // Cleave is in the recommended loadout; Pommel Strike is in the catalog
+    // but NOT the recommended loadout. With 3 axes showing, the picker must
+    // surface Cleave only — not Pommel Strike.
+    const ids = getRegisteredHeroIds();
+    const berserker = ids.find(id => id === "berserker");
+    if (!berserker) return; // skip when berserker isn't in this build
+    const { state } = applyAction(makeEmptyState(), {
+      kind: "start-match", seed: 41, p1: berserker, p2: ids[1] ?? berserker, coinFlipWinner: "p1",
+    });
+    // Berserker dice faces 0..2 are axe (faceValue 1/2/3). Set all 5 to axe.
+    setAllDiceToFace(state, "p1", 0);
+    // Drive into offensive-roll and end the roll so the picker opens.
+    let s = state;
+    ({ state: s } = applyAction(s, { kind: "roll-dice" }));
+    // Engine still has 2 reroll attempts; commit by advancing past offensive-roll.
+    while (s.phase === "offensive-roll" && !s.pendingOffensiveChoice) {
+      const before = s;
+      ({ state: s } = applyAction(s, { kind: "advance-phase" }));
+      if (s === before) break;
+    }
+    expect(s.pendingOffensiveChoice).toBeDefined();
+    const matchNames = (s.pendingOffensiveChoice?.matches ?? []).map(m => m.abilityName);
+    expect(matchNames).toContain("Cleave");
+    // The picker must NOT surface Pommel Strike (it's in the catalog but not
+    // the drafted loadout). If it did, the engine is reading from the catalog.
+    expect(matchNames).not.toContain("Pommel Strike");
+  });
+
+  it("select-defense indexes into activeDefense, not the full catalog", () => {
+    const ids = getRegisteredHeroIds();
+    const berserker = ids.find(id => id === "berserker");
+    if (!berserker) return;
+    const { state } = applyAction(makeEmptyState(), {
+      kind: "start-match", seed: 43, p1: berserker, p2: berserker, coinFlipWinner: "p1",
+    });
+    // Both players default to recommendedLoadout — defense is [Wolfhide, Bloodoath].
+    expect(state.players.p1.activeDefense.length).toBe(2);
+    expect(state.players.p1.activeDefense.map(a => a.name)).toEqual(["Wolfhide", "Bloodoath"]);
+    // The catalog alternate "Skin of the Pack" must not be present in activeDefense.
+    expect(state.players.p1.activeDefense.find(a => a.name === "Skin of the Pack")).toBeUndefined();
+  });
+});
