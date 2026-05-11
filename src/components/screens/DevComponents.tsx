@@ -248,6 +248,12 @@ function LadderDemo() {
       hand: [], deck: [], discard: [], statuses: [],
       upgrades: { 1: 0, 2: 0, 3: 0, 4: 0 },
       signatureState: {},
+      activeOffense: hero.recommendedLoadout.offense
+        .map(n => hero.abilityCatalog.find(a => a.name.toLowerCase() === n.toLowerCase()))
+        .filter(<T,>(a: T): a is NonNullable<T> => !!a),
+      activeDefense: hero.recommendedLoadout.defense
+        .map(n => (hero.defensiveCatalog ?? []).find(a => a.name.toLowerCase() === n.toLowerCase()))
+        .filter(<T,>(a: T): a is NonNullable<T> => !!a),
       ladderState: blankLadder(),
       isLowHp: false,
       nextAbilityBonusDamage: 0,

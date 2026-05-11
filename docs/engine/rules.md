@@ -67,7 +67,7 @@ Each turn moves through 8 phases in fixed order. The transitions happen in `src/
 | `income` | Active player draws 1 card and gains 1 CP (clamped to cap of 15). The first player skips their first income. | No |
 | `main-pre` | Pre-roll window. Player can play `main-phase` cards, sell cards, or hit ROLL to advance. | **Yes — must tap ROLL** |
 | `offensive-roll` | Active player rolls dice (up to 3 attempts; can lock/unlock between rolls; can play `roll-phase` cards). When the player ends their roll, engine emits `offensive-pick-prompt` listing every matched ability and halts via `state.pendingOffensiveChoice`. The player **picks** which ability to fire (or passes) via `select-offensive-ability`. | **Yes — lock dice, play cards, then pick which attack to fire** |
-| `defensive-roll` | **Interactive (defender's pause window).** Engine emits `attack-intended` and halts via `state.pendingAttack`. The defender picks one defense from their `defensiveLadder` (or "take it"); the engine rolls the chosen defense's dice count once **inside the same dispatch** (no rerolls, no separate roll action, no `pendingDefenseRoll`), evaluates, applies any reduction, then resolves the original ability's damage. Both players may play `roll-phase` and `instant` cards during this window. The phase is a *defender* state during the attacker's turn — the active player never enters it on their own behalf. | **Yes — defender picks a defense via `select-defense`** (or the AI driver does so off-turn) |
+| `defensive-roll` | **Interactive (defender's pause window).** Engine emits `attack-intended` and halts via `state.pendingAttack`. The defender picks one defense from their drafted defensive loadout (`activeDefense`) (or "take it"); the engine rolls the chosen defense's dice count once **inside the same dispatch** (no rerolls, no separate roll action, no `pendingDefenseRoll`), evaluates, applies any reduction, then resolves the original ability's damage. Both players may play `roll-phase` and `instant` cards during this window. The phase is a *defender* state during the attacker's turn — the active player never enters it on their own behalf. | **Yes — defender picks a defense via `select-defense`** (or the AI driver does so off-turn) |
 | `main-post` | Post-resolution window. Player can play `main-phase` cards, sell cards. Ends turn manually. | **Yes — must tap END TURN** |
 | `discard` | Auto-sell every card over hand cap (6) for +1 CP each, swap active player, transition into the new active player's `upkeep`. | No |
 
@@ -115,7 +115,7 @@ In `src/game/dice.ts`:
 
 ### Ladder evaluator
 
-`evaluateLadder(hero, dice)` returns `LadderRowState[]` — one row per ability declared in the hero's `abilityLadder`. Each row is one of:
+`evaluateLadder(hero, snapshot)` returns `LadderRowState[]` — one row per ability in the snapshot's `activeOffense` (the player's drafted 4-ability loadout). Each row is one of:
 
 - `{ kind: "firing", tier, lethal }` — this is the ability that will actually fire (highest tier matched, then highest base damage among ties)
 - `{ kind: "triggered", tier, lethal }` — this combo is matched, but a higher-tier match is also matched, so it won't fire
@@ -130,9 +130,34 @@ The same evaluator backs the player's live ladder UI and the AI's planning — g
 
 ## 5. Ability ladders
 
-### Offensive ladder
+### Catalog vs. live ladder (loadout drafted pre-match)
 
-Each hero declares `abilityLadder: AbilityDef[]`. Variable count — old heroes shipped with exactly 4 (one per tier); newer heroes can have multiple abilities at the same tier (a hero can have two T2 abilities with different combos; the picker fires whichever matches, with the higher-damage one winning ties).
+Each hero declares two ladders' worth of authored content:
+
+- `abilityCatalog: AbilityDef[]` — every offensive ability the hero
+  can field. Typically ≥4 (at least one per tier), often more so the
+  player has a draft choice at most tiers.
+- `defensiveCatalog?: AbilityDef[]` — every defensive ability the
+  hero can field. Typically ≥2.
+
+Pre-match the player drafts a 4-ability offensive **loadout** (one per
+tier T1–T4) and a 2-ability defensive loadout from these catalogs. The
+in-match live ladder is the drafted loadout, materialised onto:
+
+- `HeroSnapshot.activeOffense: AbilityDef[]` (length 4)
+- `HeroSnapshot.activeDefense: AbilityDef[]` (length 2)
+
+The engine's reads — picker, ability resolution, defensive flow,
+ladder evaluator — all index into these snapshot arrays. The catalog
+is only consulted at `start-match` (to materialise the loadout) and
+by the simulator's landing-rate audit (which keeps every authored
+ability in tuning band even when not drafted).
+
+See [`../design/loadouts.md`](../design/loadouts.md) for the full
+loadout system — composition rules, builder UI, validation,
+persistence, and engine touchpoints.
+
+### Offensive ladder (live, post-draft)
 
 Each `AbilityDef` carries:
 
@@ -153,13 +178,13 @@ Each `AbilityDef` carries:
 
 When the active player ends their offensive roll, the engine **does not auto-pick**. Instead it:
 
-1. Evaluates every ability in the ladder against the current dice (with active symbol bends applied).
+1. Evaluates every ability in the **drafted offensive loadout** (`activeOffense`) against the current dice (with active symbol bends applied).
 2. Emits `offensive-pick-prompt` carrying the full list of matches, sorted highest-tier-first then highest-base-damage-first.
 3. Halts via `state.pendingOffensiveChoice`. The active player sees the **AttackSelectLayer** overlay and dispatches `select-offensive-ability { abilityIndex }` (or `null` to pass).
 
 If zero abilities match, the engine skips the prompt entirely — the turn fizzles, and any `offensiveFallback` defense is consulted before transitioning to `main-post`.
 
-The prompt-list ordering matches the legacy auto-pick (highest-tier highest-damage first), so confirming the top entry reproduces the old behaviour. The picker exists so the player can deliberately choose a lower-tier or alternate damage-type ability when that's the better play (e.g. a high-damage normal attack vs. a lower-damage undefendable).
+Because the loadout enforces one ability per offensive tier, the picker surfaces at most one match per tier. The choice between same-tier alternatives in the catalog happens pre-match in the LoadoutBuilder, not on the dice tray. (Multi-match scenarios are still possible when, say, a T2 and a T3 both match — that's the normal "do I commit to the bigger swing?" question the picker is designed for.)
 
 ### Tier semantics
 
@@ -178,7 +203,7 @@ A Tier 4 ability can declare a more-restrictive variant — `criticalCondition: 
 
 ### Defensive ladder (interactive — Correction 5)
 
-Optional `defensiveLadder?: AbilityDef[]`. Unlike the offensive ladder, the defender **picks** which defense to attempt — there is no auto-picker. After the active player's offensive ability is locked in, the engine emits `attack-intended` and halts on `state.pendingAttack`. The defender then dispatches `select-defense { abilityIndex }`:
+The hero's `defensiveCatalog` is the pool; the defender's drafted 2-ability loadout (`HeroSnapshot.activeDefense`) is what surfaces in the picker at match time. Unlike the offensive ladder, the defender **picks** which defense to attempt — there is no auto-picker. After the active player's offensive ability is locked in, the engine emits `attack-intended` and halts on `state.pendingAttack`. The defender then dispatches `select-defense { abilityIndex }` (index into `activeDefense`):
 
 1. **Pick** one defense from their ladder (or `null` = take the hit undefended).
 2. The engine — in the **same dispatch** — rolls the chosen defense's `defenseDiceCount` dice **once** (no rerolls, no locking, no separate roll action).

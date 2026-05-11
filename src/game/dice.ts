@@ -305,7 +305,13 @@ export function evaluateLadder(
   // reachability sampler. Field-tweak modifications continue to be applied
   // at effect-resolution time inside phases.ts; this resolver only swaps
   // the structural pieces (combo, name, etc.).
-  const resolved = hero.abilityLadder.map(a => resolveAbilityFor(active, a, "offensive"));
+  //
+  // We evaluate against the player's drafted offensive loadout
+  // (`activeOffense`), not the full catalog — the row count of `rows`
+  // matches `activeOffense.length`, which is what `ladderState` is sized
+  // to on the snapshot.
+  void hero;
+  const resolved = active.activeOffense.map(a => resolveAbilityFor(active, a, "offensive"));
   const currentlyMatched: number[] = [];
   for (let i = 0; i < resolved.length; i++) {
     // §15.6: combo-overrides further loosen the match requirement on top of
@@ -381,7 +387,7 @@ export function simulateLandingRate(
 ): { tier: 1|2|3|4; rate: number; target: [number, number]; abilityName: string }[] {
   const out: { tier: 1|2|3|4; rate: number; target: [number, number]; abilityName: string }[] = [];
   const allFaces = hero.diceIdentity.faces;
-  for (const ability of hero.abilityLadder) {
+  for (const ability of hero.abilityCatalog) {
     let hits = 0;
     let cursor = 0;
     for (let s = 0; s < samples; s++) {

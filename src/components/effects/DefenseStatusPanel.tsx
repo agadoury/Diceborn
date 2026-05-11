@@ -61,11 +61,12 @@ export function DefenseStatusPanel() {
   const incomingAmount = pa?.incomingAmount;
   const incomingType = pa?.damageType;
 
-  // Defense ability the defender chose / is rolling.
+  // Defense ability the defender chose / is rolling. Index targets the
+  // defender's drafted defensive loadout, not the full catalog.
   const defenseAbilityIndex = defenseIntended?.abilityIndex ?? null;
   const defenseAbility = (() => {
     if (defenseAbilityIndex == null) return null;
-    const dl = defenderHero.defensiveLadder;
+    const dl = defender.activeDefense;
     if (!dl || defenseAbilityIndex < 0 || defenseAbilityIndex >= dl.length) return null;
     return resolveAbilityFor(defender, dl[defenseAbilityIndex], "defensive");
   })();

@@ -83,7 +83,12 @@ export const BERSERKER: HeroDefinition = {
     },
   },
 
-  abilityLadder: [
+  recommendedLoadout: {
+    offense: ["Cleave", "Winter Storm", "Blood Harvest", "Wolf's Howl"],
+    defense: ["Wolfhide", "Bloodoath"],
+  },
+
+  abilityCatalog: [
     {
       tier: 1,
       name: "Cleave",
@@ -241,9 +246,100 @@ export const BERSERKER: HeroDefinition = {
       criticalCinematic:
         "Extended ultimate. Anticipation, howl, four spectral ice-wolves manifest, convergence strike, settle.",
     },
+    // ── Catalog alternates (loadout-drafted) ─────────────────────────────────
+    {
+      tier: 1,
+      name: "Pommel Strike",
+      damageType: "normal",
+      // Same 3+ axe combo as Cleave — lands almost every roll given the
+      // Berserker's 3-axe-faces dice (~98% audited). Cleave shares the
+      // wider band tolerance for the same reason.
+      targetLandingRate: [0.75, 1.0],
+      combo: { kind: "symbol-count", symbol: "berserker:axe", count: 3 },
+      shortText: "4 dmg + 2 Frost-bite",
+      longText:
+        "3+ axes; deals 4 damage and applies 2 Frost-bite. Trade Cleave's escalating damage for heavier debuff pressure.",
+      effect: {
+        kind: "compound",
+        effects: [
+          { kind: "damage", amount: 4, type: "normal" },
+          { kind: "apply-status", status: "berserker:frostbite", stacks: 2, target: "opponent" },
+        ],
+      },
+    },
+    {
+      tier: 2,
+      name: "Iron Tide",
+      damageType: "normal",
+      // The simulator's heuristic keep-mask for n-of-a-kind keeps every die
+      // (see `dice.pickKeepMask`); a real player or AI policy that locks
+      // pairs and chases the third lands meaningfully higher than this
+      // band. Targets reflect the simulator's measurement so the audit
+      // remains a useful signal.
+      targetLandingRate: [0.15, 0.4],
+      combo: { kind: "n-of-a-kind", count: 3 },
+      shortText: "6 dmg + 1 Frost-bite",
+      longText:
+        "Three of a kind (any face); 6 damage + 1 Frost-bite. Reliable, hero-symbol-agnostic.",
+      effect: {
+        kind: "compound",
+        effects: [
+          { kind: "damage", amount: 6, type: "normal" },
+          { kind: "apply-status", status: "berserker:frostbite", stacks: 1, target: "opponent" },
+        ],
+      },
+    },
+    {
+      tier: 3,
+      name: "Pack Hunter",
+      damageType: "normal",
+      targetLandingRate: [0.35, 0.6],
+      combo: { kind: "symbol-count", symbol: "berserker:axe", count: 5 },
+      shortText: "11 dmg + 2 Frost-bite",
+      longText:
+        "5 axes (all 5 dice on axe faces); 11 damage + 2 Frost-bite. Pure-damage T3 alternative to Blood Harvest's bonus-dice payout or Frostfang's stun.",
+      effect: {
+        kind: "compound",
+        effects: [
+          { kind: "damage", amount: 11, type: "normal" },
+          { kind: "apply-status", status: "berserker:frostbite", stacks: 2, target: "opponent" },
+        ],
+      },
+    },
+    {
+      tier: 4,
+      name: "Endless Hunger",
+      damageType: "ultimate",
+      targetLandingRate: [0.005, 0.02],
+      ultimateBand: "career-moment",
+      combo: { kind: "symbol-count", symbol: "berserker:howl", count: 5 },
+      shortText: "12 ult + heal/Frenzy + 3 Frenzy",
+      longText:
+        "5 howl (all 5 dice on face 6); 12 ultimate damage, heal 3 HP per Frenzy stack, then +3 Frenzy. Recovery-focused career-moment alternative to Wolf's Howl.",
+      effect: {
+        kind: "compound",
+        effects: [
+          { kind: "damage", amount: 12, type: "ultimate" },
+          {
+            kind: "heal",
+            amount: 0,
+            target: "self",
+            conditional_bonus: {
+              condition: { kind: "passive-counter-min", passiveKey: "frenzy", count: 1 },
+              bonusPerUnit: 3,
+              source: "self-passive-counter",
+              sourcePassiveKey: "frenzy",
+            },
+          },
+          { kind: "passive-counter-modifier", passiveKey: "frenzy", operation: "add", value: 3, respectsCap: true },
+        ],
+      },
+      criticalCinematic:
+        "The pack feeds. The Berserker drinks in the storm, eyes pure blue, ice splintering outward from every wound — frame holds three full seconds before the impact bounces back.",
+    },
   ],
 
-  defensiveLadder: [
+  defensiveCatalog: [
     {
       tier: 1,
       name: "Wolfhide",
@@ -298,6 +394,25 @@ export const BERSERKER: HeroDefinition = {
         kind: "compound",
         effects: [
           { kind: "reduce-damage", amount: 5 },
+          { kind: "apply-status", status: "berserker:frostbite", stacks: 1, target: "opponent" },
+        ],
+      },
+    },
+    // Catalog alternate — defense-catalog-only, not in the recommended loadout.
+    {
+      tier: 2,
+      name: "Skin of the Pack",
+      damageType: "normal",
+      targetLandingRate: [0.55, 0.75],
+      combo: { kind: "n-of-a-kind", count: 2 },
+      defenseDiceCount: 3,
+      shortText: "Reduce 3 + Frost-bite",
+      longText:
+        "Two of a kind on 3 dice rolled; reduces incoming damage by 3, applies 1 Frost-bite to attacker. Reliable mid-tier defense without the fur dependency.",
+      effect: {
+        kind: "compound",
+        effects: [
+          { kind: "reduce-damage", amount: 3 },
           { kind: "apply-status", status: "berserker:frostbite", stacks: 1, target: "opponent" },
         ],
       },

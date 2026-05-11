@@ -74,8 +74,9 @@ Hero data file (`heroes/<id>.ts`) contents — straight from your filled-in temp
 - `diceIdentity` — six face entries
 - `resourceIdentity.cpGainTriggers` — structured triggers, no freeform prose
 - `signatureMechanic` — `kind`, `passiveKey`, optional `bankStartsAt` / `bankCap` / `spendOptions`
-- `abilityLadder` — exactly **1 T1 + 3 T2 + 2 T3 + 1 T4** = 7 entries. The T4 is gated on `5× face-6` (your hero's unique face-6 symbol) and uses `ultimateBand: "career-moment"`.
-- `defensiveLadder` — three entries (D1, D2, D3) with `defenseDiceCount` and an optional `offensiveFallback` on D2 or D3.
+- `abilityCatalog` — the full pool of offensive abilities you ship. Minimum 4 entries (at least one per tier T1-T4); ship 2+ per tier where possible so the LoadoutBuilder draft has real choices. T4s are gated on `5× face-6` (your hero's unique face-6 symbol) and use `ultimateBand: "career-moment"`.
+- `defensiveCatalog` — the full pool of defensive abilities. Minimum 2 entries; ship 3-4 with clearly different shapes (e.g. quick parry, big block, counterattack).
+- `recommendedLoadout` — `{ offense: string[]; defense: string[] }`. Exactly **4 ability names** for offense (one per tier) + **2 names** for defense. Both arrays must reference entries in the catalogs above. This is the default loadout the engine materialises onto `HeroSnapshot.activeOffense` / `activeDefense` when the player hasn't customised — and what the starter `recommendedDeck`'s masteries should target so the new-player experience has its upgrades actually firing.
 - `recommendedDeck` — exactly 12 valid card IDs in the order generic / dice-manip / ladder-upgrade / signature.
 - `onHitApplyStatus` (optional) — shorthand for "every offensive hit also applies X".
 

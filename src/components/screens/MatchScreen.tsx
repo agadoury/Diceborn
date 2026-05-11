@@ -354,7 +354,9 @@ export default function MatchScreen() {
       {/* Ladder click-to-fire confirm. Resolves the ability through the
           upgrade pipeline so the prompt shows the live name. */}
       {pendingLadderFire != null && (() => {
-        const a = meHero.abilityLadder[pendingLadderFire];
+        // Click-to-fire indexes into the player's drafted offensive
+        // loadout (`activeOffense`), not the full catalog.
+        const a = meSnap.activeOffense[pendingLadderFire];
         if (!a) return null;
         const resolved = resolveAbilityFor(meSnap, a, "offensive");
         return (

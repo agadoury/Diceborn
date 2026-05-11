@@ -21,8 +21,9 @@ interface HeroDefinition {
   diceIdentity: { faces: DieFace[]; fluffDescription: string };  // 6 faces
   resourceIdentity: { cpGainTriggers: PassiveTrigger[]; fluffDescription: string };
   signatureMechanic: { name; description; implementation: PassiveBehavior };
-  abilityLadder: AbilityDef[];          // any number, across tiers 1-4
-  defensiveLadder?: AbilityDef[];       // optional
+  abilityCatalog: AbilityDef[];         // full authored pool, any count across tiers 1-4
+  defensiveCatalog?: AbilityDef[];      // full authored pool, optional
+  recommendedLoadout: LoadoutSelection; // default 4-offense / 2-defense draft
   onHitApplyStatus?: { status; stacks };  // shorthand for "every landed ability also applies X"
 }
 ```

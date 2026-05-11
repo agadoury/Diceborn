@@ -79,7 +79,7 @@ function logEvent(ev: GameEvent): void {
 }
 
 function landingRateAudit(heroIds: HeroId[]): void {
-  console.log("\n— Landing-rate audit (10,000 trials per tier, 3 attempts) —");
+  console.log("\n— Landing-rate audit (10,000 trials per ability, 3 attempts) —");
   if (heroIds.length === 0) {
     console.log("  (no heroes registered; nothing to audit)");
     return;
@@ -87,7 +87,7 @@ function landingRateAudit(heroIds: HeroId[]): void {
   for (const id of heroIds) {
     const hero = HEROES[id];
     if (!hero) continue;
-    console.log(`\n  ${hero.name}`);
+    console.log(`\n  ${hero.name} — ${hero.abilityCatalog.length} catalog abilities`);
     const results = simulateLandingRate(hero, 3, 10_000, 7);
     for (const r of results) {
       const inBand = r.rate >= r.target[0] && r.rate <= r.target[1];

@@ -18,6 +18,7 @@ export default function MainMenu() {
       <nav className="w-full max-w-sm flex flex-col gap-3">
         <MenuButton to="/heroes?mode=vs-ai"    label="Vs AI" recommended />
         <MenuButton to="/heroes?mode=hot-seat" label="Hot-Seat" />
+        <MenuButton to="/loadouts"             label="Loadouts" />
         <MenuButton to="/decks"                label="Deck Builder" />
         <MenuButton to="/how-to-play"          label="How to play" />
         <MenuButton to="/settings"             label="Settings" />

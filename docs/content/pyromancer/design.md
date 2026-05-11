@@ -202,7 +202,7 @@ same resolution.
 
 ## 8. Defensive ladder
 
-> Live data: [`pyromancer.ts → defensiveLadder`](../../../src/content/heroes/pyromancer.ts).
+> Live data: [`pyromancer.ts → defensiveCatalog`](../../../src/content/heroes/pyromancer.ts). The player drafts 2 of the catalog's defenses into the match's live ladder via the LoadoutBuilder.
 > For the defense flow itself see [`engine/README.md` §5](../../engine/rules.md#5-ability-ladders).
 
 | Tier | Defense | Role |

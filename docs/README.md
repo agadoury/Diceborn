@@ -12,7 +12,7 @@ Route by what you're trying to do. Each row links to the doc you should read fir
 1. **Read first**: [`authoring/workflow.md`](./authoring/workflow.md) — the operational guide. Covers four scenarios (new hero, add cards, tune hero, update / remove cards), files to touch in each, validation checklist, submission rules.
 2. **Design contract**: [`authoring/hero-spec.md`](./authoring/hero-spec.md) — the authoring brief. Constraints, primitives, tuning bands, template, self-check. Read end-to-end when designing a brand-new hero.
 3. **Reference**: [`authoring/cheatsheet.md`](./authoring/cheatsheet.md) (what each template field becomes), [`authoring/examples.md`](./authoring/examples.md) (worked patterns for every primitive).
-4. **Companion**: [`design/deck-building.md`](./design/deck-building.md) — what shape the hero's card pool should take and how the deck-builder uses it.
+4. **Companions**: [`design/loadouts.md`](./design/loadouts.md) — the pre-match ability draft (catalog → 4-offense + 2-defense loadout); [`design/deck-building.md`](./design/deck-building.md) — what shape the hero's card pool should take and how the deck-builder uses it.
 
 The `.ts` files in `src/content/` are the source of truth for mechanical data. The `.md` pages in `docs/content/<hero>/` are for design intent — lore, ability roles, cinematics, tuning rationale. Tuning passes typically only edit `.ts` files. See [`authoring/workflow.md` §1](./authoring/workflow.md#1-source-of-truth-in-one-rule).
 
@@ -48,6 +48,7 @@ docs/
 │
 ├── design/                    ← player-facing & game-design docs
 │   ├── README.md
+│   ├── loadouts.md            ← pre-match ability draft system
 │   └── deck-building.md       ← deck system
 │
 ├── engine/                    ← engine internals

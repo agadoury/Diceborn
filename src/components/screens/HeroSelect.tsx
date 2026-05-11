@@ -139,9 +139,13 @@ export default function HeroSelect() {
           variant="ghost"
           size="md"
           onClick={() => {
-            // Pre-resolve the opponent so DeckBuilder can route straight to
-            // /play after save in vs-ai. Hot-seat: return to HeroSelect so
-            // p2 still gets picked.
+            // The customize flow is a 2-step wizard: Loadout → Deck → Play.
+            // We open LoadoutBuilder first; it forwards into DeckBuilder
+            // (Step 2) on commit, which in turn launches the match.
+            //
+            // Pre-resolve the opponent so the wizard can route straight to
+            // /play after the deck step in vs-ai. Hot-seat: return to
+            // HeroSelect so p2 still gets picked.
             const opp = mode === "vs-ai"
               ? (ALL_HEROES.find(h => h !== currentSel) ?? ALL_HEROES[0] ?? "")
               : "";
@@ -150,10 +154,10 @@ export default function HeroSelect() {
               params.set("p1", currentSel);
               params.set("p2", opp);
             }
-            navigate(`/deck-builder?${params.toString()}`);
+            navigate(`/loadout?${params.toString()}`);
           }}
         >
-          Customize deck
+          Customize
         </Button>
         <Button
           variant="primary"

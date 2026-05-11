@@ -17,7 +17,6 @@
  * driver is in `useAiDriver` (in MatchScreen).
  */
 import { useGameStore, useInputUnlocked } from "@/store/gameStore";
-import { getHero } from "@/content";
 import type { AbilityDef, DamageType } from "@/game/types";
 
 export function DefenseSelectLayer() {
@@ -32,8 +31,8 @@ export function DefenseSelectLayer() {
   const pa = state.pendingAttack;
   const defenderIsAi = aiPlayer != null && aiPlayer === pa.defender;
   const defender = state.players[pa.defender];
-  const hero = defender ? getHero(defender.hero) : undefined;
-  const ladder: readonly AbilityDef[] = hero?.defensiveLadder ?? [];
+  // The defender's drafted defensive loadout (2 abilities), not the catalog.
+  const ladder: readonly AbilityDef[] = defender?.activeDefense ?? [];
 
   function pick(idx: number | null) {
     dispatch({ kind: "select-defense", abilityIndex: idx });

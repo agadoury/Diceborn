@@ -28,8 +28,14 @@ The engine, choreographer, audio, UI, and screens are already built. Heroes are 
 | Faces per die | 6 (numbered 1 through 6) |
 | Roll attempts per offensive turn | 3 |
 | Ability tiers | 4 (Tier 1 Basic, Tier 2 Strong, Tier 3 Signature, Tier 4 Ultimate) |
+| Offensive catalog | **≥4** abilities total (at least one per tier). Ship 2+ per tier where possible so the loadout draft is meaningful. |
+| Defensive catalog | **≥2** abilities. Ship 3-4 with clearly different shapes. |
+| In-match offensive ladder | **exactly 4** — one per tier, drafted by the player from the catalog pre-match. |
+| In-match defensive ladder | **exactly 2** — any two distinct entries, drafted from the defensive catalog pre-match. |
 | Cards in hero deck | **exactly 12** (3 dice manipulation + 4 Masteries + 5 signature plays) |
 | Masteries per hero | **exactly 4** (1 each for T1 / T2 / T3 / Defensive). T4 ultimates intentionally have **no** Mastery. |
+
+**Catalog vs. loadout.** The hero ships a **catalog** of authored abilities (`abilityCatalog` + `defensiveCatalog`). The player drafts a **loadout** (4 offensive + 2 defensive) from it pre-match. The engine plays the loadout; the simulator audits the catalog. See [`../design/loadouts.md`](../design/loadouts.md) for the full draft system.
 
 **Selling cards:** any card in hand can be sold for +1 CP at any phase the player has the floor.
 

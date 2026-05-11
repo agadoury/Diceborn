@@ -19,6 +19,10 @@ Refactored the `docs/` tree for scalability. SCREAMING_SNAKE filenames (`HERO_RE
 
 New entries go at the top.
 
+## 2026-05-11 — Pre-match ability loadouts (catalog ⇒ drafted 4-offense + 2-defense)
+
+Each hero now ships an `abilityCatalog` (renamed from `abilityLadder`) and `defensiveCatalog` (renamed from `defensiveLadder`); the in-match ladder is a 4-offensive (one per tier T1-T4) + 2-defensive (any two distinct) draft the player builds pre-match from those catalogs. Snapshots gain `activeOffense` and `activeDefense` arrays; every engine read that used to walk the hero's full ladder now indexes into the snapshot's drafted loadout. The picker still works the same way — it just surfaces at most one match per tier on offense and two options on defense, because the choice between same-tier catalog options happens pre-match in the new `LoadoutBuilder` screen. Customise flow is now a 2-step wizard from HeroSelect: Loadout → Deck → Play. Loadouts persist per-hero in localStorage under `pact-of-heroes:loadouts:v1`. The three shipping heroes each gained 4 alternate offensive abilities (one per tier) plus 1 alternate defensive ability so the draft has real choice from day one. Mastery cards whose ability targets aren't in the player's current loadout get a soft "NO TARGET" warning chip in the deck builder — savable, but flagged. The simulator's landing-rate audit iterates the full catalog so every authored ability stays in band even when not drafted; T4 alternates share the `5× face-6` career-moment gate. Full system docs in [`docs/design/loadouts.md`](./docs/design/loadouts.md).
+
 ---
 
 ## 2026-05-10 — Project renamed: Diceborn → Pact of Heroes (PR #20)
